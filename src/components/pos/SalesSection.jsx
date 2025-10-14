@@ -1187,12 +1187,12 @@ export default function SalesSection({ cashier }) {
                           </p>
                         )}
 
-                        <div className="mt-auto flex items-center justify-between pt-3">
+                        <div className="mt-auto flex flex-col gap-2 pt-3">
                           {stockBadge}
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="font-semibold"
+                            className="font-semibold w-full"
                             disabled={!canSell}
                             onClick={(event) => {
                               event.stopPropagation();
