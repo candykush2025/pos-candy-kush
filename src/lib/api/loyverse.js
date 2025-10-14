@@ -461,6 +461,87 @@ class LoyverseService {
     const data = await this.request(`/employees/${employeeId}`);
     return data;
   }
+
+  /**
+   * Get list of payment types
+   * @param {Object} params - Query parameters
+   * @param {string} params.payment_type_ids - Comma-separated list of payment type IDs
+   * @param {string} params.created_at_min - Show resources created after date
+   * @param {string} params.created_at_max - Show resources created before date
+   * @param {string} params.updated_at_min - Show resources updated after date
+   * @param {string} params.updated_at_max - Show resources updated before date
+   * @param {boolean} params.show_deleted - Show deleted payment types
+   * @returns {Promise<Object>} Response with payment_types array
+   */
+  async getPaymentTypes(params = {}) {
+    const requestParams = {};
+
+    // Add query parameters
+    if (params.payment_type_ids)
+      requestParams.payment_type_ids = params.payment_type_ids;
+    if (params.created_at_min)
+      requestParams.created_at_min = params.created_at_min;
+    if (params.created_at_max)
+      requestParams.created_at_max = params.created_at_max;
+    if (params.updated_at_min)
+      requestParams.updated_at_min = params.updated_at_min;
+    if (params.updated_at_max)
+      requestParams.updated_at_max = params.updated_at_max;
+    if (params.show_deleted !== undefined)
+      requestParams.show_deleted = params.show_deleted;
+
+    return await this.request("/payment_types", requestParams);
+  }
+
+  /**
+   * Get all payment types (convenience method)
+   * @param {Object} params - Query parameters
+   * @returns {Promise<Object>} All payment types
+   */
+  async getAllPaymentTypes(params = {}) {
+    return await this.getPaymentTypes(params);
+  }
+
+  /**
+   * Create a receipt (POST request)
+   * @param {Object} receiptData - Receipt data to create
+   * @returns {Promise<Object>} Created receipt data
+   */
+  async createReceipt(receiptData) {
+    try {
+      const response = await fetch(this.proxyURL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          endpoint: "/receipts",
+          method: "POST",
+          data: receiptData,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `API Error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = await response.json();
+
+      // Check if response contains an error
+      if (data.error) {
+        throw new Error(data.message || "Failed to create receipt");
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Create receipt error:", error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

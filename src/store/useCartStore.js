@@ -24,9 +24,19 @@ export const useCartStore = create((set, get) => ({
       });
     } else {
       // Add new item
+      // Extract variant_id from product (Loyverse format)
+      let variantId = null;
+      if (product.variant_id) {
+        variantId = product.variant_id;
+      } else if (product.variants && product.variants.length > 0) {
+        // Get first variant's ID
+        variantId = product.variants[0].variant_id || product.variants[0].id;
+      }
+
       const newItem = {
         id: nanoid(),
         productId: product.id,
+        variantId: variantId, // Loyverse variant_id
         name: product.name,
         price: product.price,
         quantity,
@@ -34,6 +44,7 @@ export const useCartStore = create((set, get) => ({
         total: product.price * quantity,
         barcode: product.barcode,
         sku: product.sku,
+        cost: product.cost || 0, // For Loyverse sync
       };
       set({ items: [...items, newItem] });
     }

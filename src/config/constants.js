@@ -90,6 +90,38 @@ export const UI_CONFIG = {
   MAX_RECENT_SEARCHES: 10,
 };
 
+// Loyverse Configuration (from environment variables)
+export const LOYVERSE_CONFIG = {
+  STORE_ID: process.env.NEXT_PUBLIC_LOYVERSE_STORE_ID || "",
+  DEFAULT_PAYMENT_TYPE_ID:
+    process.env.NEXT_PUBLIC_LOYVERSE_PAYMENT_TYPE_ID || "",
+  SOURCE_NAME: process.env.NEXT_PUBLIC_LOYVERSE_SOURCE_NAME || "POS System",
+};
+
+// Loyverse Payment Types (from your Loyverse account)
+export const LOYVERSE_PAYMENT_TYPES = {
+  CASH: {
+    id: "e68a8970-7792-49f7-a0f3-f72c61371d46",
+    name: "Cash",
+    type: "CASH",
+  },
+  CARD: {
+    id: "4b4b981f-81aa-4979-baaa-cf8ac49647ec",
+    name: "Card",
+    type: "NONINTEGRATEDCARD",
+  },
+  CRYPTO: {
+    id: "d8139062-22ed-4e16-a565-0a1fead90c70",
+    name: "Crypto transfer",
+    type: "OTHER",
+  },
+  TRANSFER: {
+    id: "e8cc7249-784b-4224-bd9c-db4fe19c1d84",
+    name: "Transfer",
+    type: "OTHER",
+  },
+};
+
 // Feature Flags
 export const FEATURES = {
   BARCODE_SCANNER: process.env.NEXT_PUBLIC_ENABLE_BARCODE_SCANNER === "true",
@@ -98,6 +130,7 @@ export const FEATURES = {
     process.env.NEXT_PUBLIC_ENABLE_HARDWARE_INTEGRATION === "true",
   DEBUG_MODE: process.env.NEXT_PUBLIC_DEBUG_MODE === "true",
   MOCK_API: process.env.NEXT_PUBLIC_MOCK_API === "true",
+  LOYVERSE_SYNC: process.env.NEXT_PUBLIC_LOYVERSE_SYNC === "true",
 };
 
 // Storage Keys

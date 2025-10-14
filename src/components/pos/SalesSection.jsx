@@ -43,6 +43,8 @@ import {
   RefreshCw,
   CheckCircle,
   AlertCircle,
+  ArrowLeftRight,
+  Bitcoin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
@@ -91,6 +93,21 @@ export default function SalesSection({ cashier }) {
   const [showCustomerSelectModal, setShowCustomerSelectModal] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+
+  // Initialize device ID on first load
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      let deviceId = localStorage.getItem("device_id");
+      if (!deviceId) {
+        // Generate unique device ID
+        deviceId = `device-${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+        localStorage.setItem("device_id", deviceId);
+        console.log("Generated new device ID:", deviceId);
+      }
+    }
+  }, []);
 
   // Load products and customers
   useEffect(() => {
@@ -365,35 +382,201 @@ export default function SalesSection({ cashier }) {
     try {
       setIsProcessing(true);
       const cartData = getCartData();
-      const { ordersService } = await import("@/lib/firebase/firestore");
+      const { receiptsService } = await import("@/lib/firebase/firestore");
       const { generateOrderNumber } = await import("@/lib/utils/format");
+      const { loyverseService } = await import("@/lib/api/loyverse");
+      const { LOYVERSE_CONFIG, FEATURES } = await import("@/config/constants");
 
-      // Create order in Firebase
-      const orderData = {
-        orderNumber: generateOrderNumber(),
-        items: items.map((item) => ({
-          productId: item.productId,
-          name: item.name,
-          price: item.price,
+      const orderNumber = generateOrderNumber();
+      const now = new Date();
+
+      // Get payment type details based on selected payment method
+      const { LOYVERSE_PAYMENT_TYPES } = await import("@/config/constants");
+      let selectedPaymentType;
+      switch (paymentMethod) {
+        case "cash":
+          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CASH;
+          break;
+        case "card":
+          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CARD;
+          break;
+        case "crypto":
+          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CRYPTO;
+          break;
+        case "transfer":
+          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.TRANSFER;
+          break;
+        default:
+          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CASH;
+      }
+
+      // Prepare line items for Loyverse format
+      // According to Loyverse API: ONLY variant_id and quantity are REQUIRED
+      // Optional fields: price, cost, line_note, line_discounts, line_taxes, line_modifiers
+      const lineItems = items.map((item) => {
+        const lineItem = {
+          variant_id: item.variantId || item.variant_id || item.productId,
           quantity: item.quantity,
-          total: item.total,
-        })),
+        };
+
+        // Only add optional fields if you want to override Loyverse defaults
+        if (item.price !== undefined) {
+          lineItem.price = item.price;
+        }
+        if (item.cost !== undefined) {
+          lineItem.cost = item.cost;
+        }
+
+        return lineItem;
+      });
+
+      // Prepare payment data with correct payment type ID
+      const payments = [
+        {
+          payment_type_id: selectedPaymentType.id,
+          paid_at: now.toISOString(),
+        },
+      ];
+
+      // Sync status tracking
+      let loyverseReceipt = null;
+      let syncStatus = "pending";
+      let syncError = null;
+
+      // Try to sync to Loyverse if feature is enabled and online
+      if (FEATURES.LOYVERSE_SYNC && navigator.onLine) {
+        try {
+          // Create receipt in Loyverse
+          const loyverseData = {
+            store_id: LOYVERSE_CONFIG.STORE_ID,
+            employee_id: cashier?.loyverseId || null,
+            order: orderNumber,
+            customer_id: cartCustomer?.loyverseId || null,
+            source: LOYVERSE_CONFIG.SOURCE_NAME,
+            receipt_date: now.toISOString(),
+            note: `Transaction from ${LOYVERSE_CONFIG.SOURCE_NAME}`,
+            line_items: lineItems,
+            payments: payments,
+          };
+
+          loyverseReceipt = await loyverseService.createReceipt(loyverseData);
+          syncStatus = "synced";
+
+          toast.success("Transaction synced to Loyverse!");
+        } catch (error) {
+          console.error("Loyverse sync error:", error);
+          syncStatus = "failed";
+          syncError = error.message;
+          toast.warning(
+            "Transaction saved locally. Sync failed: " + error.message
+          );
+        }
+      } else if (!navigator.onLine) {
+        syncStatus = "offline";
+        toast.info("Offline mode: Transaction will sync when online");
+      }
+
+      // Create receipt data for Firebase (in Loyverse-compatible format)
+      const receiptData = {
+        // Local identifiers
+        orderNumber: orderNumber,
+        deviceId:
+          typeof window !== "undefined"
+            ? localStorage.getItem("device_id") || "unknown"
+            : "unknown",
+        fromThisDevice: true,
+
+        // Loyverse format
+        receipt_number: loyverseReceipt?.receipt_number || null,
+        receipt_type: "SALE",
+        order: orderNumber,
+        source: LOYVERSE_CONFIG.SOURCE_NAME,
+
+        // Dates
+        created_at: now.toISOString(),
+        receipt_date: now.toISOString(),
+        updated_at: now.toISOString(),
+
+        // Money amounts
+        total_money: cartData.total,
+        total_tax: 0, // Add tax calculation if needed
+        total_discount: cartData.discountAmount,
         subtotal: cartData.subtotal,
-        discount: cartData.discountAmount,
-        total: cartData.total,
-        userId: user?.id || null,
+        tip: 0,
+        surcharge: 0,
+
+        // Points (if customer has loyalty program)
+        points_earned: cartCustomer ? Math.floor(total) : 0,
+        points_deducted: 0,
+        points_balance: cartCustomer
+          ? (cartCustomer.points || 0) + Math.floor(total)
+          : 0,
+
+        // IDs
+        store_id: LOYVERSE_CONFIG.STORE_ID,
+        employee_id: cashier?.loyverseId || null,
+        customer_id: cartCustomer?.loyverseId || null,
+        pos_device_id: null,
+
+        // Additional info
         cashierId: cashier?.id || null,
         cashierName: cashier?.name || "Unknown Cashier",
+        userId: user?.id || null,
         customerId: cartCustomer?.id || null,
         customerName: cartCustomer?.name || null,
+
+        // Status and sync
         status: "completed",
-        paymentMethod,
+        cancelled_at: null,
+
+        // Sync tracking
+        syncStatus: syncStatus,
+        syncError: syncError,
+        syncedAt: syncStatus === "synced" ? now.toISOString() : null,
+        loyverseReceiptNumber: loyverseReceipt?.receipt_number || null,
+        loyverseResponse: loyverseReceipt || null,
+
+        // Line items in Loyverse format
+        line_items: items.map((item) => ({
+          id: item.id || null,
+          item_id: item.itemId || item.productId,
+          variant_id: item.variantId || item.productId,
+          item_name: item.name,
+          variant_name: item.variant || null,
+          sku: item.sku || null,
+          quantity: item.quantity,
+          price: item.price,
+          gross_total_money: item.total,
+          total_money: item.total,
+          cost: item.cost || 0,
+          cost_total: (item.cost || 0) * item.quantity,
+          line_note: null,
+          line_taxes: [],
+          line_discounts: [],
+          line_modifiers: [],
+          total_discount: 0,
+        })),
+
+        // Payment info
+        paymentMethod: paymentMethod,
+        paymentTypeName: selectedPaymentType.name,
         cashReceived: paymentMethod === "cash" ? cashAmount : total,
         change: paymentMethod === "cash" ? cashAmount - total : 0,
-        synced: false, // Track sync status
+
+        payments: [
+          {
+            payment_type_id: selectedPaymentType.id,
+            name: selectedPaymentType.name,
+            type: selectedPaymentType.type,
+            money_amount: total,
+            paid_at: now.toISOString(),
+            payment_details: null,
+          },
+        ],
       };
 
-      await ordersService.create(orderData);
+      // Save to Firebase
+      await receiptsService.create(receiptData);
 
       // Update customer stats if customer is selected
       if (cartCustomer) {
@@ -408,26 +591,27 @@ export default function SalesSection({ cashier }) {
         }
       }
 
-      // Also save to IndexedDB for local cache (already in Firebase, no need for sync queue)
+      // Also save to IndexedDB for local cache
       try {
         await db.transaction("rw", db.orders, db.orderItems, async () => {
           const localOrderId = await db.orders.add({
-            orderNumber: orderData.orderNumber,
+            orderNumber: orderNumber,
             status: "completed",
-            total: orderData.total,
-            subtotal: orderData.subtotal,
-            discount: orderData.discount,
+            total: total,
+            subtotal: cartData.subtotal,
+            discount: cartData.discountAmount,
             tax: 0,
             userId: user?.id || null,
             cashierId: cashier?.id || null,
             cashierName: cashier?.name || "Unknown Cashier",
-            customerId: orderData.customerId,
-            customerName: orderData.customerName,
+            customerId: cartCustomer?.id || null,
+            customerName: cartCustomer?.name || null,
             paymentMethod,
-            cashReceived: orderData.cashReceived,
-            change: orderData.change,
-            createdAt: new Date().toISOString(),
-            syncStatus: "synced", // Already synced to Firebase
+            cashReceived: paymentMethod === "cash" ? cashAmount : total,
+            change: paymentMethod === "cash" ? cashAmount - total : 0,
+            createdAt: now.toISOString(),
+            syncStatus: syncStatus,
+            loyverseReceiptNumber: loyverseReceipt?.receipt_number || null,
           });
 
           const orderItemsWithOrderId = items.map((item) => ({
@@ -443,10 +627,15 @@ export default function SalesSection({ cashier }) {
       }
 
       // Store completed order and show receipt modal
-      setCompletedOrder(orderData);
+      setCompletedOrder(receiptData);
       setShowPaymentModal(false);
       setShowReceiptModal(true);
-      toast.success("Payment completed successfully!");
+
+      if (syncStatus === "synced") {
+        toast.success("Payment completed and synced to Loyverse!");
+      } else {
+        toast.success("Payment completed successfully!");
+      }
     } catch (error) {
       console.error("Checkout error:", error);
       toast.error("Failed to complete order");
@@ -507,7 +696,78 @@ export default function SalesSection({ cashier }) {
     return Math.max(0, cashAmount - total);
   };
 
-  const quickCashAmounts = [20, 50, 100, 200];
+  // Handle quick cash button click - set amount and auto-complete payment
+  const handleQuickCash = (amount) => {
+    // Set the cash received amount
+    setCashReceived(amount.toString());
+
+    // Auto-complete payment after state update
+    // Use setTimeout to ensure state is updated
+    setTimeout(() => {
+      const completeButton = document.querySelector(
+        '[data-quick-complete="true"]'
+      );
+      if (completeButton && !completeButton.disabled) {
+        completeButton.click();
+      }
+    }, 50);
+  };
+
+  // Generate smart quick cash amounts based on total
+  const getQuickCashAmounts = () => {
+    const total = getTotal();
+
+    // Standard denominations
+    const denominations = [20, 50, 100, 200, 500, 1000, 2000, 5000];
+
+    // Find the nearest higher denomination
+    const amounts = [];
+
+    // Add exact amount as first option
+    amounts.push(Math.ceil(total));
+
+    // Add next 3 denominations that are >= total
+    let added = 0;
+    for (const denom of denominations) {
+      if (denom >= total && added < 3) {
+        if (!amounts.includes(denom)) {
+          amounts.push(denom);
+          added++;
+        }
+      }
+    }
+
+    // If we don't have 4 amounts yet, add higher denominations
+    while (amounts.length < 4) {
+      const lastAmount = amounts[amounts.length - 1];
+      let nextAmount = lastAmount;
+
+      // Find next denomination
+      for (const denom of denominations) {
+        if (denom > lastAmount) {
+          nextAmount = denom;
+          break;
+        }
+      }
+
+      // If no denomination found, just add multiples
+      if (nextAmount === lastAmount) {
+        if (lastAmount < 100) {
+          nextAmount = lastAmount + 50;
+        } else if (lastAmount < 1000) {
+          nextAmount = lastAmount + 100;
+        } else {
+          nextAmount = lastAmount + 500;
+        }
+      }
+
+      amounts.push(nextAmount);
+    }
+
+    return amounts.slice(0, 4);
+  };
+
+  const quickCashAmounts = getQuickCashAmounts();
 
   // Generate thermal receipt HTML (58mm width)
   const generateThermalReceipt = (order) => {
@@ -660,7 +920,9 @@ export default function SalesSection({ cashier }) {
         <div class="payment-info">
           <div class="total-row">
             <span>Payment Method:</span>
-            <span>${order.paymentMethod.toUpperCase()}</span>
+            <span>${
+              order.paymentTypeName || order.paymentMethod.toUpperCase()
+            }</span>
           </div>
           ${
             order.paymentMethod === "cash"
@@ -886,7 +1148,9 @@ export default function SalesSection({ cashier }) {
                         {(!availableForSale || isOutOfStock) && (
                           <div className="absolute inset-0 flex items-center justify-center">
                             <span className="rounded bg-black/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
-                              {!availableForSale ? "Not for sale" : "Out of stock"}
+                              {!availableForSale
+                                ? "Not for sale"
+                                : "Out of stock"}
                             </span>
                           </div>
                         )}
@@ -1154,6 +1418,26 @@ export default function SalesSection({ cashier }) {
                     <CreditCard className="h-6 w-6 mb-1" />
                     Card
                   </Button>
+                  <Button
+                    type="button"
+                    variant={paymentMethod === "crypto" ? "default" : "outline"}
+                    className="h-20 flex flex-col"
+                    onClick={() => setPaymentMethod("crypto")}
+                  >
+                    <Bitcoin className="h-6 w-6 mb-1" />
+                    Crypto
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      paymentMethod === "transfer" ? "default" : "outline"
+                    }
+                    className="h-20 flex flex-col"
+                    onClick={() => setPaymentMethod("transfer")}
+                  >
+                    <ArrowLeftRight className="h-6 w-6 mb-1" />
+                    Transfer
+                  </Button>
                 </div>
               </div>
 
@@ -1181,7 +1465,7 @@ export default function SalesSection({ cashier }) {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => setCashReceived(amount.toString())}
+                        onClick={() => handleQuickCash(amount)}
                       >
                         ${amount}
                       </Button>
@@ -1220,6 +1504,24 @@ export default function SalesSection({ cashier }) {
                   </div>
                 </div>
               )}
+
+              {/* Crypto Payment Note */}
+              {paymentMethod === "crypto" && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-4 rounded-lg">
+                  <div className="text-sm text-purple-700 dark:text-purple-400">
+                    Process cryptocurrency transfer and confirm payment received
+                  </div>
+                </div>
+              )}
+
+              {/* Transfer Payment Note */}
+              {paymentMethod === "transfer" && (
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 p-4 rounded-lg">
+                  <div className="text-sm text-indigo-700 dark:text-indigo-400">
+                    Process bank transfer and confirm payment received
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}
@@ -1235,6 +1537,7 @@ export default function SalesSection({ cashier }) {
               <Button
                 className="flex-1"
                 onClick={handleCompletePayment}
+                data-quick-complete="true"
                 disabled={
                   isProcessing ||
                   (paymentMethod === "cash" &&
@@ -1282,9 +1585,8 @@ export default function SalesSection({ cashier }) {
                         Payment Completed
                       </div>
                       <div className="text-sm text-green-600 dark:text-green-400">
-                        {completedOrder.paymentMethod === "cash"
-                          ? "Cash Payment"
-                          : "Card Payment"}
+                        {completedOrder.paymentTypeName ||
+                          completedOrder.paymentMethod}
                       </div>
                     </div>
                   </div>
@@ -1331,15 +1633,15 @@ export default function SalesSection({ cashier }) {
                 {/* Order Items Summary */}
                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg max-h-48 overflow-y-auto">
                   <div className="text-sm font-semibold mb-2">
-                    Order Items ({completedOrder.items.length})
+                    Order Items ({completedOrder.line_items?.length || 0})
                   </div>
                   <div className="space-y-1">
-                    {completedOrder.items.map((item, index) => (
+                    {completedOrder.line_items?.map((item, index) => (
                       <div key={index} className="flex justify-between text-sm">
                         <span>
-                          {item.quantity}x {item.name}
+                          {item.quantity}x {item.item_name}
                         </span>
-                        <span>{formatCurrency(item.total)}</span>
+                        <span>{formatCurrency(item.total_money)}</span>
                       </div>
                     ))}
                   </div>

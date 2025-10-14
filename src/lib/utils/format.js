@@ -85,14 +85,17 @@ export const parseFloatSafe = (value, defaultValue = 0) => {
 };
 
 /**
- * Generate order number
+ * Generate order number (max 20 chars for Loyverse)
  */
 export const generateOrderNumber = (prefix = "ORD") => {
-  const timestamp = Date.now();
+  const now = new Date();
+  const date = now.toISOString().slice(2, 10).replace(/-/g, ""); // YYMMDD
+  const time = now.toTimeString().slice(0, 5).replace(/:/g, ""); // HHMM
   const random = Math.floor(Math.random() * 1000)
     .toString()
     .padStart(3, "0");
-  return `${prefix}-${timestamp}-${random}`;
+  // Format: O-YYMMDD-HHMM-RRR (max 18 chars)
+  return `O-${date}-${time}-${random}`;
 };
 
 /**

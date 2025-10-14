@@ -30,6 +30,7 @@ export default function IntegrationPage() {
     items: false,
     customers: false,
     receipts: false,
+    paymentTypes: false,
   });
 
   const [syncResults, setSyncResults] = useState({
@@ -37,10 +38,12 @@ export default function IntegrationPage() {
     items: null,
     customers: null,
     receipts: null,
+    paymentTypes: null,
   });
 
   const [debugData, setDebugData] = useState(null);
   const [showDebugData, setShowDebugData] = useState(false);
+  const [paymentTypes, setPaymentTypes] = useState(null);
 
   // Test API Connection
   const handleTestConnection = async () => {
@@ -402,6 +405,48 @@ export default function IntegrationPage() {
     }
   };
 
+  // Get Payment Types
+  const handleGetPaymentTypes = async () => {
+    setSyncing({ ...syncing, paymentTypes: true });
+    try {
+      console.log("📡 Fetching payment types from Loyverse...");
+      const response = await loyverseService.getAllPaymentTypes({
+        show_deleted: false,
+      });
+
+      console.log("Loyverse Payment Types:", response);
+      setPaymentTypes(response.payment_types);
+
+      setSyncResults({
+        ...syncResults,
+        paymentTypes: {
+          success: true,
+          count: response.payment_types?.length || 0,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      toast.success(
+        `✅ Found ${response.payment_types?.length || 0} payment types`
+      );
+      setDebugData(response);
+      setShowDebugData(true);
+    } catch (error) {
+      console.error("Payment types fetch failed:", error);
+      toast.error(`❌ Failed: ${error.message}`);
+      setSyncResults({
+        ...syncResults,
+        paymentTypes: {
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } finally {
+      setSyncing({ ...syncing, paymentTypes: false });
+    }
+  };
+
   // Sync All
   const handleSyncAll = async () => {
     toast.info("Starting full sync...");
@@ -692,6 +737,130 @@ export default function IntegrationPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Payment Types Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-indigo-600" />
+            Payment Types
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-600">
+            View all available payment types configured in your Loyverse
+            account. This helps you identify the correct Payment Type IDs for
+            receipts.
+          </p>
+
+          {syncResults.paymentTypes && (
+            <div
+              className={`p-3 rounded-lg ${
+                syncResults.paymentTypes.success
+                  ? "bg-green-50 border border-green-200"
+                  : "bg-red-50 border border-red-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                {syncResults.paymentTypes.success ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <span className="font-medium">
+                  {syncResults.paymentTypes.success
+                    ? `${syncResults.paymentTypes.count} payment types found`
+                    : "Fetch failed"}
+                </span>
+              </div>
+              <p className="text-xs mt-1">
+                {new Date(syncResults.paymentTypes.timestamp).toLocaleString()}
+              </p>
+            </div>
+          )}
+
+          <Button
+            onClick={handleGetPaymentTypes}
+            disabled={syncing.paymentTypes}
+            className="w-full"
+            variant="outline"
+          >
+            {syncing.paymentTypes ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <Database className="mr-2 h-4 w-4" />
+                Get Payment Types
+              </>
+            )}
+          </Button>
+
+          {/* Display Payment Types */}
+          {paymentTypes && paymentTypes.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-700">
+                Available Payment Types ({paymentTypes.length}):
+              </h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {paymentTypes.map((pt) => (
+                  <div
+                    key={pt.id}
+                    className="border rounded-lg p-3 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold text-gray-900">
+                            {pt.name}
+                          </h4>
+                          <Badge
+                            variant={
+                              pt.type === "CASH"
+                                ? "default"
+                                : pt.type === "CARD"
+                                ? "secondary"
+                                : "outline"
+                            }
+                            className="text-xs"
+                          >
+                            {pt.type}
+                          </Badge>
+                          {pt.deleted_at && (
+                            <Badge variant="destructive" className="text-xs">
+                              Deleted
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1 text-xs text-gray-600">
+                          <p className="font-mono bg-gray-100 px-2 py-1 rounded inline-block">
+                            ID: {pt.id}
+                          </p>
+                          {pt.stores && pt.stores.length > 0 && (
+                            <p>Stores: {pt.stores.length} configured</p>
+                          )}
+                          <p>
+                            Created:{" "}
+                            {new Date(pt.created_at).toLocaleDateString()}
+                          </p>
+                          {pt.updated_at && (
+                            <p>
+                              Updated:{" "}
+                              {new Date(pt.updated_at).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Sync All */}
       <Card>

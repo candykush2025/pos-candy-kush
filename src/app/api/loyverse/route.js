@@ -4,9 +4,21 @@
  */
 
 const LOYVERSE_API_BASE = "https://api.loyverse.com/v1.0";
-const LOYVERSE_ACCESS_TOKEN = "d390d2223e2c4537a12f9bd60860c2b8";
+const LOYVERSE_ACCESS_TOKEN = process.env.LOYVERSE_ACCESS_TOKEN;
 
 export async function GET(request) {
+  // Check if access token is configured
+  if (!LOYVERSE_ACCESS_TOKEN) {
+    return Response.json(
+      {
+        error: true,
+        message:
+          "Loyverse access token not configured. Please set LOYVERSE_ACCESS_TOKEN in .env.local",
+      },
+      { status: 500 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const endpoint = searchParams.get("endpoint") || "/categories";
 
@@ -95,6 +107,20 @@ export async function GET(request) {
       if (updated_at_max) queryParams.append("updated_at_max", updated_at_max);
       if (created_at_min) queryParams.append("created_at_min", created_at_min);
       if (created_at_max) queryParams.append("created_at_max", created_at_max);
+    } else if (endpoint.includes("payment_types")) {
+      // Payment types-specific parameters
+      const payment_type_ids = searchParams.get("payment_type_ids");
+      const created_at_min = searchParams.get("created_at_min");
+      const created_at_max = searchParams.get("created_at_max");
+      const updated_at_min = searchParams.get("updated_at_min");
+      const updated_at_max = searchParams.get("updated_at_max");
+
+      if (payment_type_ids)
+        queryParams.append("payment_type_ids", payment_type_ids);
+      if (created_at_min) queryParams.append("created_at_min", created_at_min);
+      if (created_at_max) queryParams.append("created_at_max", created_at_max);
+      if (updated_at_min) queryParams.append("updated_at_min", updated_at_min);
+      if (updated_at_max) queryParams.append("updated_at_max", updated_at_max);
     } else if (endpoint.includes("employees")) {
       // Employees endpoint - no additional parameters needed for single employee
       // List endpoint uses common parameters (limit, cursor) already handled above
@@ -147,6 +173,18 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  // Check if access token is configured
+  if (!LOYVERSE_ACCESS_TOKEN) {
+    return Response.json(
+      {
+        error: true,
+        message:
+          "Loyverse access token not configured. Please set LOYVERSE_ACCESS_TOKEN in .env.local",
+      },
+      { status: 500 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { endpoint, method = "POST", data } = body;

@@ -755,7 +755,7 @@ export default function AdminOrders() {
                     <div className="flex gap-4">
                       {receipt.storeId && (
                         <span className="text-xs">
-                          Store: {receipt.storeId.slice(0, 8)}...
+                          Store: {receipt.storeId}
                         </span>
                       )}
                       {receipt.receiptDate && (

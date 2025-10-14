@@ -28,6 +28,11 @@ import {
   Receipt,
   ChevronLeft,
   ChevronRight,
+  CheckCircle,
+  XCircle,
+  Clock,
+  WifiOff,
+  AlertCircle,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { loyverseService } from "@/lib/api/loyverse";
@@ -209,6 +214,65 @@ const getPaymentSummary = (receipt) => {
   return receipt.payments
     .map((payment) => payment.name || payment.payment_type?.name || "Cash")
     .join(", ");
+};
+
+const getSyncStatusBadge = (receipt) => {
+  const syncStatus = receipt.syncStatus || receipt.sync_status;
+  const fromThisDevice = receipt.fromThisDevice;
+
+  // If no sync status, it's from Loyverse
+  if (!syncStatus) {
+    return {
+      variant: "secondary",
+      icon: Receipt,
+      text: "From Loyverse",
+      className:
+        "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+    };
+  }
+
+  switch (syncStatus) {
+    case "synced":
+      return {
+        variant: "default",
+        icon: CheckCircle,
+        text: fromThisDevice ? "Synced ✓" : "Synced",
+        className:
+          "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800",
+      };
+    case "pending":
+      return {
+        variant: "secondary",
+        icon: Clock,
+        text: "Pending",
+        className:
+          "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800",
+      };
+    case "offline":
+      return {
+        variant: "outline",
+        icon: WifiOff,
+        text: "Offline",
+        className:
+          "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
+      };
+    case "failed":
+      return {
+        variant: "destructive",
+        icon: XCircle,
+        text: "Failed",
+        className:
+          "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
+      };
+    default:
+      return {
+        variant: "outline",
+        icon: AlertCircle,
+        text: "Unknown",
+        className:
+          "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700",
+      };
+  }
 };
 
 const getLineItemQuantity = (item) => {
@@ -541,14 +605,37 @@ export default function HistorySection({ cashier: _cashier }) {
                     </p>
                   </div>
                 </div>
-                {receipt.receiptType && (
-                  <Badge
-                    variant="outline"
-                    className="w-fit text-xs uppercase tracking-wide"
-                  >
-                    {receipt.receiptType}
-                  </Badge>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  {receipt.receiptType && (
+                    <Badge
+                      variant="outline"
+                      className="w-fit text-xs uppercase tracking-wide"
+                    >
+                      {receipt.receiptType}
+                    </Badge>
+                  )}
+                  {(() => {
+                    const syncBadge = getSyncStatusBadge(receipt);
+                    const SyncIcon = syncBadge.icon;
+                    return (
+                      <Badge
+                        variant={syncBadge.variant}
+                        className={`w-fit text-xs font-medium ${syncBadge.className}`}
+                      >
+                        <SyncIcon className="mr-1 h-3 w-3" />
+                        {syncBadge.text}
+                      </Badge>
+                    );
+                  })()}
+                  {receipt.fromThisDevice && (
+                    <Badge
+                      variant="secondary"
+                      className="w-fit text-xs font-medium bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                    >
+                      This Device
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="px-5 pb-3 pt-2">
                 <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2 lg:grid-cols-4">
@@ -661,6 +748,52 @@ export default function HistorySection({ cashier: _cashier }) {
           </DialogHeader>
           {selectedReceipt && (
             <div className="space-y-4">
+              {/* Sync Status Section */}
+              <div className="rounded-lg border p-3">
+                <h3 className="mb-2 font-semibold">Sync Status</h3>
+                <div className="flex flex-wrap gap-2">
+                  {(() => {
+                    const syncBadge = getSyncStatusBadge(selectedReceipt);
+                    const SyncIcon = syncBadge.icon;
+                    return (
+                      <Badge
+                        variant={syncBadge.variant}
+                        className={`font-medium ${syncBadge.className}`}
+                      >
+                        <SyncIcon className="mr-1 h-3 w-3" />
+                        {syncBadge.text}
+                      </Badge>
+                    );
+                  })()}
+                  {selectedReceipt.fromThisDevice && (
+                    <Badge
+                      variant="secondary"
+                      className="font-medium bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                    >
+                      Created on This Device
+                    </Badge>
+                  )}
+                  {selectedReceipt.loyverseReceiptNumber && (
+                    <Badge
+                      variant="outline"
+                      className="font-medium bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
+                    >
+                      Loyverse #{selectedReceipt.loyverseReceiptNumber}
+                    </Badge>
+                  )}
+                </div>
+                {selectedReceipt.syncError && (
+                  <div className="mt-2 rounded bg-red-50 p-2 text-sm text-red-700">
+                    <strong>Sync Error:</strong> {selectedReceipt.syncError}
+                  </div>
+                )}
+                {selectedReceipt.syncedAt && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Synced: {formatDate(new Date(selectedReceipt.syncedAt))}
+                  </p>
+                )}
+              </div>
+
               <div>
                 <h3 className="font-semibold mb-2">Customer</h3>
                 <p>{getCustomerLabel(selectedReceipt)}</p>
