@@ -1,8 +1,8 @@
-# PWA Configuration Summary - Cashier Sales Route
+# PWA Configuration Summary - Login Page Install
 
 ## ✅ Configuration Complete
 
-The PWA is now configured to **only** install for cashiers on the `/sales` route. Admins will use the regular browser.
+The PWA is now configured to show install prompt **instantly** on the `/login` page (first page users see).
 
 ---
 
@@ -12,22 +12,23 @@ The PWA is now configured to **only** install for cashiers on the `/sales` route
 
 ```json
 {
-  "start_url": "/sales",     // Changed from "/"
-  "scope": "/sales",          // Added - PWA only active on /sales
+  "start_url": "/login",     // Login is entry point
+  "scope": "/",               // Works across all routes
+  "orientation": "landscape", // Force landscape on tablets
   ...
 }
 ```
 
-**Effect**: PWA only works within the `/sales` route.
+**Effect**: PWA starts at login page and works across all routes.
 
 ### 2. **PWAInstallPrompt.jsx** Updated
 
 - Added `usePathname()` from `next/navigation`
-- Added route check: `const isOnSalesRoute = pathname === "/sales"`
-- Install prompt only shows when `isOnSalesRoute === true`
-- Prompt appears 30 seconds after visiting `/sales`
+- Added route check: `const isOnLoginRoute = pathname === "/login"`
+- Install prompt only shows when `isOnLoginRoute === true`
+- **No delay** - Prompt appears instantly when login page loads
 
-**Effect**: Install prompt ONLY appears on `/sales` route, never on admin routes.
+**Effect**: Install prompt appears INSTANTLY on `/login` route (first page users see).
 
 ### 3. **CASHIER_PWA_INSTALL.md** Created
 
@@ -43,10 +44,10 @@ Complete installation guide for cashiers with:
 
 ## 🎯 How It Works
 
-### For Cashiers (on /sales)
+### For All Users (on /login)
 
-1. Visit `https://your-domain.com/sales`
-2. Wait 30 seconds → Install prompt appears
+1. Visit `https://your-domain.com` → Redirects to `/login`
+2. Login page loads → Install prompt appears **instantly**
 3. Click "Install" → App installs
 4. Access via "CK POS" icon on device
 

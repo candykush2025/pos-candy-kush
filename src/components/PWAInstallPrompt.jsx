@@ -13,8 +13,8 @@ export function PWAInstallPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
-  // Only show prompt on /sales route (for cashiers)
-  const isOnSalesRoute = pathname === "/sales";
+  // Only show prompt on /login route (first page users see)
+  const isOnLoginRoute = pathname === "/login";
 
   useEffect(() => {
     // Check if already installed
@@ -41,14 +41,16 @@ export function PWAInstallPrompt() {
 
     // Listen for beforeinstallprompt event
     const handler = (e) => {
+      console.log("PWA: beforeinstallprompt event fired");
       e.preventDefault();
       setDeferredPrompt(e);
-      // Show prompt after 30 seconds of usage (only on /sales route)
-      setTimeout(() => {
-        if (isOnSalesRoute) {
-          setShowPrompt(true);
-        }
-      }, 30000);
+      // Show prompt instantly on login page (no delay)
+      if (isOnLoginRoute) {
+        console.log("PWA: Showing install prompt on login page");
+        setShowPrompt(true);
+      } else {
+        console.log("PWA: Not on login route, skipping prompt");
+      }
     };
 
     window.addEventListener("beforeinstallprompt", handler);
@@ -63,7 +65,7 @@ export function PWAInstallPrompt() {
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
     };
-  }, [isOnSalesRoute]);
+  }, [isOnLoginRoute]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
