@@ -1,7 +1,7 @@
 /**
- * Format currency
+ * Format currency (Thai Baht)
  */
-export const formatCurrency = (amount, currency = "USD", locale = "en-US") => {
+export const formatCurrency = (amount, currency = "THB", locale = "th-TH") => {
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,

@@ -55,6 +55,18 @@ export const dbService = {
     return await db.categories.bulkPut(categories);
   },
 
+  async updateCategory(id, updates) {
+    const category = await db.categories.get(id);
+    if (!category) {
+      throw new Error("Category not found");
+    }
+    return await db.categories.put({ ...category, ...updates, id });
+  },
+
+  async deleteCategory(id) {
+    return await db.categories.delete(id);
+  },
+
   // Orders
   async createOrder(order, items) {
     return await db.transaction(
@@ -213,9 +225,22 @@ export const dbService = {
     return await db.customers.bulkPut(customers);
   },
 
+  async updateCustomer(id, updates) {
+    return await db.customers.update(id, updates);
+  },
+
+  async deleteCustomer(id) {
+    return await db.customers.delete(id);
+  },
+
   // Users
   async getUsers() {
     return await db.users.toArray();
+  },
+
+  async getUserByPin(pin) {
+    const users = await db.users.toArray();
+    return users.find((u) => u.pin === pin);
   },
 
   async upsertUsers(users) {

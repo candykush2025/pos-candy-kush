@@ -30,6 +30,7 @@ export default function AdminUsers() {
     email: "",
     password: "",
     role: USER_ROLES.CASHIER,
+    pin: "",
   });
 
   useEffect(() => {
@@ -55,9 +56,20 @@ export default function AdminUsers() {
     e.preventDefault();
 
     try {
+      // Validate PIN for cashiers
+      if (
+        (formData.role === USER_ROLES.CASHIER ||
+          formData.role === USER_ROLES.ADMIN) &&
+        (!formData.pin || formData.pin.length < 4)
+      ) {
+        toast.error("PIN must be at least 4 digits for cashiers");
+        return;
+      }
+
       await registerUser(formData.email, formData.password, {
         name: formData.name,
         role: formData.role,
+        pin: formData.pin || null,
       });
 
       toast.success("User created successfully");
@@ -84,6 +96,7 @@ export default function AdminUsers() {
       email: "",
       password: "",
       role: USER_ROLES.CASHIER,
+      pin: "",
     });
   };
 
@@ -187,6 +200,34 @@ export default function AdminUsers() {
                 </p>
               </div>
 
+              {(formData.role === USER_ROLES.CASHIER ||
+                formData.role === USER_ROLES.ADMIN) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    PIN* (4-6 digits)
+                  </label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="Enter 4-6 digit PIN"
+                    value={formData.pin}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        pin: e.target.value.replace(/\D/g, "").slice(0, 6),
+                      })
+                    }
+                    required
+                    minLength={4}
+                    maxLength={6}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    🔒 PIN is required for POS login (cashiers and admins only)
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-end space-x-2">
                 <Button
                   type="button"
@@ -253,6 +294,11 @@ export default function AdminUsers() {
                     <div>
                       <h3 className="font-semibold">{user.name}</h3>
                       <p className="text-sm text-gray-500">{user.email}</p>
+                      {user.pin && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          🔒 PIN: {"*".repeat(user.pin.length)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center space-x-4">

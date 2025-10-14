@@ -550,8 +550,8 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
   );
 }
 
-// Main Customers Page
-export default function CustomersPage() {
+// Main Customers Section
+export default function CustomersSection() {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");

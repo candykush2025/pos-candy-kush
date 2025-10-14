@@ -5,12 +5,12 @@ export const db = new Dexie("CandyKushPOS");
 
 // Define database schema
 db.version(1).stores({
-  // Products table
+  // Products table (Loyverse compatible)
   products:
-    "++id, barcode, sku, name, categoryId, price, stock, *tags, lastSynced",
+    "id, barcode, sku, name, categoryId, price, stock, source, createdAt, updatedAt",
 
-  // Categories table
-  categories: "++id, name, parentId, lastSynced",
+  // Categories table (Loyverse compatible)
+  categories: "id, name, color, source, createdAt, updatedAt",
 
   // Orders table
   orders:
@@ -26,8 +26,9 @@ db.version(1).stores({
   // Ticket items table
   ticketItems: "++id, ticketId, productId, quantity, price, discount",
 
-  // Customers table
-  customers: "++id, name, email, phone, loyaltyPoints, lastSynced",
+  // Customers table (Loyverse compatible)
+  customers:
+    "id, name, email, phone, customerCode, source, createdAt, updatedAt",
 
   // Users (staff) table
   users: "++id, username, name, role, email, lastSynced",

@@ -26,6 +26,7 @@ export const COLLECTIONS = {
   PRODUCTS: "products",
   CATEGORIES: "categories",
   ORDERS: "orders",
+  RECEIPTS: "receipts",
   CUSTOMERS: "customers",
   SESSIONS: "sessions",
   TICKETS: "tickets",
@@ -229,6 +230,18 @@ export const categoriesService = {
   delete: (id) => deleteDocument(COLLECTIONS.CATEGORIES, id),
 };
 
+// Receipts
+export const receiptsService = {
+  create: (data) => createDocument(COLLECTIONS.RECEIPTS, data),
+  set: (id, data) => setDocument(COLLECTIONS.RECEIPTS, id, data),
+  get: (id) => getDocument(COLLECTIONS.RECEIPTS, id),
+  getAll: (options) => getDocuments(COLLECTIONS.RECEIPTS, options),
+  update: (id, data) => updateDocument(COLLECTIONS.RECEIPTS, id, data),
+  delete: (id) => deleteDocument(COLLECTIONS.RECEIPTS, id),
+  subscribe: (callback, options) =>
+    subscribeToCollection(COLLECTIONS.RECEIPTS, callback, options),
+};
+
 export default {
   createDocument,
   getDocument,
@@ -241,4 +254,5 @@ export default {
   orders: ordersService,
   customers: customersService,
   categories: categoriesService,
+  receipts: receiptsService,
 };
