@@ -403,6 +403,7 @@ export default function HistorySection({ cashier: _cashier }) {
           const receiptDate = getReceiptDate(receipt);
           const lineItems = normalizeLineItems(
             receipt.lineItems ||
+              receipt.line_items ||
               receipt.items ||
               receipt.receiptItems ||
               receipt.receipt_items ||
@@ -412,6 +413,7 @@ export default function HistorySection({ cashier: _cashier }) {
           const enrichedReceipt = {
             ...receipt,
             lineItems,
+            totalMoney: receipt.totalMoney || receipt.total_money || receipt.total || 0,
             _receiptDate: receiptDate,
           };
 

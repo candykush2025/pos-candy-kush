@@ -1,15 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download, X } from "lucide-react";
 import { toast } from "sonner";
 
 export function PWAInstallPrompt() {
+  const pathname = usePathname();
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+
+  // Only show prompt on /sales route (for cashiers)
+  const isOnSalesRoute = pathname === "/sales";
 
   useEffect(() => {
     // Check if already installed
@@ -38,9 +43,11 @@ export function PWAInstallPrompt() {
     const handler = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Show prompt after 30 seconds of usage
+      // Show prompt after 30 seconds of usage (only on /sales route)
       setTimeout(() => {
-        setShowPrompt(true);
+        if (isOnSalesRoute) {
+          setShowPrompt(true);
+        }
       }, 30000);
     };
 
@@ -56,7 +63,7 @@ export function PWAInstallPrompt() {
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
     };
-  }, []);
+  }, [isOnSalesRoute]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
@@ -109,11 +116,7 @@ export function PWAInstallPrompt() {
               Install our app for offline access and faster performance
             </p>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={handleInstallClick}
-                className="flex-1"
-              >
+              <Button size="sm" onClick={handleInstallClick} className="flex-1">
                 <Download className="h-3 w-3 mr-1" />
                 Install
               </Button>

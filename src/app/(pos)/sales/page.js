@@ -163,30 +163,47 @@ export default function SalesPage() {
   const { user } = useAuthStore();
   const { activeTab, setActiveTab } = usePosTabStore();
 
-  // Check if there's a logged-in cashier on mount
+  // Check if there's a logged-in cashier on mount and listen for logout events
   useEffect(() => {
-    const savedCashier = localStorage.getItem("pos_cashier");
-    if (savedCashier) {
-      try {
-        setCashier(JSON.parse(savedCashier));
-      } catch (error) {
-        console.error("Error loading cashier session:", error);
+    const loadCashier = () => {
+      const savedCashier = localStorage.getItem("pos_cashier");
+      if (savedCashier) {
+        try {
+          const parsedCashier = JSON.parse(savedCashier);
+          // Only update if different to prevent infinite loop
+          setCashier((prev) => {
+            if (JSON.stringify(prev) !== JSON.stringify(parsedCashier)) {
+              return parsedCashier;
+            }
+            return prev;
+          });
+        } catch (error) {
+          console.error("Error loading cashier session:", error);
+        }
+      } else {
+        // If no cashier in localStorage, clear state to show login
+        setCashier((prev) => (prev === null ? prev : null));
       }
-    }
-  }, []);
+    };
 
-  // Update localStorage when cashier changes (sync with layout)
-  useEffect(() => {
-    if (cashier) {
-      localStorage.setItem("pos_cashier", JSON.stringify(cashier));
-      // Trigger layout update
-      window.dispatchEvent(new Event("cashier-update"));
-    }
-  }, [cashier]);
+    // Load cashier on mount
+    loadCashier();
+
+    // Listen for cashier updates from layout logout button
+    window.addEventListener("cashier-update", loadCashier);
+    window.addEventListener("storage", loadCashier);
+
+    return () => {
+      window.removeEventListener("cashier-update", loadCashier);
+      window.removeEventListener("storage", loadCashier);
+    };
+  }, []);
 
   const handleCashierLogin = (user) => {
     setCashier(user);
     localStorage.setItem("pos_cashier", JSON.stringify(user));
+    // Trigger layout update
+    window.dispatchEvent(new Event("cashier-update"));
     setActiveTab("sales");
   };
 

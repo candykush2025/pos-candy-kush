@@ -100,8 +100,10 @@ export default function POSLayout({ children }) {
     setCashier(null);
     localStorage.removeItem("pos_cashier");
     window.dispatchEvent(new Event("cashier-update"));
-    setActiveTab("sales");
     toast.success("Cashier logged out");
+    // Logout admin user and redirect to login page
+    logout();
+    router.push("/login");
   };
 
   const handleForceSync = async () => {

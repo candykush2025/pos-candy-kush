@@ -1,5 +1,30 @@
 # Cashier Login System - Quick Start
 
+## 📱 PWA Installation (Recommended)
+
+**For the best cashier experience, install the POS as an app on your device!**
+
+### Why Install?
+
+- ⚡ **Faster**: Instant loading after installation
+- 📱 **App-like**: Works like a native mobile/desktop app
+- 🔒 **Focused**: No browser tabs or distractions
+- 💾 **Better Performance**: Products and settings load faster
+
+### Quick Install Guide
+
+1. Open Chrome browser on your device
+2. Navigate to: `https://your-pos-domain.com/sales`
+3. Wait 30 seconds → Install prompt will appear
+4. Click "Install" button
+5. Done! Access via "CK POS" icon on your device
+
+**📖 Full Installation Guide**: See [CASHIER_PWA_INSTALL.md](./CASHIER_PWA_INSTALL.md)
+
+> **Note for Admins**: Do NOT install the PWA. Use the regular browser for admin features.
+
+---
+
 ## ✅ What's Been Implemented
 
 ### 1. **Cashier Login Screen**
