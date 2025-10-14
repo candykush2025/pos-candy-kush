@@ -962,7 +962,7 @@ export default function SalesSection({ cashier }) {
   };
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Sync Status Bar */}
       {(!isOnline || unsyncedOrders > 0) && (
         <div
@@ -1111,7 +1111,7 @@ export default function SalesSection({ cashier }) {
                     "relative overflow-hidden rounded-md bg-gray-100",
                     viewMode === "list"
                       ? "h-24 w-24 flex-shrink-0"
-                      : "aspect-[4/3] w-full"
+                      : "w-full h-48"
                   );
 
                   const handleCardClick = () => {
@@ -1162,23 +1162,21 @@ export default function SalesSection({ cashier }) {
                           viewMode === "list" ? "py-1 pr-2" : "pt-3"
                         )}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <h3 className="text-base font-semibold text-gray-900">
-                              {product.name}
-                            </h3>
-                            {categoryLabel && (
-                              <p className="text-xs text-gray-500">
-                                {categoryLabel}
-                              </p>
-                            )}
-                            {sku && (
-                              <p className="text-[11px] uppercase tracking-wide text-gray-400">
-                                SKU • {sku}
-                              </p>
-                            )}
-                          </div>
-                          <p className="text-lg font-semibold text-emerald-600">
+                        <div className="space-y-1">
+                          <h3 className="text-base font-semibold text-gray-900">
+                            {product.name}
+                          </h3>
+                          {categoryLabel && (
+                            <p className="text-xs text-gray-500">
+                              {categoryLabel}
+                            </p>
+                          )}
+                          {sku && (
+                            <p className="text-[11px] uppercase tracking-wide text-gray-400">
+                              SKU • {sku}
+                            </p>
+                          )}
+                          <p className="text-lg font-semibold text-emerald-600 pt-1">
                             {formatCurrency(product.price || 0)}
                           </p>
                         </div>
