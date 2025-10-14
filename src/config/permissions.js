@@ -1,5 +1,8 @@
 import { USER_ROLES, PERMISSIONS } from "./constants";
 
+// Re-export for convenience
+export { USER_ROLES, PERMISSIONS };
+
 // Role-based permission mapping
 export const ROLE_PERMISSIONS = {
   [USER_ROLES.CASHIER]: [PERMISSIONS.VIEW_PRODUCTS, PERMISSIONS.CREATE_SALE],

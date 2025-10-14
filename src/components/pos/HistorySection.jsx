@@ -413,7 +413,8 @@ export default function HistorySection({ cashier: _cashier }) {
           const enrichedReceipt = {
             ...receipt,
             lineItems,
-            totalMoney: receipt.totalMoney || receipt.total_money || receipt.total || 0,
+            totalMoney:
+              receipt.totalMoney || receipt.total_money || receipt.total || 0,
             _receiptDate: receiptDate,
           };
 
