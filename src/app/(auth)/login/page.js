@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { loginWithEmail } from "@/lib/firebase/auth";
@@ -18,10 +18,32 @@ import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setAuth, setLoading, setError } = useAuthStore();
+  const { isAuthenticated, user, setAuth, setLoading, setError } =
+    useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Check if user is already authenticated on mount
+  useEffect(() => {
+    // Small delay to ensure Zustand persist has hydrated
+    const timer = setTimeout(() => {
+      if (isAuthenticated && user) {
+        console.log("User already authenticated, redirecting...");
+        // Redirect based on role
+        if (user.role === "admin") {
+          router.push("/admin/dashboard");
+        } else {
+          router.push("/sales");
+        }
+      } else {
+        setIsCheckingAuth(false);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, user, router]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -75,6 +97,20 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // Show loading while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100 p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-12 w-12 animate-spin text-green-600 mb-4" />
+            <p className="text-gray-600">Checking authentication...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100 p-4">
