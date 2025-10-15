@@ -36,11 +36,11 @@ export default function AdminSettings() {
   const [isSaving, setIsSaving] = useState(false);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-gray-500 mt-2">
+        <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
+        <p className="text-sm md:text-base text-gray-500 mt-1 md:mt-2">
           System configuration and information
         </p>
       </div>
@@ -48,38 +48,40 @@ export default function AdminSettings() {
       {/* Color Theme Customization */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <Palette className="mr-2 h-5 w-5" />
+          <CardTitle className="flex items-center text-lg md:text-xl">
+            <Palette className="mr-2 h-6 w-6 md:h-5 md:w-5" />
             POS Color Theme
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-sm">
             Customize the POS interface colors (Admin only)
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-5 md:space-y-6">
           {/* Primary Color */}
           <div className="space-y-3">
-            <label className="text-sm font-medium">Primary Color</label>
-            <p className="text-xs text-gray-500">
+            <label className="text-sm md:text-base font-medium">
+              Primary Color
+            </label>
+            <p className="text-xs md:text-sm text-gray-500">
               Main color used for buttons, highlights, and accents
             </p>
-            <div className="flex gap-3 items-center">
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
               <Input
                 type="color"
                 value={primaryColor}
                 onChange={(e) => setPrimaryColor(e.target.value)}
-                className="w-20 h-12 cursor-pointer"
+                className="w-full sm:w-20 h-14 md:h-12 cursor-pointer"
               />
               <Input
                 type="text"
                 value={primaryColor}
                 onChange={(e) => setPrimaryColor(e.target.value)}
                 placeholder="#16a34a"
-                className="flex-1"
+                className="flex-1 h-12 text-base"
                 maxLength={7}
               />
               <div
-                className="w-12 h-12 rounded border-2 border-gray-300"
+                className="hidden sm:block w-12 h-12 rounded border-2 border-gray-300 flex-shrink-0"
                 style={{ backgroundColor: primaryColor }}
               />
             </div>
@@ -87,27 +89,29 @@ export default function AdminSettings() {
 
           {/* Secondary Color */}
           <div className="space-y-3">
-            <label className="text-sm font-medium">Secondary Color</label>
-            <p className="text-xs text-gray-500">
+            <label className="text-sm md:text-base font-medium">
+              Secondary Color
+            </label>
+            <p className="text-xs md:text-sm text-gray-500">
               Accent color for badges, links, and secondary elements
             </p>
-            <div className="flex gap-3 items-center">
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
               <Input
                 type="color"
                 value={secondaryColor}
                 onChange={(e) => setSecondaryColor(e.target.value)}
-                className="w-20 h-12 cursor-pointer"
+                className="w-full sm:w-20 h-14 md:h-12 cursor-pointer"
               />
               <Input
                 type="text"
                 value={secondaryColor}
                 onChange={(e) => setSecondaryColor(e.target.value)}
                 placeholder="#0ea5e9"
-                className="flex-1"
+                className="flex-1 h-12 text-base"
                 maxLength={7}
               />
               <div
-                className="w-12 h-12 rounded border-2 border-gray-300"
+                className="hidden sm:block w-12 h-12 rounded border-2 border-gray-300 flex-shrink-0"
                 style={{ backgroundColor: secondaryColor }}
               />
             </div>
@@ -115,8 +119,10 @@ export default function AdminSettings() {
 
           {/* Preset Colors */}
           <div className="space-y-3">
-            <label className="text-sm font-medium">Quick Presets</label>
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            <label className="text-sm md:text-base font-medium">
+              Quick Presets
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
                 { name: "Green", primary: "#16a34a", secondary: "#0ea5e9" },
                 { name: "Blue", primary: "#2563eb", secondary: "#8b5cf6" },
@@ -131,20 +137,22 @@ export default function AdminSettings() {
                     setPrimaryColor(preset.primary);
                     setSecondaryColor(preset.secondary);
                   }}
-                  className="flex flex-col items-center p-3 rounded-lg border-2 hover:border-gray-400 transition-colors"
+                  className="flex flex-col items-center p-3 md:p-4 rounded-lg border-2 hover:border-gray-400 transition-colors active:scale-95"
                   title={preset.name}
                 >
-                  <div className="flex gap-1 mb-2">
+                  <div className="flex gap-1 md:gap-2 mb-2">
                     <div
-                      className="w-8 h-8 rounded"
+                      className="w-10 h-10 md:w-8 md:h-8 rounded"
                       style={{ backgroundColor: preset.primary }}
                     />
                     <div
-                      className="w-8 h-8 rounded"
+                      className="w-10 h-10 md:w-8 md:h-8 rounded"
                       style={{ backgroundColor: preset.secondary }}
                     />
                   </div>
-                  <span className="text-xs font-medium">{preset.name}</span>
+                  <span className="text-xs md:text-sm font-medium">
+                    {preset.name}
+                  </span>
                 </button>
               ))}
             </div>
@@ -152,14 +160,14 @@ export default function AdminSettings() {
 
           {/* Preview */}
           <div className="space-y-3">
-            <label className="text-sm font-medium">Preview</label>
-            <div className="p-4 border rounded-lg space-y-3 bg-gray-50">
+            <label className="text-sm md:text-base font-medium">Preview</label>
+            <div className="p-4 md:p-6 border rounded-lg space-y-3 bg-gray-50">
               <Button
                 style={{
                   backgroundColor: primaryColor,
                   color: "white",
                 }}
-                className="w-full"
+                className="w-full h-12 md:h-10 text-base"
               >
                 Primary Button Preview
               </Button>
@@ -169,7 +177,7 @@ export default function AdminSettings() {
                   borderColor: secondaryColor,
                   color: secondaryColor,
                 }}
-                className="w-full"
+                className="w-full h-12 md:h-10 text-base"
               >
                 Secondary Button Preview
               </Button>
@@ -177,14 +185,14 @@ export default function AdminSettings() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <Button
               variant="outline"
               onClick={async () => {
                 await resetTheme();
                 toast.success("Theme reset to default colors");
               }}
-              className="flex-1"
+              className="flex-1 h-12 md:h-10 text-base"
             >
               Reset to Default
             </Button>

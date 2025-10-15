@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,10 +18,19 @@ import {
   Users,
   ShoppingCart,
   FolderTree,
+  Clock,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { loyverseService } from "@/lib/api/loyverse";
-import { setDocument, COLLECTIONS } from "@/lib/firebase/firestore";
+import {
+  setDocument,
+  getDocuments,
+  getDocument,
+  updateDocument,
+  COLLECTIONS,
+} from "@/lib/firebase/firestore";
+import { formatDate } from "@/lib/utils/format";
 
 export default function IntegrationPage() {
   const [loading, setLoading] = useState(false);
@@ -41,9 +50,210 @@ export default function IntegrationPage() {
     paymentTypes: null,
   });
 
+  // Last sync info for each type
+  const [lastSyncInfo, setLastSyncInfo] = useState({
+    categories: null,
+    items: null,
+    customers: null,
+    receipts: null,
+  });
+
+  const [syncHistory, setSyncHistory] = useState([]);
+  const [syncProgress, setSyncProgress] = useState({
+    receipts: { current: 0, total: 0, percentage: 0 },
+  });
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(30);
+  const [isEditingInterval, setIsEditingInterval] = useState(false);
+  const [lastAutoSyncCheck, setLastAutoSyncCheck] = useState(null);
+
   const [debugData, setDebugData] = useState(null);
   const [showDebugData, setShowDebugData] = useState(false);
   const [paymentTypes, setPaymentTypes] = useState(null);
+
+  // Load sync settings and history on mount
+  useEffect(() => {
+    loadSyncSettings();
+    loadSyncHistory();
+    loadLastSyncInfo();
+  }, []);
+
+  // Auto-sync check every minute
+  useEffect(() => {
+    if (!autoSyncEnabled) return;
+
+    const checkAutoSync = async () => {
+      const history = await loadSyncHistory();
+      if (history.length === 0) return;
+
+      const lastSuccess = history.find((h) => h.success);
+      if (!lastSuccess) return;
+
+      const lastSyncTime = new Date(lastSuccess.timestamp);
+      const now = new Date();
+      const minutesSinceSync = (now - lastSyncTime) / (1000 * 60);
+
+      setLastAutoSyncCheck(now);
+
+      if (minutesSinceSync >= syncIntervalMinutes) {
+        console.log(
+          `🔄 Auto-sync triggered: ${minutesSinceSync.toFixed(
+            1
+          )} minutes since last sync`
+        );
+        toast.info("Auto-syncing data from Loyverse...");
+
+        // Auto-sync all data
+        await handleSyncCategories(true);
+        await handleSyncItems(true);
+        await handleSyncCustomers(true);
+      }
+    };
+
+    checkAutoSync();
+    const interval = setInterval(checkAutoSync, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [autoSyncEnabled, syncIntervalMinutes]);
+
+  // Load sync settings from Firebase
+  const loadSyncSettings = async () => {
+    try {
+      const settings = await getDocument(COLLECTIONS.SETTINGS, "sync_settings");
+      if (settings) {
+        setAutoSyncEnabled(settings.autoSyncEnabled ?? true);
+        setSyncIntervalMinutes(settings.syncIntervalMinutes ?? 30);
+      }
+    } catch (error) {
+      console.error("Error loading sync settings:", error);
+    }
+  };
+
+  // Save sync settings to Firebase
+  const saveSyncSettings = async () => {
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "sync_settings", {
+        autoSyncEnabled,
+        syncIntervalMinutes,
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success("Sync settings saved!");
+      setIsEditingInterval(false);
+    } catch (error) {
+      console.error("Error saving sync settings:", error);
+      toast.error("Failed to save settings");
+    }
+  };
+
+  // Load last sync info for each type
+  const loadLastSyncInfo = async () => {
+    try {
+      const history = await getDocuments(COLLECTIONS.SYNC_HISTORY, {
+        orderBy: ["timestamp", "desc"],
+        limit: 100, // Get more to find last of each type
+      });
+
+      const lastSync = {
+        categories: history.find((h) => h.type === "categories"),
+        items: history.find((h) => h.type === "items"),
+        customers: history.find((h) => h.type === "customers"),
+        receipts: history.find((h) => h.type === "receipts"),
+      };
+
+      setLastSyncInfo(lastSync);
+    } catch (error) {
+      console.error("Error loading last sync info:", error);
+    }
+  };
+
+  // Load sync history from Firebase
+  const loadSyncHistory = async () => {
+    try {
+      const history = await getDocuments(COLLECTIONS.SYNC_HISTORY, {
+        orderBy: ["timestamp", "desc"],
+        limit: 20,
+      });
+      setSyncHistory(history);
+      return history;
+    } catch (error) {
+      console.error("Error loading sync history:", error);
+      return [];
+    }
+  };
+
+  // Save sync history to Firebase
+  const saveSyncHistory = async (type, success, count, error = null) => {
+    try {
+      const historyEntry = {
+        type,
+        success,
+        count: count || 0,
+        error: error || null,
+        timestamp: new Date().toISOString(),
+        autoSync: false,
+      };
+
+      await setDocument(
+        COLLECTIONS.SYNC_HISTORY,
+        `${type}-${Date.now()}`,
+        historyEntry
+      );
+
+      await loadSyncHistory();
+      await loadLastSyncInfo(); // Update last sync info
+    } catch (err) {
+      console.error("Error saving sync history:", err);
+    }
+  };
+
+  // Helper function to check if data needs update
+  const needsUpdate = (existing, newData) => {
+    if (!existing) return true; // No existing data, needs insert
+
+    // Check if updatedAt is different
+    if (existing.updatedAt !== newData.updatedAt) return true;
+
+    // Deep comparison for other fields (excluding timestamps)
+    const keysToCompare = Object.keys(newData).filter(
+      (key) => !["createdAt", "updatedAt", "syncedAt"].includes(key)
+    );
+
+    return keysToCompare.some((key) => {
+      if (typeof newData[key] === "object" && newData[key] !== null) {
+        return JSON.stringify(existing[key]) !== JSON.stringify(newData[key]);
+      }
+      return existing[key] !== newData[key];
+    });
+  };
+
+  // Smart sync: Only update changed documents
+  const smartSync = async (collectionName, documents, idField = "id") => {
+    let newCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    for (const doc of documents) {
+      try {
+        const docId = doc[idField];
+        const existing = await getDocument(collectionName, docId);
+
+        if (needsUpdate(existing, doc)) {
+          await setDocument(collectionName, docId, doc);
+          if (existing) {
+            updatedCount++;
+          } else {
+            newCount++;
+          }
+        } else {
+          skippedCount++;
+        }
+      } catch (error) {
+        console.error(`Error syncing document ${doc[idField]}:`, error);
+      }
+    }
+
+    return { newCount, updatedCount, skippedCount, total: documents.length };
+  };
 
   // Test API Connection
   const handleTestConnection = async () => {
@@ -63,7 +273,7 @@ export default function IntegrationPage() {
   };
 
   // Sync Categories
-  const handleSyncCategories = async () => {
+  const handleSyncCategories = async (isAutoSync = false) => {
     setSyncing({ ...syncing, categories: true });
     try {
       // Fetch all categories from Loyverse
@@ -84,45 +294,70 @@ export default function IntegrationPage() {
         source: "loyverse",
       }));
 
-      // Save to Firebase Firestore ONLY (categories collection)
-      // Admin saves to Firebase, POS syncs from Firebase to IndexedDB
-      console.log(`📤 Saving ${categories.length} categories to Firebase...`);
-      const firebaseSavePromises = categories.map((category) =>
-        setDocument(COLLECTIONS.CATEGORIES, category.id, category)
+      // Smart sync: Only update changed documents
+      console.log(
+        `📤 Smart syncing ${categories.length} categories to Firebase...`
       );
-      await Promise.all(firebaseSavePromises);
-      console.log(`✅ Saved ${categories.length} categories to Firebase`);
+      const syncStats = await smartSync(COLLECTIONS.CATEGORIES, categories);
+      console.log(
+        `✅ Sync complete: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} skipped`
+      );
+
+      const result = {
+        success: true,
+        count: categories.length,
+        newCount: syncStats.newCount,
+        updatedCount: syncStats.updatedCount,
+        skippedCount: syncStats.skippedCount,
+        timestamp: new Date().toISOString(),
+      };
 
       setSyncResults({
         ...syncResults,
-        categories: {
-          success: true,
-          count: categories.length,
-          timestamp: new Date().toISOString(),
-        },
+        categories: result,
       });
 
-      toast.success(`✅ Synced ${categories.length} categories to Firebase`);
+      // Save to history
+      await saveSyncHistory(
+        "categories",
+        true,
+        syncStats.newCount + syncStats.updatedCount
+      );
+
+      if (!isAutoSync) {
+        toast.success(
+          `✅ Synced categories: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} unchanged`
+        );
+      }
       setDebugData(response);
       setShowDebugData(true);
     } catch (error) {
       console.error("Category sync failed:", error);
-      toast.error(`❌ Sync failed: ${error.message}`);
+
+      const result = {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      };
+
       setSyncResults({
         ...syncResults,
-        categories: {
-          success: false,
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        },
+        categories: result,
       });
+
+      // Save error to history
+      await saveSyncHistory("categories", false, 0, error.message);
+
+      if (!isAutoSync) {
+        toast.error(`❌ Sync failed: ${error.message}`);
+      }
     } finally {
       setSyncing({ ...syncing, categories: false });
     }
   };
 
   // Sync Items (Products)
-  const handleSyncItems = async () => {
+  const handleSyncItems = async (isAutoSync = false) => {
     setSyncing({ ...syncing, items: true });
     try {
       const response = await loyverseService.getAllItems({
@@ -194,45 +429,68 @@ export default function IntegrationPage() {
         };
       });
 
-      // Save to Firebase Firestore ONLY (items collection)
-      // Admin saves to Firebase, POS syncs from Firebase to IndexedDB
-      console.log(`📤 Saving ${items.length} items to Firebase...`);
-      const firebaseSavePromises = items.map((item) =>
-        setDocument(COLLECTIONS.PRODUCTS, item.id, item)
+      // Smart sync: Only update changed documents
+      console.log(`📤 Smart syncing ${items.length} items to Firebase...`);
+      const syncStats = await smartSync(COLLECTIONS.PRODUCTS, items);
+      console.log(
+        `✅ Sync complete: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} skipped`
       );
-      await Promise.all(firebaseSavePromises);
-      console.log(`✅ Saved ${items.length} items to Firebase`);
+
+      const result = {
+        success: true,
+        count: items.length,
+        newCount: syncStats.newCount,
+        updatedCount: syncStats.updatedCount,
+        skippedCount: syncStats.skippedCount,
+        timestamp: new Date().toISOString(),
+      };
 
       setSyncResults({
         ...syncResults,
-        items: {
-          success: true,
-          count: items.length,
-          timestamp: new Date().toISOString(),
-        },
+        items: result,
       });
 
-      toast.success(`✅ Synced ${items.length} items to Firebase`);
+      // Save to history
+      await saveSyncHistory(
+        "items",
+        true,
+        syncStats.newCount + syncStats.updatedCount
+      );
+
+      if (!isAutoSync) {
+        toast.success(
+          `✅ Synced items: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} unchanged`
+        );
+      }
       setDebugData(response);
       setShowDebugData(true);
     } catch (error) {
       console.error("Items sync failed:", error);
-      toast.error(`❌ Sync failed: ${error.message}`);
+
+      const result = {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      };
+
       setSyncResults({
         ...syncResults,
-        items: {
-          success: false,
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        },
+        items: result,
       });
+
+      // Save error to history
+      await saveSyncHistory("items", false, 0, error.message);
+
+      if (!isAutoSync) {
+        toast.error(`❌ Sync failed: ${error.message}`);
+      }
     } finally {
       setSyncing({ ...syncing, items: false });
     }
   };
 
   // Sync Customers
-  const handleSyncCustomers = async () => {
+  const handleSyncCustomers = async (isAutoSync = false) => {
     setSyncing({ ...syncing, customers: true });
     try {
       const response = await loyverseService.getAllCustomers();
@@ -267,38 +525,63 @@ export default function IntegrationPage() {
         source: "loyverse",
       }));
 
-      // Save to Firebase Firestore ONLY (customers collection)
-      // Admin saves to Firebase, POS syncs from Firebase to IndexedDB
-      console.log(`📤 Saving ${customers.length} customers to Firebase...`);
-      const firebaseSavePromises = customers.map((customer) =>
-        setDocument(COLLECTIONS.CUSTOMERS, customer.id, customer)
+      // Smart sync: Only update changed documents
+      console.log(
+        `📤 Smart syncing ${customers.length} customers to Firebase...`
       );
-      await Promise.all(firebaseSavePromises);
-      console.log(`✅ Saved ${customers.length} customers to Firebase`);
+      const syncStats = await smartSync(COLLECTIONS.CUSTOMERS, customers);
+      console.log(
+        `✅ Sync complete: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} skipped`
+      );
+
+      const result = {
+        success: true,
+        count: customers.length,
+        newCount: syncStats.newCount,
+        updatedCount: syncStats.updatedCount,
+        skippedCount: syncStats.skippedCount,
+        timestamp: new Date().toISOString(),
+      };
 
       setSyncResults({
         ...syncResults,
-        customers: {
-          success: true,
-          count: customers.length,
-          timestamp: new Date().toISOString(),
-        },
+        customers: result,
       });
 
-      toast.success(`✅ Synced ${customers.length} customers to Firebase`);
+      // Save to history
+      await saveSyncHistory(
+        "customers",
+        true,
+        syncStats.newCount + syncStats.updatedCount
+      );
+
+      if (!isAutoSync) {
+        toast.success(
+          `✅ Synced customers: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} unchanged`
+        );
+      }
       setDebugData(response);
       setShowDebugData(true);
     } catch (error) {
       console.error("Customers sync failed:", error);
-      toast.error(`❌ Sync failed: ${error.message}`);
+
+      const result = {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      };
+
       setSyncResults({
         ...syncResults,
-        customers: {
-          success: false,
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        },
+        customers: result,
       });
+
+      // Save error to history
+      await saveSyncHistory("customers", false, 0, error.message);
+
+      if (!isAutoSync) {
+        toast.error(`❌ Sync failed: ${error.message}`);
+      }
     } finally {
       setSyncing({ ...syncing, customers: false });
     }
@@ -307,23 +590,62 @@ export default function IntegrationPage() {
   // Sync Receipts (Orders)
   const handleSyncReceipts = async () => {
     setSyncing({ ...syncing, receipts: true });
+    setSyncProgress({
+      ...syncProgress,
+      receipts: { current: 0, total: 0, percentage: 0 },
+    });
+
     try {
       // Fetch receipts with progress tracking
-      const response = await loyverseService.getAllReceipts({
-        onProgress: (current, total) => {
-          const progress = Math.round((current / total) * 100);
-          toast.info(`Fetching receipts: ${progress}% (${current}/${total})`, {
-            id: "receipts-progress",
-            duration: Infinity,
-          });
-        },
-      });
+      console.log("🔄 Starting receipt sync with progress tracking...");
 
-      toast.dismiss("receipts-progress");
-      console.log("Loyverse Receipts:", response);
+      const allReceipts = [];
+      let cursor = null;
+      let hasMore = true;
+
+      // Estimate total (we'll update as we go)
+      toast.info("Fetching receipts from Loyverse...", { id: "receipt-fetch" });
+
+      while (hasMore) {
+        const response = await loyverseService.getReceipts({
+          limit: 250,
+          cursor: cursor,
+        });
+
+        const receipts = response.receipts || [];
+        allReceipts.push(...receipts);
+
+        // Update progress
+        const currentCount = allReceipts.length;
+        setSyncProgress({
+          ...syncProgress,
+          receipts: {
+            current: currentCount,
+            total: currentCount, // We don't know total yet
+            percentage: 0,
+          },
+        });
+
+        toast.info(`Fetching receipts: ${currentCount} fetched...`, {
+          id: "receipt-fetch",
+        });
+
+        // Check if there are more pages
+        cursor = response.cursor || null;
+        hasMore = !!cursor;
+      }
+
+      toast.dismiss("receipt-fetch");
+      console.log(`✅ Fetched ${allReceipts.length} receipts from Loyverse`);
+
+      // Now save to Firebase with progress
+      const totalReceipts = allReceipts.length;
+      let savedCount = 0;
+
+      toast.info("Saving receipts to Firebase...", { id: "receipt-save" });
 
       // Transform and save receipts to Firebase
-      const receipts = response.receipts.map((receipt) => ({
+      const receipts = allReceipts.map((receipt) => ({
         // Receipt identification
         receiptNumber: receipt.receipt_number,
         receiptType: receipt.receipt_type,
@@ -369,37 +691,123 @@ export default function IntegrationPage() {
         syncedAt: new Date().toISOString(),
       }));
 
-      // Save to Firebase Firestore (receipts collection)
-      console.log(`📤 Saving ${receipts.length} receipts to Firebase...`);
-      const firebaseSavePromises = receipts.map((receipt) =>
-        setDocument(COLLECTIONS.RECEIPTS, receipt.receiptNumber, receipt)
+      // Save to Firebase Firestore (receipts collection) with progress tracking
+      console.log(
+        `📤 Smart syncing ${receipts.length} receipts to Firebase...`
       );
-      await Promise.all(firebaseSavePromises);
-      console.log(`✅ Saved ${receipts.length} receipts to Firebase`);
+
+      let newCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      for (let i = 0; i < receipts.length; i++) {
+        const receipt = receipts[i];
+
+        // Check if receipt already exists and needs update
+        const existing = await getDocument(
+          COLLECTIONS.RECEIPTS,
+          receipt.receiptNumber
+        );
+
+        if (needsUpdate(existing, receipt)) {
+          await setDocument(
+            COLLECTIONS.RECEIPTS,
+            receipt.receiptNumber,
+            receipt
+          );
+          if (existing) {
+            updatedCount++;
+          } else {
+            newCount++;
+          }
+        } else {
+          skippedCount++;
+        }
+
+        savedCount++;
+        const percentage = Math.round((savedCount / totalReceipts) * 100);
+
+        // Update progress state
+        setSyncProgress({
+          ...syncProgress,
+          receipts: {
+            current: savedCount,
+            total: totalReceipts,
+            percentage: percentage,
+          },
+        });
+
+        // Update toast every 10% or on last item
+        if (
+          savedCount % Math.ceil(totalReceipts / 10) === 0 ||
+          savedCount === totalReceipts
+        ) {
+          toast.info(
+            `Syncing receipts: ${percentage}% (${savedCount}/${totalReceipts})`,
+            {
+              id: "receipt-save",
+            }
+          );
+        }
+      }
+
+      toast.dismiss("receipt-save");
+      console.log(
+        `✅ Sync complete: ${newCount} new, ${updatedCount} updated, ${skippedCount} skipped`
+      );
+
+      const result = {
+        success: true,
+        count: receipts.length,
+        newCount,
+        updatedCount,
+        skippedCount,
+        timestamp: new Date().toISOString(),
+      };
 
       setSyncResults({
         ...syncResults,
-        receipts: {
-          success: true,
-          count: receipts.length,
-          timestamp: new Date().toISOString(),
-        },
+        receipts: result,
       });
 
-      toast.success(`✅ Synced ${receipts.length} receipts to Firebase`);
-      setDebugData(response);
+      // Save to history
+      await saveSyncHistory("receipts", true, newCount + updatedCount);
+
+      // Reset progress
+      setSyncProgress({
+        ...syncProgress,
+        receipts: { current: 0, total: 0, percentage: 0 },
+      });
+
+      toast.success(
+        `✅ Synced receipts: ${newCount} new, ${updatedCount} updated, ${skippedCount} unchanged`
+      );
+      setDebugData({ receipts: allReceipts });
       setShowDebugData(true);
     } catch (error) {
       console.error("Receipts sync failed:", error);
-      toast.error(`❌ Sync failed: ${error.message}`);
+
+      const result = {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      };
+
       setSyncResults({
         ...syncResults,
-        receipts: {
-          success: false,
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        },
+        receipts: result,
       });
+
+      // Save error to history
+      await saveSyncHistory("receipts", false, 0, error.message);
+
+      // Reset progress
+      setSyncProgress({
+        ...syncProgress,
+        receipts: { current: 0, total: 0, percentage: 0 },
+      });
+
+      toast.error(`❌ Sync failed: ${error.message}`);
     } finally {
       setSyncing({ ...syncing, receipts: false });
     }
@@ -450,22 +858,22 @@ export default function IntegrationPage() {
   // Sync All
   const handleSyncAll = async () => {
     toast.info("Starting full sync...");
-    await handleSyncCategories();
-    await handleSyncItems();
-    await handleSyncCustomers();
-    await handleSyncReceipts();
+    await handleSyncCategories(false);
+    await handleSyncItems(false);
+    await handleSyncCustomers(false);
+    // Note: Not including receipts in auto-sync due to large dataset
     toast.success("🎉 Full sync completed!");
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Link2 className="h-8 w-8 text-primary" />
+        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+          <Link2 className="h-6 w-6 md:h-8 md:w-8 text-primary" />
           Loyverse Integration
         </h1>
-        <p className="text-gray-500 mt-2">
+        <p className="text-sm md:text-base text-gray-500 mt-1 md:mt-2">
           Sync data from Loyverse POS to your local database
         </p>
       </div>
@@ -473,24 +881,29 @@ export default function IntegrationPage() {
       {/* API Status */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
+          <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <span className="flex items-center gap-2 text-base md:text-lg">
+              <Database className="h-5 w-5 md:h-6 md:w-6" />
               API Connection
             </span>
-            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+            <Badge
+              variant="secondary"
+              className="bg-blue-100 text-blue-800 text-sm"
+            >
               Ready
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-gray-500">API Endpoint:</p>
-              <p className="font-mono text-xs">https://api.loyverse.com/v1.0</p>
+              <p className="text-gray-500 mb-1">API Endpoint:</p>
+              <p className="font-mono text-xs break-all">
+                https://api.loyverse.com/v1.0
+              </p>
             </div>
             <div>
-              <p className="text-gray-500">Access Token:</p>
+              <p className="text-gray-500 mb-1">Access Token:</p>
               <p className="font-mono text-xs">d390d2...c2b8 ✅</p>
             </div>
           </div>
@@ -498,16 +911,16 @@ export default function IntegrationPage() {
             onClick={handleTestConnection}
             disabled={loading}
             variant="outline"
-            className="w-full"
+            className="w-full h-12 md:h-10 text-base"
           >
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
                 Testing...
               </>
             ) : (
               <>
-                <RefreshCw className="mr-2 h-4 w-4" />
+                <RefreshCw className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                 Test Connection
               </>
             )}
@@ -515,38 +928,238 @@ export default function IntegrationPage() {
         </CardContent>
       </Card>
 
+      {/* Auto-Sync Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <span className="flex items-center gap-2 text-base md:text-lg">
+              <Clock className="h-5 w-5 md:h-6 md:w-6" />
+              Automatic Sync
+            </span>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-sm text-gray-600">
+                {autoSyncEnabled ? "Enabled" : "Disabled"}
+              </span>
+              <input
+                type="checkbox"
+                checked={autoSyncEnabled}
+                onChange={(e) => setAutoSyncEnabled(e.target.checked)}
+                className="w-10 h-6 rounded-full appearance-none bg-gray-300 checked:bg-green-500 relative transition-colors cursor-pointer
+                  after:content-[''] after:absolute after:top-1 after:left-1 after:w-4 after:h-4 after:bg-white after:rounded-full after:transition-transform
+                  checked:after:translate-x-4"
+              />
+            </label>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between items-center gap-4">
+              <span className="text-gray-600">Sync Interval:</span>
+              {isEditingInterval ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value={syncIntervalMinutes}
+                    onChange={(e) =>
+                      setSyncIntervalMinutes(parseInt(e.target.value) || 30)
+                    }
+                    className="w-20 h-8 text-sm"
+                  />
+                  <span className="text-xs text-gray-500">min</span>
+                  <Button
+                    size="sm"
+                    onClick={saveSyncSettings}
+                    className="h-8 px-3"
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditingInterval(false);
+                      loadSyncSettings();
+                    }}
+                    className="h-8 px-3"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsEditingInterval(true)}
+                  className="font-medium text-blue-600 hover:text-blue-700"
+                >
+                  {syncIntervalMinutes} minutes ✏️
+                </button>
+              )}
+            </div>
+            {syncHistory.length > 0 && syncHistory.find((h) => h.success) && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Last Successful Sync:</span>
+                <span className="font-medium text-xs md:text-sm">
+                  {(() => {
+                    const lastSuccess = syncHistory.find((h) => h.success);
+                    if (!lastSuccess) return "Never";
+                    const lastTime = new Date(lastSuccess.timestamp);
+                    const now = new Date();
+                    const diffMinutes = Math.floor(
+                      (now - lastTime) / (1000 * 60)
+                    );
+                    return diffMinutes < 60
+                      ? `${diffMinutes} min ago`
+                      : `${Math.floor(diffMinutes / 60)}h ${
+                          diffMinutes % 60
+                        }m ago`;
+                  })()}
+                </span>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 pt-2 border-t">
+              {autoSyncEnabled
+                ? `Auto-syncs categories, items, and customers every ${syncIntervalMinutes} minutes when enabled.`
+                : "Enable to automatically sync data at regular intervals."}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sync History */}
+      {syncHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <History className="h-5 w-5 md:h-6 md:w-6" />
+              Sync History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {syncHistory.map((entry, index) => {
+                const entryDate = new Date(entry.timestamp);
+                const icon =
+                  entry.type === "categories"
+                    ? FolderTree
+                    : entry.type === "items"
+                    ? Package
+                    : entry.type === "customers"
+                    ? Users
+                    : ShoppingCart;
+                const Icon = icon;
+
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors"
+                  >
+                    <Icon className="h-4 w-4 text-gray-500" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm capitalize">
+                          {entry.type}
+                        </span>
+                        {entry.autoSync && (
+                          <Badge variant="outline" className="text-xs">
+                            Auto
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {entryDate.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {entry.success ? (
+                        <>
+                          <span className="text-sm font-medium text-green-700">
+                            {entry.count}
+                          </span>
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        </>
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-red-600" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sync Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Categories */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <FolderTree className="h-5 w-5 text-purple-600" />
+            <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+              <FolderTree className="h-6 w-6 md:h-5 md:w-5 text-purple-600" />
               Categories
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Last Sync Info */}
+            {lastSyncInfo.categories && (
+              <div className="p-3 rounded-lg border bg-gray-50">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-gray-600">Last Sync:</span>
+                  <span
+                    className={
+                      lastSyncInfo.categories.success
+                        ? "text-green-600 font-medium"
+                        : "text-red-600 font-medium"
+                    }
+                  >
+                    {lastSyncInfo.categories.success ? "✓ Success" : "✗ Failed"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {new Date(lastSyncInfo.categories.timestamp).toLocaleString()}
+                </p>
+                {lastSyncInfo.categories.success && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    {lastSyncInfo.categories.count} items synced
+                  </p>
+                )}
+              </div>
+            )}
+
             {syncResults.categories && (
               <div
-                className={`p-3 rounded-lg ${
+                className={`p-3 md:p-4 rounded-lg ${
                   syncResults.categories.success
                     ? "bg-green-50 text-green-800"
                     : "bg-red-50 text-red-800"
                 }`}
               >
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm md:text-base">
                   {syncResults.categories.success ? (
-                    <CheckCircle className="h-4 w-4" />
+                    <CheckCircle className="h-5 w-5 md:h-4 md:w-4" />
                   ) : (
-                    <AlertCircle className="h-4 w-4" />
+                    <AlertCircle className="h-5 w-5 md:h-4 md:w-4" />
                   )}
                   <span className="font-medium">
                     {syncResults.categories.success
-                      ? `${syncResults.categories.count} synced`
+                      ? `${syncResults.categories.count} total`
                       : "Sync failed"}
                   </span>
                 </div>
-                <p className="text-xs mt-1">
+                {syncResults.categories.success &&
+                  syncResults.categories.newCount !== undefined && (
+                    <div className="text-xs mt-2 space-y-1">
+                      <div>🆕 {syncResults.categories.newCount} new</div>
+                      <div>
+                        🔄 {syncResults.categories.updatedCount} updated
+                      </div>
+                      <div>
+                        ⏭️ {syncResults.categories.skippedCount} unchanged
+                      </div>
+                    </div>
+                  )}
+                <p className="text-xs md:text-sm mt-1">
                   {new Date(syncResults.categories.timestamp).toLocaleString()}
                 </p>
               </div>
@@ -554,17 +1167,17 @@ export default function IntegrationPage() {
             <Button
               onClick={handleSyncCategories}
               disabled={syncing.categories}
-              className="w-full"
+              className="w-full h-12 md:h-10 text-base"
               variant="outline"
             >
               {syncing.categories ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
                   Syncing...
                 </>
               ) : (
                 <>
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   Sync Categories
                 </>
               )}
@@ -575,32 +1188,66 @@ export default function IntegrationPage() {
         {/* Items */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Package className="h-5 w-5 text-blue-600" />
+            <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+              <Package className="h-6 w-6 md:h-5 md:w-5 text-blue-600" />
               Items
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Last Sync Info */}
+            {lastSyncInfo.items && (
+              <div className="p-3 rounded-lg border bg-gray-50">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-gray-600">Last Sync:</span>
+                  <span
+                    className={
+                      lastSyncInfo.items.success
+                        ? "text-green-600 font-medium"
+                        : "text-red-600 font-medium"
+                    }
+                  >
+                    {lastSyncInfo.items.success ? "✓ Success" : "✗ Failed"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {new Date(lastSyncInfo.items.timestamp).toLocaleString()}
+                </p>
+                {lastSyncInfo.items.success && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    {lastSyncInfo.items.count} items synced
+                  </p>
+                )}
+              </div>
+            )}
+
             {syncResults.items && (
               <div
-                className={`p-3 rounded-lg ${
+                className={`p-3 md:p-4 rounded-lg ${
                   syncResults.items.success
                     ? "bg-green-50 text-green-800"
                     : "bg-red-50 text-red-800"
                 }`}
               >
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm md:text-base">
                   {syncResults.items.success ? (
-                    <CheckCircle className="h-4 w-4" />
+                    <CheckCircle className="h-5 w-5 md:h-4 md:w-4" />
                   ) : (
-                    <AlertCircle className="h-4 w-4" />
+                    <AlertCircle className="h-5 w-5 md:h-4 md:w-4" />
                   )}
                   <span className="font-medium">
                     {syncResults.items.success
-                      ? `${syncResults.items.count} synced`
+                      ? `${syncResults.items.count} total`
                       : "Sync failed"}
                   </span>
                 </div>
+                {syncResults.items.success &&
+                  syncResults.items.newCount !== undefined && (
+                    <div className="text-xs mt-2 space-y-1">
+                      <div>🆕 {syncResults.items.newCount} new</div>
+                      <div>🔄 {syncResults.items.updatedCount} updated</div>
+                      <div>⏭️ {syncResults.items.skippedCount} unchanged</div>
+                    </div>
+                  )}
                 <p className="text-xs mt-1">
                   {new Date(syncResults.items.timestamp).toLocaleString()}
                 </p>
@@ -609,17 +1256,17 @@ export default function IntegrationPage() {
             <Button
               onClick={handleSyncItems}
               disabled={syncing.items}
-              className="w-full"
+              className="w-full h-12 md:h-10 text-base"
               variant="outline"
             >
               {syncing.items ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
                   Syncing...
                 </>
               ) : (
                 <>
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   Sync Items
                 </>
               )}
@@ -630,33 +1277,69 @@ export default function IntegrationPage() {
         {/* Customers */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Users className="h-5 w-5 text-green-600" />
+            <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+              <Users className="h-6 w-6 md:h-5 md:w-5 text-green-600" />
               Customers
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Last Sync Info */}
+            {lastSyncInfo.customers && (
+              <div className="p-3 rounded-lg border bg-gray-50">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-gray-600">Last Sync:</span>
+                  <span
+                    className={
+                      lastSyncInfo.customers.success
+                        ? "text-green-600 font-medium"
+                        : "text-red-600 font-medium"
+                    }
+                  >
+                    {lastSyncInfo.customers.success ? "✓ Success" : "✗ Failed"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {new Date(lastSyncInfo.customers.timestamp).toLocaleString()}
+                </p>
+                {lastSyncInfo.customers.success && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    {lastSyncInfo.customers.count} customers synced
+                  </p>
+                )}
+              </div>
+            )}
+
             {syncResults.customers && (
               <div
-                className={`p-3 rounded-lg ${
+                className={`p-3 md:p-4 rounded-lg ${
                   syncResults.customers.success
                     ? "bg-green-50 text-green-800"
                     : "bg-red-50 text-red-800"
                 }`}
               >
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm md:text-base">
                   {syncResults.customers.success ? (
-                    <CheckCircle className="h-4 w-4" />
+                    <CheckCircle className="h-5 w-5 md:h-4 md:w-4" />
                   ) : (
-                    <AlertCircle className="h-4 w-4" />
+                    <AlertCircle className="h-5 w-5 md:h-4 md:w-4" />
                   )}
                   <span className="font-medium">
                     {syncResults.customers.success
-                      ? `${syncResults.customers.count} synced`
+                      ? `${syncResults.customers.count} total`
                       : "Sync failed"}
                   </span>
                 </div>
-                <p className="text-xs mt-1">
+                {syncResults.customers.success &&
+                  syncResults.customers.newCount !== undefined && (
+                    <div className="text-xs mt-2 space-y-1">
+                      <div>🆕 {syncResults.customers.newCount} new</div>
+                      <div>🔄 {syncResults.customers.updatedCount} updated</div>
+                      <div>
+                        ⏭️ {syncResults.customers.skippedCount} unchanged
+                      </div>
+                    </div>
+                  )}
+                <p className="text-xs md:text-sm mt-1">
                   {new Date(syncResults.customers.timestamp).toLocaleString()}
                 </p>
               </div>
@@ -664,17 +1347,17 @@ export default function IntegrationPage() {
             <Button
               onClick={handleSyncCustomers}
               disabled={syncing.customers}
-              className="w-full"
+              className="w-full h-12 md:h-10 text-base"
               variant="outline"
             >
               {syncing.customers ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
                   Syncing...
                 </>
               ) : (
                 <>
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   Sync Customers
                 </>
               )}
@@ -685,12 +1368,38 @@ export default function IntegrationPage() {
         {/* Receipts */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5 text-purple-600" />
+            <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+              <ShoppingCart className="h-6 w-6 md:h-5 md:w-5 text-purple-600" />
               Receipts (Orders)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Last Sync Info */}
+            {lastSyncInfo.receipts && (
+              <div className="p-3 rounded-lg border bg-gray-50">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-gray-600">Last Sync:</span>
+                  <span
+                    className={
+                      lastSyncInfo.receipts.success
+                        ? "text-green-600 font-medium"
+                        : "text-red-600 font-medium"
+                    }
+                  >
+                    {lastSyncInfo.receipts.success ? "✓ Success" : "✗ Failed"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {new Date(lastSyncInfo.receipts.timestamp).toLocaleString()}
+                </p>
+                {lastSyncInfo.receipts.success && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    {lastSyncInfo.receipts.count} receipts synced
+                  </p>
+                )}
+              </div>
+            )}
+
             {syncResults.receipts && (
               <div
                 className={`p-3 rounded-lg ${
@@ -707,29 +1416,75 @@ export default function IntegrationPage() {
                   )}
                   <span className="font-medium">
                     {syncResults.receipts.success
-                      ? `${syncResults.receipts.count} synced`
+                      ? `${syncResults.receipts.count} total`
                       : "Sync failed"}
                   </span>
                 </div>
+                {syncResults.receipts.success &&
+                  syncResults.receipts.newCount !== undefined && (
+                    <div className="text-xs mt-2 space-y-1">
+                      <div>🆕 {syncResults.receipts.newCount} new</div>
+                      <div>🔄 {syncResults.receipts.updatedCount} updated</div>
+                      <div>
+                        ⏭️ {syncResults.receipts.skippedCount} unchanged
+                      </div>
+                    </div>
+                  )}
                 <p className="text-xs mt-1">
                   {new Date(syncResults.receipts.timestamp).toLocaleString()}
                 </p>
               </div>
             )}
+
+            {/* Progress Bar */}
+            {syncing.receipts &&
+              syncProgress.receipts &&
+              syncProgress.receipts.total > 0 && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      {syncProgress.receipts.percentage > 0
+                        ? "Saving to Firebase..."
+                        : "Fetching from Loyverse..."}
+                    </span>
+                    <span className="font-medium">
+                      {syncProgress.receipts.percentage > 0
+                        ? `${syncProgress.receipts.percentage}%`
+                        : `${syncProgress.receipts.current} fetched`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-purple-600 h-full transition-all duration-300 rounded-full"
+                      style={{
+                        width:
+                          syncProgress.receipts.percentage > 0
+                            ? `${syncProgress.receipts.percentage}%`
+                            : "0%",
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 text-center">
+                    {syncProgress.receipts.current} /{" "}
+                    {syncProgress.receipts.total} receipts
+                  </p>
+                </div>
+              )}
+
             <Button
               onClick={handleSyncReceipts}
               disabled={syncing.receipts}
-              className="w-full"
+              className="w-full h-12 md:h-10 text-base"
               variant="outline"
             >
               {syncing.receipts ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
                   Syncing...
                 </>
               ) : (
                 <>
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   Sync Receipts
                 </>
               )}

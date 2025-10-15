@@ -31,6 +31,7 @@ export const COLLECTIONS = {
   SESSIONS: "sessions",
   TICKETS: "tickets",
   SETTINGS: "settings",
+  SYNC_HISTORY: "sync_history",
 };
 
 /**

@@ -121,35 +121,37 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-gray-500 mt-2">
+        <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
+        <p className="text-sm md:text-base text-gray-500 mt-1 md:mt-2">
           Welcome to Candy Kush POS Admin Panel
         </p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           const isPositive = stat.change ? stat.change > 0 : null;
 
           return (
-            <Card key={index}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
+            <Card key={index} className="hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                <CardTitle className="text-sm md:text-base font-medium text-gray-600">
                   {stat.title}
                 </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <Icon className={`h-5 w-5 ${stat.color}`} />
+                <div className={`p-2 md:p-3 rounded-lg ${stat.bgColor}`}>
+                  <Icon className={`h-5 w-5 md:h-6 md:w-6 ${stat.color}`} />
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
+                <div className="text-xl md:text-2xl lg:text-3xl font-bold">
+                  {stat.value}
+                </div>
                 {stat.change && (
-                  <div className="flex items-center mt-2 text-sm">
+                  <div className="flex items-center mt-2 text-xs md:text-sm">
                     {isPositive ? (
                       <TrendingUp className="h-4 w-4 text-green-600 mr-1" />
                     ) : (
@@ -160,7 +162,9 @@ export default function AdminDashboard() {
                     >
                       {Math.abs(stat.change)}%
                     </span>
-                    <span className="text-gray-500 ml-1">from last month</span>
+                    <span className="text-gray-500 ml-1 hidden sm:inline">
+                      from last month
+                    </span>
                   </div>
                 )}
               </CardContent>
@@ -172,8 +176,8 @@ export default function AdminDashboard() {
       {/* Recent Orders */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Orders</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-lg md:text-xl">Recent Orders</CardTitle>
+          <CardDescription className="text-sm">
             Latest transactions in your POS system
           </CardDescription>
         </CardHeader>
@@ -181,17 +185,17 @@ export default function AdminDashboard() {
           {recentOrders.length === 0 ? (
             <p className="text-gray-500 text-center py-8">No orders yet</p>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 md:space-y-4">
               {recentOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between border-b pb-4 last:border-0"
+                  className="flex items-center justify-between border-b pb-3 md:pb-4 last:border-0 gap-4"
                 >
-                  <div>
-                    <p className="font-medium">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm md:text-base truncate">
                       Order #{order.orderNumber || order.id.slice(0, 8)}
                     </p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-xs md:text-sm text-gray-500">
                       {order.createdAt
                         ? new Date(
                             order.createdAt.toDate()
@@ -200,8 +204,10 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold">{formatCurrency(order.total)}</p>
-                    <p className="text-sm text-gray-500 capitalize">
+                    <p className="font-bold text-sm md:text-base">
+                      {formatCurrency(order.total)}
+                    </p>
+                    <p className="text-xs md:text-sm text-gray-500 capitalize">
                       {order.status}
                     </p>
                   </div>
@@ -213,34 +219,40 @@ export default function AdminDashboard() {
       </Card>
 
       {/* Quick Actions */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Package className="mr-2 h-5 w-5" />
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
+        <Card className="cursor-pointer hover:shadow-lg transition-shadow active:scale-95">
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="flex items-center text-base md:text-lg">
+              <Package className="mr-2 h-5 w-5 md:h-6 md:w-6" />
               Manage Products
             </CardTitle>
-            <CardDescription>Add, edit, or remove products</CardDescription>
+            <CardDescription className="text-sm">
+              Add, edit, or remove products
+            </CardDescription>
           </CardHeader>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Users className="mr-2 h-5 w-5" />
+        <Card className="cursor-pointer hover:shadow-lg transition-shadow active:scale-95">
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="flex items-center text-base md:text-lg">
+              <Users className="mr-2 h-5 w-5 md:h-6 md:w-6" />
               Manage Users
             </CardTitle>
-            <CardDescription>Add staff and manage permissions</CardDescription>
+            <CardDescription className="text-sm">
+              Add staff and manage permissions
+            </CardDescription>
           </CardHeader>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <TrendingUp className="mr-2 h-5 w-5" />
+        <Card className="cursor-pointer hover:shadow-lg transition-shadow active:scale-95">
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="flex items-center text-base md:text-lg">
+              <TrendingUp className="mr-2 h-5 w-5 md:h-6 md:w-6" />
               View Analytics
             </CardTitle>
-            <CardDescription>Detailed reports and insights</CardDescription>
+            <CardDescription className="text-sm">
+              Detailed reports and insights
+            </CardDescription>
           </CardHeader>
         </Card>
       </div>
