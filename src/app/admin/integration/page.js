@@ -83,11 +83,33 @@ export default function IntegrationPage() {
     if (!autoSyncEnabled) return;
 
     const checkAutoSync = async () => {
-      const history = await loadSyncHistory();
-      if (history.length === 0) return;
+      // Don't auto-sync if already syncing
+      if (
+        syncing.categories ||
+        syncing.items ||
+        syncing.customers ||
+        syncing.receipts
+      ) {
+        console.log("⏭️ Skipping auto-sync: Sync already in progress");
+        return;
+      }
 
+      const history = await loadSyncHistory();
+      if (history.length === 0) {
+        console.log("ℹ️ No sync history found, running first auto-sync");
+        toast.info("Running first auto-sync from Loyverse...");
+        await handleSyncCategories(true);
+        await handleSyncItems(true);
+        await handleSyncCustomers(true);
+        return;
+      }
+
+      // Find the most recent successful sync
       const lastSuccess = history.find((h) => h.success);
-      if (!lastSuccess) return;
+      if (!lastSuccess) {
+        console.log("ℹ️ No successful sync found in history");
+        return;
+      }
 
       const lastSyncTime = new Date(lastSuccess.timestamp);
       const now = new Date();
@@ -95,26 +117,40 @@ export default function IntegrationPage() {
 
       setLastAutoSyncCheck(now);
 
+      console.log(
+        `⏱️ Time since last sync: ${minutesSinceSync.toFixed(
+          1
+        )} minutes (interval: ${syncIntervalMinutes} minutes)`
+      );
+
       if (minutesSinceSync >= syncIntervalMinutes) {
         console.log(
           `🔄 Auto-sync triggered: ${minutesSinceSync.toFixed(
             1
-          )} minutes since last sync`
+          )} minutes since last sync (threshold: ${syncIntervalMinutes} minutes)`
         );
         toast.info("Auto-syncing data from Loyverse...");
 
-        // Auto-sync all data
-        await handleSyncCategories(true);
-        await handleSyncItems(true);
-        await handleSyncCustomers(true);
+        // Auto-sync all data sequentially
+        try {
+          await handleSyncCategories(true);
+          await handleSyncItems(true);
+          await handleSyncCustomers(true);
+          console.log("✅ Auto-sync completed successfully");
+        } catch (error) {
+          console.error("❌ Auto-sync failed:", error);
+        }
       }
     };
 
+    // Run immediately on mount
     checkAutoSync();
-    const interval = setInterval(checkAutoSync, 60000); // Check every minute
+
+    // Then check every minute
+    const interval = setInterval(checkAutoSync, 60000);
 
     return () => clearInterval(interval);
-  }, [autoSyncEnabled, syncIntervalMinutes]);
+  }, [autoSyncEnabled, syncIntervalMinutes, syncing]);
 
   // Load sync settings from Firebase
   const loadSyncSettings = async () => {
@@ -182,7 +218,13 @@ export default function IntegrationPage() {
   };
 
   // Save sync history to Firebase
-  const saveSyncHistory = async (type, success, count, error = null) => {
+  const saveSyncHistory = async (
+    type,
+    success,
+    count,
+    error = null,
+    isAutoSync = false
+  ) => {
     try {
       const historyEntry = {
         type,
@@ -190,7 +232,7 @@ export default function IntegrationPage() {
         count: count || 0,
         error: error || null,
         timestamp: new Date().toISOString(),
-        autoSync: false,
+        autoSync: isAutoSync,
       };
 
       await setDocument(
@@ -321,7 +363,9 @@ export default function IntegrationPage() {
       await saveSyncHistory(
         "categories",
         true,
-        syncStats.newCount + syncStats.updatedCount
+        syncStats.newCount + syncStats.updatedCount,
+        null,
+        isAutoSync
       );
 
       if (!isAutoSync) {
@@ -346,7 +390,7 @@ export default function IntegrationPage() {
       });
 
       // Save error to history
-      await saveSyncHistory("categories", false, 0, error.message);
+      await saveSyncHistory("categories", false, 0, error.message, isAutoSync);
 
       if (!isAutoSync) {
         toast.error(`❌ Sync failed: ${error.message}`);
@@ -454,7 +498,9 @@ export default function IntegrationPage() {
       await saveSyncHistory(
         "items",
         true,
-        syncStats.newCount + syncStats.updatedCount
+        syncStats.newCount + syncStats.updatedCount,
+        null,
+        isAutoSync
       );
 
       if (!isAutoSync) {
@@ -479,7 +525,7 @@ export default function IntegrationPage() {
       });
 
       // Save error to history
-      await saveSyncHistory("items", false, 0, error.message);
+      await saveSyncHistory("items", false, 0, error.message, isAutoSync);
 
       if (!isAutoSync) {
         toast.error(`❌ Sync failed: ${error.message}`);
@@ -552,7 +598,9 @@ export default function IntegrationPage() {
       await saveSyncHistory(
         "customers",
         true,
-        syncStats.newCount + syncStats.updatedCount
+        syncStats.newCount + syncStats.updatedCount,
+        null,
+        isAutoSync
       );
 
       if (!isAutoSync) {
@@ -577,7 +625,7 @@ export default function IntegrationPage() {
       });
 
       // Save error to history
-      await saveSyncHistory("customers", false, 0, error.message);
+      await saveSyncHistory("customers", false, 0, error.message, isAutoSync);
 
       if (!isAutoSync) {
         toast.error(`❌ Sync failed: ${error.message}`);
@@ -771,7 +819,13 @@ export default function IntegrationPage() {
       });
 
       // Save to history
-      await saveSyncHistory("receipts", true, newCount + updatedCount);
+      await saveSyncHistory(
+        "receipts",
+        true,
+        newCount + updatedCount,
+        null,
+        false
+      );
 
       // Reset progress
       setSyncProgress({
@@ -799,7 +853,7 @@ export default function IntegrationPage() {
       });
 
       // Save error to history
-      await saveSyncHistory("receipts", false, 0, error.message);
+      await saveSyncHistory("receipts", false, 0, error.message, false);
 
       // Reset progress
       setSyncProgress({
@@ -873,7 +927,7 @@ export default function IntegrationPage() {
           <Link2 className="h-6 w-6 md:h-8 md:w-8 text-primary" />
           Loyverse Integration
         </h1>
-        <p className="text-sm md:text-base text-gray-500 mt-1 md:mt-2">
+        <p className="text-sm md:text-base text-neutral-500 mt-1 md:mt-2">
           Sync data from Loyverse POS to your local database
         </p>
       </div>
@@ -897,13 +951,13 @@ export default function IntegrationPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-gray-500 mb-1">API Endpoint:</p>
+              <p className="text-neutral-500 mb-1">API Endpoint:</p>
               <p className="font-mono text-xs break-all">
                 https://api.loyverse.com/v1.0
               </p>
             </div>
             <div>
-              <p className="text-gray-500 mb-1">Access Token:</p>
+              <p className="text-neutral-500 mb-1">Access Token:</p>
               <p className="font-mono text-xs">d390d2...c2b8 ✅</p>
             </div>
           </div>
@@ -937,14 +991,14 @@ export default function IntegrationPage() {
               Automatic Sync
             </span>
             <label className="flex items-center gap-2 cursor-pointer">
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-neutral-600">
                 {autoSyncEnabled ? "Enabled" : "Disabled"}
               </span>
               <input
                 type="checkbox"
                 checked={autoSyncEnabled}
                 onChange={(e) => setAutoSyncEnabled(e.target.checked)}
-                className="w-10 h-6 rounded-full appearance-none bg-gray-300 checked:bg-green-500 relative transition-colors cursor-pointer
+                className="w-10 h-6 rounded-full appearance-none bg-neutral-300 checked:bg-green-500 relative transition-colors cursor-pointer
                   after:content-[''] after:absolute after:top-1 after:left-1 after:w-4 after:h-4 after:bg-white after:rounded-full after:transition-transform
                   checked:after:translate-x-4"
               />
@@ -954,7 +1008,7 @@ export default function IntegrationPage() {
         <CardContent>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between items-center gap-4">
-              <span className="text-gray-600">Sync Interval:</span>
+              <span className="text-neutral-600">Sync Interval:</span>
               {isEditingInterval ? (
                 <div className="flex items-center gap-2">
                   <Input
@@ -967,7 +1021,7 @@ export default function IntegrationPage() {
                     }
                     className="w-20 h-8 text-sm"
                   />
-                  <span className="text-xs text-gray-500">min</span>
+                  <span className="text-xs text-neutral-500">min</span>
                   <Button
                     size="sm"
                     onClick={saveSyncSettings}
@@ -997,29 +1051,61 @@ export default function IntegrationPage() {
               )}
             </div>
             {syncHistory.length > 0 && syncHistory.find((h) => h.success) && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Last Successful Sync:</span>
-                <span className="font-medium text-xs md:text-sm">
-                  {(() => {
-                    const lastSuccess = syncHistory.find((h) => h.success);
-                    if (!lastSuccess) return "Never";
-                    const lastTime = new Date(lastSuccess.timestamp);
-                    const now = new Date();
-                    const diffMinutes = Math.floor(
-                      (now - lastTime) / (1000 * 60)
-                    );
-                    return diffMinutes < 60
-                      ? `${diffMinutes} min ago`
-                      : `${Math.floor(diffMinutes / 60)}h ${
-                          diffMinutes % 60
-                        }m ago`;
-                  })()}
-                </span>
-              </div>
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-neutral-600">
+                    Last Successful Sync:
+                  </span>
+                  <span className="font-medium text-xs md:text-sm">
+                    {(() => {
+                      const lastSuccess = syncHistory.find((h) => h.success);
+                      if (!lastSuccess) return "Never";
+                      const lastTime = new Date(lastSuccess.timestamp);
+                      const now = new Date();
+                      const diffMinutes = Math.floor(
+                        (now - lastTime) / (1000 * 60)
+                      );
+                      return diffMinutes < 60
+                        ? `${diffMinutes} min ago`
+                        : `${Math.floor(diffMinutes / 60)}h ${
+                            diffMinutes % 60
+                          }m ago`;
+                    })()}
+                  </span>
+                </div>
+                {autoSyncEnabled && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-neutral-600">Next Auto-Sync:</span>
+                    <span className="font-medium text-xs md:text-sm text-green-600">
+                      {(() => {
+                        const lastSuccess = syncHistory.find((h) => h.success);
+                        if (!lastSuccess) return "Soon...";
+                        const lastTime = new Date(lastSuccess.timestamp);
+                        const now = new Date();
+                        const diffMinutes = Math.floor(
+                          (now - lastTime) / (1000 * 60)
+                        );
+                        const minutesUntilNext =
+                          syncIntervalMinutes - diffMinutes;
+
+                        if (minutesUntilNext <= 0) {
+                          return "Due now! 🔄";
+                        }
+
+                        return minutesUntilNext < 60
+                          ? `in ${minutesUntilNext} min`
+                          : `in ${Math.floor(minutesUntilNext / 60)}h ${
+                              minutesUntilNext % 60
+                            }m`;
+                      })()}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
-            <p className="text-xs text-gray-500 pt-2 border-t">
+            <p className="text-xs text-neutral-500 pt-2 border-t">
               {autoSyncEnabled
-                ? `Auto-syncs categories, items, and customers every ${syncIntervalMinutes} minutes when enabled.`
+                ? `Auto-syncs categories, items, and customers every ${syncIntervalMinutes} minutes when enabled. Check console for sync logs.`
                 : "Enable to automatically sync data at regular intervals."}
             </p>
           </div>
@@ -1052,9 +1138,9 @@ export default function IntegrationPage() {
                 return (
                   <div
                     key={index}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-3 p-3 rounded-lg border dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
                   >
-                    <Icon className="h-4 w-4 text-gray-500" />
+                    <Icon className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm capitalize">
@@ -1066,7 +1152,7 @@ export default function IntegrationPage() {
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-neutral-500">
                         {entryDate.toLocaleString()}
                       </p>
                     </div>
@@ -1103,24 +1189,26 @@ export default function IntegrationPage() {
           <CardContent className="space-y-4">
             {/* Last Sync Info */}
             {lastSyncInfo.categories && (
-              <div className="p-3 rounded-lg border bg-gray-50">
+              <div className="p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-600">Last Sync:</span>
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Last Sync:
+                  </span>
                   <span
                     className={
                       lastSyncInfo.categories.success
-                        ? "text-green-600 font-medium"
-                        : "text-red-600 font-medium"
+                        ? "text-green-600 dark:text-green-400 font-medium"
+                        : "text-red-600 dark:text-red-400 font-medium"
                     }
                   >
                     {lastSyncInfo.categories.success ? "✓ Success" : "✗ Failed"}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   {new Date(lastSyncInfo.categories.timestamp).toLocaleString()}
                 </p>
                 {lastSyncInfo.categories.success && (
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
                     {lastSyncInfo.categories.count} items synced
                   </p>
                 )}
@@ -1131,8 +1219,8 @@ export default function IntegrationPage() {
               <div
                 className={`p-3 md:p-4 rounded-lg ${
                   syncResults.categories.success
-                    ? "bg-green-50 text-green-800"
-                    : "bg-red-50 text-red-800"
+                    ? "bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
                 }`}
               >
                 <div className="flex items-center gap-2 text-sm md:text-base">
@@ -1196,24 +1284,26 @@ export default function IntegrationPage() {
           <CardContent className="space-y-4">
             {/* Last Sync Info */}
             {lastSyncInfo.items && (
-              <div className="p-3 rounded-lg border bg-gray-50">
+              <div className="p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-600">Last Sync:</span>
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Last Sync:
+                  </span>
                   <span
                     className={
                       lastSyncInfo.items.success
-                        ? "text-green-600 font-medium"
-                        : "text-red-600 font-medium"
+                        ? "text-green-600 dark:text-green-400 font-medium"
+                        : "text-red-600 dark:text-red-400 font-medium"
                     }
                   >
                     {lastSyncInfo.items.success ? "✓ Success" : "✗ Failed"}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   {new Date(lastSyncInfo.items.timestamp).toLocaleString()}
                 </p>
                 {lastSyncInfo.items.success && (
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
                     {lastSyncInfo.items.count} items synced
                   </p>
                 )}
@@ -1224,8 +1314,8 @@ export default function IntegrationPage() {
               <div
                 className={`p-3 md:p-4 rounded-lg ${
                   syncResults.items.success
-                    ? "bg-green-50 text-green-800"
-                    : "bg-red-50 text-red-800"
+                    ? "bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
                 }`}
               >
                 <div className="flex items-center gap-2 text-sm md:text-base">
@@ -1285,24 +1375,26 @@ export default function IntegrationPage() {
           <CardContent className="space-y-4">
             {/* Last Sync Info */}
             {lastSyncInfo.customers && (
-              <div className="p-3 rounded-lg border bg-gray-50">
+              <div className="p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-600">Last Sync:</span>
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Last Sync:
+                  </span>
                   <span
                     className={
                       lastSyncInfo.customers.success
-                        ? "text-green-600 font-medium"
-                        : "text-red-600 font-medium"
+                        ? "text-green-600 dark:text-green-400 font-medium"
+                        : "text-red-600 dark:text-red-400 font-medium"
                     }
                   >
                     {lastSyncInfo.customers.success ? "✓ Success" : "✗ Failed"}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   {new Date(lastSyncInfo.customers.timestamp).toLocaleString()}
                 </p>
                 {lastSyncInfo.customers.success && (
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
                     {lastSyncInfo.customers.count} customers synced
                   </p>
                 )}
@@ -1313,8 +1405,8 @@ export default function IntegrationPage() {
               <div
                 className={`p-3 md:p-4 rounded-lg ${
                   syncResults.customers.success
-                    ? "bg-green-50 text-green-800"
-                    : "bg-red-50 text-red-800"
+                    ? "bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
                 }`}
               >
                 <div className="flex items-center gap-2 text-sm md:text-base">
@@ -1376,24 +1468,26 @@ export default function IntegrationPage() {
           <CardContent className="space-y-4">
             {/* Last Sync Info */}
             {lastSyncInfo.receipts && (
-              <div className="p-3 rounded-lg border bg-gray-50">
+              <div className="p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-600">Last Sync:</span>
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Last Sync:
+                  </span>
                   <span
                     className={
                       lastSyncInfo.receipts.success
-                        ? "text-green-600 font-medium"
-                        : "text-red-600 font-medium"
+                        ? "text-green-600 dark:text-green-400 font-medium"
+                        : "text-red-600 dark:text-red-400 font-medium"
                     }
                   >
                     {lastSyncInfo.receipts.success ? "✓ Success" : "✗ Failed"}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   {new Date(lastSyncInfo.receipts.timestamp).toLocaleString()}
                 </p>
                 {lastSyncInfo.receipts.success && (
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
                     {lastSyncInfo.receipts.count} receipts synced
                   </p>
                 )}
@@ -1404,8 +1498,8 @@ export default function IntegrationPage() {
               <div
                 className={`p-3 rounded-lg ${
                   syncResults.receipts.success
-                    ? "bg-green-50 border border-green-200"
-                    : "bg-red-50 border border-red-200"
+                    ? "bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
                 }`}
               >
                 <div className="flex items-center gap-2 text-sm">
@@ -1442,7 +1536,7 @@ export default function IntegrationPage() {
               syncProgress.receipts.total > 0 && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
+                    <span className="text-neutral-600">
                       {syncProgress.receipts.percentage > 0
                         ? "Saving to Firebase..."
                         : "Fetching from Loyverse..."}
@@ -1453,7 +1547,7 @@ export default function IntegrationPage() {
                         : `${syncProgress.receipts.current} fetched`}
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div className="w-full bg-neutral-200 rounded-full h-3 overflow-hidden">
                     <div
                       className="bg-purple-600 h-full transition-all duration-300 rounded-full"
                       style={{
@@ -1464,7 +1558,7 @@ export default function IntegrationPage() {
                       }}
                     />
                   </div>
-                  <p className="text-xs text-gray-500 text-center">
+                  <p className="text-xs text-neutral-500 text-center">
                     {syncProgress.receipts.current} /{" "}
                     {syncProgress.receipts.total} receipts
                   </p>
@@ -1502,7 +1596,7 @@ export default function IntegrationPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-neutral-600">
             View all available payment types configured in your Loyverse
             account. This helps you identify the correct Payment Type IDs for
             receipts.
@@ -1512,13 +1606,13 @@ export default function IntegrationPage() {
             <div
               className={`p-3 rounded-lg ${
                 syncResults.paymentTypes.success
-                  ? "bg-green-50 border border-green-200"
-                  : "bg-red-50 border border-red-200"
+                  ? "bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
               }`}
             >
               <div className="flex items-center gap-2 text-sm">
                 {syncResults.paymentTypes.success ? (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                 ) : (
                   <AlertCircle className="h-4 w-4" />
                 )}
@@ -1556,19 +1650,19 @@ export default function IntegrationPage() {
           {/* Display Payment Types */}
           {paymentTypes && paymentTypes.length > 0 && (
             <div className="mt-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-700">
+              <h3 className="text-sm font-semibold text-neutral-700">
                 Available Payment Types ({paymentTypes.length}):
               </h3>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {paymentTypes.map((pt) => (
                   <div
                     key={pt.id}
-                    className="border rounded-lg p-3 bg-white hover:bg-gray-50 transition-colors"
+                    className="border dark:border-neutral-700 rounded-lg p-3 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-gray-900">
+                          <h4 className="font-semibold text-neutral-900 dark:text-neutral-100">
                             {pt.name}
                           </h4>
                           <Badge
@@ -1589,8 +1683,8 @@ export default function IntegrationPage() {
                             </Badge>
                           )}
                         </div>
-                        <div className="space-y-1 text-xs text-gray-600">
-                          <p className="font-mono bg-gray-100 px-2 py-1 rounded inline-block">
+                        <div className="space-y-1 text-xs text-neutral-600">
+                          <p className="font-mono bg-neutral-100 px-2 py-1 rounded inline-block">
                             ID: {pt.id}
                           </p>
                           {pt.stores && pt.stores.length > 0 && (
@@ -1660,7 +1754,7 @@ export default function IntegrationPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-auto max-h-96 text-xs">
+            <pre className="bg-neutral-50 dark:bg-neutral-900 p-4 rounded-lg overflow-auto max-h-96 text-xs">
               {JSON.stringify(debugData, null, 2)}
             </pre>
           </CardContent>
@@ -1681,7 +1775,7 @@ export default function IntegrationPage() {
             <li>View debug data to inspect API responses</li>
           </ol>
           <Separator className="my-4" />
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-neutral-500">
             <p>
               <strong>Note:</strong> This is a one-way sync from Loyverse to
               your local database. Changes made in your POS will not sync back

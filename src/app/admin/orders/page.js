@@ -368,7 +368,7 @@ export default function AdminOrders() {
       case "REFUND":
         return "bg-red-100 text-red-800";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-neutral-100 text-neutral-800";
     }
   };
 
@@ -385,7 +385,7 @@ export default function AdminOrders() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Orders & Receipts</h1>
-        <p className="text-gray-500 mt-2">
+        <p className="text-neutral-500 mt-2">
           View all sales and receipts from Loyverse
         </p>
       </div>
@@ -396,7 +396,7 @@ export default function AdminOrders() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Receipts</p>
+                <p className="text-sm text-neutral-500">Total Receipts</p>
                 <p className="text-2xl font-bold">{filteredReceipts.length}</p>
               </div>
               <Receipt className="h-8 w-8 text-blue-600" />
@@ -408,7 +408,7 @@ export default function AdminOrders() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Sales</p>
+                <p className="text-sm text-neutral-500">Total Sales</p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(totalSales)}
                 </p>
@@ -422,7 +422,7 @@ export default function AdminOrders() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Refunds</p>
+                <p className="text-sm text-neutral-500">Total Refunds</p>
                 <p className="text-2xl font-bold text-red-600">
                   {formatCurrency(totalRefunds)}
                 </p>
@@ -438,7 +438,7 @@ export default function AdminOrders() {
         <CardContent className="pt-6 space-y-4">
           {/* Quick Date Range Tabs */}
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
+            <label className="text-sm font-medium text-neutral-700 mb-2 block">
               Quick Date Range
             </label>
             <Tabs
@@ -463,7 +463,7 @@ export default function AdminOrders() {
           {dateRange === "custom" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 mb-2 block">
                   Start Date
                 </label>
                 <Input
@@ -475,7 +475,7 @@ export default function AdminOrders() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 mb-2 block">
                   End Date
                 </label>
                 <Input
@@ -488,7 +488,7 @@ export default function AdminOrders() {
                 />
               </div>
               {customStartDate && customEndDate && (
-                <div className="md:col-span-2 text-sm text-blue-700 bg-white p-2 rounded border border-blue-200">
+                <div className="md:col-span-2 text-sm text-blue-700 dark:text-blue-400 bg-white dark:bg-blue-900/20 p-2 rounded border border-blue-200 dark:border-blue-800">
                   📅 Showing receipts from{" "}
                   {new Date(customStartDate).toLocaleDateString()} to{" "}
                   {new Date(customEndDate).toLocaleDateString()}
@@ -499,7 +499,7 @@ export default function AdminOrders() {
 
           {/* Date Range Info */}
           {dateRange !== "custom" && dateRange !== "all" && (
-            <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm text-neutral-600 bg-neutral-50 p-3 rounded-lg">
               📅 <strong>Showing:</strong>{" "}
               {dateRange === "today"
                 ? "Today's receipts"
@@ -525,7 +525,7 @@ export default function AdminOrders() {
           {/* Search Bar */}
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
               <Input
                 placeholder="Search by receipt #, customer, employee, source..."
                 value={searchQuery}
@@ -544,10 +544,10 @@ export default function AdminOrders() {
 
           {/* Advanced Filters */}
           {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-neutral-50 rounded-lg">
               {/* Receipt Type Filter */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 mb-2 block">
                   Receipt Type
                 </label>
                 <select
@@ -563,7 +563,7 @@ export default function AdminOrders() {
 
               {/* Source Filter */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 mb-2 block">
                   Source
                 </label>
                 <select
@@ -582,7 +582,7 @@ export default function AdminOrders() {
 
               {/* Min Amount */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 mb-2 block">
                   Min Amount (฿)
                 </label>
                 <Input
@@ -596,7 +596,7 @@ export default function AdminOrders() {
 
               {/* Max Amount */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 mb-2 block">
                   Max Amount (฿)
                 </label>
                 <Input
@@ -633,14 +633,14 @@ export default function AdminOrders() {
       {/* Receipts List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-gray-500">Loading receipts...</p>
+          <p className="text-neutral-500">Loading receipts...</p>
         </div>
       ) : filteredReceipts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No receipts found</p>
-            <p className="text-sm text-gray-400 mt-2">
+            <Receipt className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
+            <p className="text-neutral-500">No receipts found</p>
+            <p className="text-sm text-neutral-400 mt-2">
               Sync receipts from Loyverse in the Integration page
             </p>
           </CardContent>
@@ -655,7 +655,7 @@ export default function AdminOrders() {
               {paginatedReceipts.map((receipt) => (
                 <div
                   key={receipt.id}
-                  className="p-4 border rounded-lg hover:bg-gray-50"
+                  className="p-4 border rounded-lg hover:bg-neutral-50"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div>
@@ -672,13 +672,13 @@ export default function AdminOrders() {
                           <Badge variant="destructive">Cancelled</Badge>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-neutral-500 mt-1">
                         {receipt.receiptDate
                           ? new Date(receipt.receiptDate).toLocaleString()
                           : "N/A"}
                       </p>
                       {receipt.source && (
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-neutral-400">
                           Source: {receipt.source}
                         </p>
                       )}
@@ -698,31 +698,31 @@ export default function AdminOrders() {
                   {/* Line Items */}
                   {receipt.lineItems && receipt.lineItems.length > 0 && (
                     <div className="mt-3 pt-3 border-t">
-                      <p className="text-sm font-medium text-gray-700 mb-2">
+                      <p className="text-sm font-medium text-neutral-700 mb-2">
                         Items ({receipt.lineItems.length}):
                       </p>
                       <div className="space-y-2">
                         {receipt.lineItems.map((item, idx) => (
                           <div
                             key={idx}
-                            className="flex justify-between text-sm bg-gray-50 p-2 rounded"
+                            className="flex justify-between text-sm bg-neutral-50 p-2 rounded"
                           >
                             <div className="flex-1">
-                              <span className="text-gray-900 font-medium">
+                              <span className="text-neutral-900 font-medium">
                                 {item.quantity}x {item.item_name}
                               </span>
                               {item.variant_name && (
-                                <span className="text-gray-500 ml-2">
+                                <span className="text-neutral-500 ml-2">
                                   ({item.variant_name})
                                 </span>
                               )}
                               {item.sku && (
-                                <span className="text-xs text-gray-400 ml-2">
+                                <span className="text-xs text-neutral-400 ml-2">
                                   SKU: {item.sku}
                                 </span>
                               )}
                             </div>
-                            <span className="text-gray-900 font-medium">
+                            <span className="text-neutral-900 font-medium">
                               {formatCurrency(item.total_money || 0)}
                             </span>
                           </div>
@@ -732,7 +732,7 @@ export default function AdminOrders() {
                   )}
 
                   {/* Receipt Details */}
-                  <div className="mt-3 pt-3 border-t flex items-center justify-between text-sm text-gray-600">
+                  <div className="mt-3 pt-3 border-t flex items-center justify-between text-sm text-neutral-600">
                     <div className="flex gap-4">
                       {receipt.payments && receipt.payments.length > 0 && (
                         <span>
@@ -779,7 +779,7 @@ export default function AdminOrders() {
             {/* Pagination Controls */}
             {filteredReceipts.length > itemsPerPage && (
               <div className="mt-6 flex items-center justify-between border-t pt-4">
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-neutral-600">
                   Showing {startIndex + 1} to{" "}
                   {Math.min(endIndex, filteredReceipts.length)} of{" "}
                   {filteredReceipts.length} receipts
@@ -807,7 +807,7 @@ export default function AdminOrders() {
                       .map((page, idx, arr) => (
                         <div key={page} className="flex items-center">
                           {idx > 0 && arr[idx - 1] !== page - 1 && (
-                            <span className="px-2 text-gray-400">...</span>
+                            <span className="px-2 text-neutral-400">...</span>
                           )}
                           <Button
                             variant={
@@ -842,3 +842,4 @@ export default function AdminOrders() {
     </div>
   );
 }
+

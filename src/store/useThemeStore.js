@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 const defaultTheme = {
   primaryColor: "#16a34a", // Green
   secondaryColor: "#0ea5e9", // Blue
-  mode: "light", // light or dark
+  mode: "system", // system, light, or dark
   isLoaded: false,
 };
 
@@ -30,6 +30,8 @@ export const useThemeStore = create(
       // Set theme mode
       setMode: (mode) => {
         set({ mode });
+        // Apply theme immediately when mode changes
+        setTimeout(() => get().applyTheme(), 0);
       },
 
       // Load theme from Firebase
@@ -170,8 +172,18 @@ export const useThemeStore = create(
           isSecondaryDark ? "oklch(0.985 0 0)" : "oklch(0.145 0 0)" // White for dark, dark for light
         );
 
+        // Determine actual theme mode (resolve "system" to "light" or "dark")
+        let actualMode = mode;
+        if (mode === "system") {
+          // Check system preference
+          const prefersDark = window.matchMedia(
+            "(prefers-color-scheme: dark)"
+          ).matches;
+          actualMode = prefersDark ? "dark" : "light";
+        }
+
         // Set dark mode class
-        if (mode === "dark") {
+        if (actualMode === "dark") {
           root.classList.add("dark");
         } else {
           root.classList.remove("dark");

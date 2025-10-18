@@ -21,14 +21,19 @@ import {
   HardDrive,
   Palette,
   Save,
+  Moon,
+  Sun,
+  Monitor,
 } from "lucide-react";
 
 export default function AdminSettings() {
   const {
     primaryColor,
     secondaryColor,
+    mode,
     setPrimaryColor,
     setSecondaryColor,
+    setMode,
     resetTheme,
     saveThemeToFirebase,
   } = useThemeStore();
@@ -40,10 +45,83 @@ export default function AdminSettings() {
       {/* Header */}
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
-        <p className="text-sm md:text-base text-gray-500 mt-1 md:mt-2">
+        <p className="text-sm md:text-base text-neutral-500 dark:text-neutral-400 mt-1 md:mt-2">
           System configuration and information
         </p>
       </div>
+
+      {/* Dark Mode Toggle */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-lg md:text-xl">
+            <Moon className="mr-2 h-6 w-6 md:h-5 md:w-5" />
+            Appearance
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Choose how the admin panel looks to you
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            {/* System */}
+            <button
+              onClick={() => setMode("system")}
+              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
+                mode === "system"
+                  ? "border-primary bg-primary/5"
+                  : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600"
+              }`}
+            >
+              <Monitor className="h-8 w-8 mb-2" />
+              <span className="text-sm font-medium">System</span>
+              <span className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-center">
+                Use system theme
+              </span>
+            </button>
+
+            {/* Light */}
+            <button
+              onClick={() => setMode("light")}
+              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
+                mode === "light"
+                  ? "border-primary bg-primary/5"
+                  : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600"
+              }`}
+            >
+              <Sun className="h-8 w-8 mb-2" />
+              <span className="text-sm font-medium">Light</span>
+              <span className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                Always light
+              </span>
+            </button>
+
+            {/* Dark */}
+            <button
+              onClick={() => setMode("dark")}
+              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
+                mode === "dark"
+                  ? "border-primary bg-primary/5"
+                  : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600"
+              }`}
+            >
+              <Moon className="h-8 w-8 mb-2" />
+              <span className="text-sm font-medium">Dark</span>
+              <span className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                Always dark
+              </span>
+            </button>
+          </div>
+
+          {mode === "system" && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-900 dark:text-blue-200 flex items-center gap-2">
+                <Monitor className="h-4 w-4" />
+                Theme will automatically switch based on your system settings
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Color Theme Customization */}
       <Card>
@@ -62,7 +140,7 @@ export default function AdminSettings() {
             <label className="text-sm md:text-base font-medium">
               Primary Color
             </label>
-            <p className="text-xs md:text-sm text-gray-500">
+            <p className="text-xs md:text-sm text-neutral-500">
               Main color used for buttons, highlights, and accents
             </p>
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
@@ -81,7 +159,7 @@ export default function AdminSettings() {
                 maxLength={7}
               />
               <div
-                className="hidden sm:block w-12 h-12 rounded border-2 border-gray-300 flex-shrink-0"
+                className="hidden sm:block w-12 h-12 rounded border-2 border-neutral-300 flex-shrink-0"
                 style={{ backgroundColor: primaryColor }}
               />
             </div>
@@ -92,7 +170,7 @@ export default function AdminSettings() {
             <label className="text-sm md:text-base font-medium">
               Secondary Color
             </label>
-            <p className="text-xs md:text-sm text-gray-500">
+            <p className="text-xs md:text-sm text-neutral-500">
               Accent color for badges, links, and secondary elements
             </p>
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
@@ -111,7 +189,7 @@ export default function AdminSettings() {
                 maxLength={7}
               />
               <div
-                className="hidden sm:block w-12 h-12 rounded border-2 border-gray-300 flex-shrink-0"
+                className="hidden sm:block w-12 h-12 rounded border-2 border-neutral-300 flex-shrink-0"
                 style={{ backgroundColor: secondaryColor }}
               />
             </div>
@@ -137,7 +215,7 @@ export default function AdminSettings() {
                     setPrimaryColor(preset.primary);
                     setSecondaryColor(preset.secondary);
                   }}
-                  className="flex flex-col items-center p-3 md:p-4 rounded-lg border-2 hover:border-gray-400 transition-colors active:scale-95"
+                  className="flex flex-col items-center p-3 md:p-4 rounded-lg border-2 hover:border-neutral-400 transition-colors active:scale-95"
                   title={preset.name}
                 >
                   <div className="flex gap-1 md:gap-2 mb-2">
@@ -161,7 +239,7 @@ export default function AdminSettings() {
           {/* Preview */}
           <div className="space-y-3">
             <label className="text-sm md:text-base font-medium">Preview</label>
-            <div className="p-4 md:p-6 border rounded-lg space-y-3 bg-gray-50">
+            <div className="p-4 md:p-6 border rounded-lg space-y-3 bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
               <Button
                 style={{
                   backgroundColor: primaryColor,
@@ -239,21 +317,21 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Project ID</span>
+            <span className="text-sm text-neutral-600">Project ID</span>
             <Badge variant="secondary">
               {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}
             </Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Authentication</span>
+            <span className="text-sm text-neutral-600">Authentication</span>
             <Badge className="bg-green-100 text-green-800">Connected</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Firestore</span>
+            <span className="text-sm text-neutral-600">Firestore</span>
             <Badge className="bg-green-100 text-green-800">Connected</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Storage</span>
+            <span className="text-sm text-neutral-600">Storage</span>
             <Badge className="bg-green-100 text-green-800">Connected</Badge>
           </div>
         </CardContent>
@@ -270,15 +348,15 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">App Version</span>
+            <span className="text-sm text-neutral-600">App Version</span>
             <Badge variant="secondary">v1.0.0</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Environment</span>
+            <span className="text-sm text-neutral-600">Environment</span>
             <Badge variant="secondary">Production</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Last Deployment</span>
+            <span className="text-sm text-neutral-600">Last Deployment</span>
             <span className="text-sm">{new Date().toLocaleDateString()}</span>
           </div>
         </CardContent>
@@ -295,19 +373,19 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Offline Mode</span>
+            <span className="text-sm text-neutral-600">Offline Mode</span>
             <Badge className="bg-green-100 text-green-800">Enabled</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Real-time Sync</span>
+            <span className="text-sm text-neutral-600">Real-time Sync</span>
             <Badge className="bg-green-100 text-green-800">Enabled</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Barcode Scanner</span>
+            <span className="text-sm text-neutral-600">Barcode Scanner</span>
             <Badge className="bg-yellow-100 text-yellow-800">Coming Soon</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Receipt Printing</span>
+            <span className="text-sm text-neutral-600">Receipt Printing</span>
             <Badge className="bg-yellow-100 text-yellow-800">Coming Soon</Badge>
           </div>
         </CardContent>
@@ -324,19 +402,19 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-neutral-600">
               Cloud Storage (Firebase)
             </span>
             <Badge className="bg-green-100 text-green-800">Active</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-neutral-600">
               Local Storage (IndexedDB)
             </span>
             <Badge className="bg-green-100 text-green-800">Active</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Sync Status</span>
+            <span className="text-sm text-neutral-600">Sync Status</span>
             <Wifi className="h-4 w-4 text-green-600" />
           </div>
         </CardContent>
@@ -355,7 +433,7 @@ export default function AdminSettings() {
                 <h4 className="font-semibold">Admin</h4>
                 <Badge className="bg-red-100 text-red-800">Full Access</Badge>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-neutral-600">
                 Complete system access including user management, analytics, and
                 settings
               </p>
@@ -368,7 +446,7 @@ export default function AdminSettings() {
                   Extended Access
                 </Badge>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-neutral-600">
                 Sales operations, reports, discounts, and ticket management
               </p>
             </div>
@@ -380,7 +458,7 @@ export default function AdminSettings() {
                   Basic Access
                 </Badge>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-neutral-600">
                 Basic sales operations and product viewing only
               </p>
             </div>
@@ -390,3 +468,4 @@ export default function AdminSettings() {
     </div>
   );
 }
+

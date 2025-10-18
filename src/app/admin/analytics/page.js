@@ -106,7 +106,7 @@ export default function AdminAnalytics() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">Loading analytics...</p>
+        <p className="text-neutral-500">Loading analytics...</p>
       </div>
     );
   }
@@ -116,7 +116,7 @@ export default function AdminAnalytics() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Analytics</h1>
-        <p className="text-gray-500 mt-2">
+        <p className="text-neutral-500 mt-2">
           Detailed insights and performance metrics
         </p>
       </div>
@@ -132,7 +132,7 @@ export default function AdminAnalytics() {
             <div className="text-2xl font-bold">
               {formatCurrency(analytics.totalRevenue)}
             </div>
-            <p className="text-xs text-gray-500 mt-1">All time</p>
+            <p className="text-xs text-neutral-500 mt-1">All time</p>
           </CardContent>
         </Card>
 
@@ -143,7 +143,7 @@ export default function AdminAnalytics() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{analytics.totalOrders}</div>
-            <p className="text-xs text-gray-500 mt-1">Completed sales</p>
+            <p className="text-xs text-neutral-500 mt-1">Completed sales</p>
           </CardContent>
         </Card>
 
@@ -158,7 +158,7 @@ export default function AdminAnalytics() {
             <div className="text-2xl font-bold">
               {formatCurrency(analytics.averageOrderValue)}
             </div>
-            <p className="text-xs text-gray-500 mt-1">Per transaction</p>
+            <p className="text-xs text-neutral-500 mt-1">Per transaction</p>
           </CardContent>
         </Card>
       </div>
@@ -181,12 +181,12 @@ export default function AdminAnalytics() {
               return (
                 <div key={index}>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-600">{day.date}</span>
+                    <span className="text-neutral-600">{day.date}</span>
                     <span className="font-semibold">
                       {formatCurrency(day.revenue)}
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-neutral-200 rounded-full h-2">
                     <div
                       className="bg-green-600 h-2 rounded-full transition-all"
                       style={{ width: `${percentage}%` }}
@@ -213,7 +213,7 @@ export default function AdminAnalytics() {
                   <div className="w-3 h-3 rounded-full bg-green-600" />
                   <span className="capitalize font-medium">{status}</span>
                 </div>
-                <span className="text-gray-600">{count} orders</span>
+                <span className="text-neutral-600">{count} orders</span>
               </div>
             ))}
           </div>
@@ -239,7 +239,7 @@ export default function AdminAnalytics() {
                   </div>
                   <div>
                     <p className="font-medium">{product.name}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-neutral-500">
                       {product.sales} sales
                     </p>
                   </div>
@@ -255,3 +255,4 @@ export default function AdminAnalytics() {
     </div>
   );
 }
+

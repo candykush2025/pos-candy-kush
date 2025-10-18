@@ -156,7 +156,7 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Categories</h1>
-          <p className="text-gray-500 mt-2">Manage product categories</p>
+          <p className="text-neutral-500 mt-2">Manage product categories</p>
         </div>
       </div>
 
@@ -164,7 +164,7 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="flex-1 max-w-md">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <Input
               placeholder="Search categories..."
               value={searchQuery}
@@ -182,13 +182,13 @@ export default function CategoriesPage() {
       {/* Categories Grid */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500">Loading categories...</p>
+          <p className="text-neutral-500">Loading categories...</p>
         </div>
       ) : filteredCategories.length === 0 ? (
         <Card className="py-12">
           <CardContent className="text-center">
-            <FolderTree className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">
+            <FolderTree className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
+            <p className="text-neutral-500">
               {searchQuery ? "No categories found" : "No categories yet"}
             </p>
             {!searchQuery && (
@@ -232,7 +232,7 @@ export default function CategoriesPage() {
                   </div>
                 </div>
                 <h3 className="font-semibold text-lg mb-2">{category.name}</h3>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center gap-2 text-sm text-neutral-500">
                   {category.source && (
                     <Badge variant="secondary" className="text-xs">
                       {category.source}
@@ -283,7 +283,7 @@ export default function CategoriesPage() {
                     type="button"
                     className={`h-10 w-10 rounded-lg border-2 transition-all ${
                       formData.color === color
-                        ? "border-gray-900 dark:border-white scale-110"
+                        ? "border-neutral-900 dark:border-white scale-110"
                         : "border-transparent"
                     }`}
                     style={{ backgroundColor: color }}
@@ -320,3 +320,4 @@ export default function CategoriesPage() {
     </div>
   );
 }
+

@@ -115,7 +115,7 @@ export default function AdminUsers() {
       case USER_ROLES.CASHIER:
         return "bg-green-100 text-green-800";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-neutral-100 text-neutral-800";
     }
   };
 
@@ -125,7 +125,7 @@ export default function AdminUsers() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Users</h1>
-          <p className="text-gray-500 mt-2">
+          <p className="text-neutral-500 mt-2">
             Manage staff members and their roles
           </p>
         </div>
@@ -194,7 +194,7 @@ export default function AdminUsers() {
                   <option value={USER_ROLES.MANAGER}>Manager</option>
                   <option value={USER_ROLES.ADMIN}>Admin</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-neutral-500 mt-1">
                   Cashier: Basic sales only • Manager: Sales + reports • Admin:
                   Full access
                 </p>
@@ -222,7 +222,7 @@ export default function AdminUsers() {
                     minLength={4}
                     maxLength={6}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-neutral-500 mt-1">
                     🔒 PIN is required for POS login (cashiers and admins only)
                   </p>
                 </div>
@@ -247,7 +247,7 @@ export default function AdminUsers() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <Input
               placeholder="Search users by name or email..."
               value={searchQuery}
@@ -261,13 +261,13 @@ export default function AdminUsers() {
       {/* Users List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-gray-500">Loading users...</p>
+          <p className="text-neutral-500">Loading users...</p>
         </div>
       ) : filteredUsers.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No users found</p>
+            <UserPlus className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
+            <p className="text-neutral-500">No users found</p>
             <Button className="mt-4" onClick={() => setIsModalOpen(true)}>
               Add your first user
             </Button>
@@ -293,9 +293,9 @@ export default function AdminUsers() {
                     </div>
                     <div>
                       <h3 className="font-semibold">{user.name}</h3>
-                      <p className="text-sm text-gray-500">{user.email}</p>
+                      <p className="text-sm text-neutral-500">{user.email}</p>
                       {user.pin && (
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-xs text-neutral-400 mt-1">
                           🔒 PIN: {"*".repeat(user.pin.length)}
                         </p>
                       )}
@@ -306,7 +306,7 @@ export default function AdminUsers() {
                       {user.role}
                     </Badge>
                     {user.createdAt && (
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-neutral-500">
                         Joined{" "}
                         {new Date(user.createdAt.toDate()).toLocaleDateString()}
                       </span>
@@ -321,3 +321,4 @@ export default function AdminUsers() {
     </div>
   );
 }
+

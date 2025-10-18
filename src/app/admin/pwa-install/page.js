@@ -94,7 +94,7 @@ export default function PWAInstallPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-neutral-50 p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-4">
@@ -103,10 +103,10 @@ export default function PWAInstallPage() {
               CK
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900">
+          <h1 className="text-4xl font-bold text-neutral-900">
             Install Candy Kush POS
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-lg text-neutral-600">
             Get the full app experience with offline support and faster performance
           </p>
         </div>
@@ -125,7 +125,7 @@ export default function PWAInstallPage() {
                   <p className="font-semibold text-lg">
                     {isInstalled ? "App Installed" : "Ready to Install"}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-neutral-500">
                     {isInstalled
                       ? "You're using the installed app"
                       : "Install for the best experience"}
@@ -172,7 +172,7 @@ export default function PWAInstallPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold">Works Offline</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-neutral-600">
                     Continue selling even without internet connection
                   </p>
                 </div>
@@ -185,7 +185,7 @@ export default function PWAInstallPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold">Native App Experience</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-neutral-600">
                     Runs like a native app on your device
                   </p>
                 </div>
@@ -198,7 +198,7 @@ export default function PWAInstallPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold">Quick Access</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-neutral-600">
                     Launch from home screen like any other app
                   </p>
                 </div>
@@ -211,7 +211,7 @@ export default function PWAInstallPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold">Faster Performance</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-neutral-600">
                     Cached resources for lightning-fast loading
                   </p>
                 </div>
@@ -386,7 +386,7 @@ export default function PWAInstallPage() {
                 <h3 className="font-semibold mb-2">
                   Don't see the install option?
                 </h3>
-                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                <ul className="list-disc list-inside text-sm text-neutral-600 space-y-1">
                   <li>Make sure you're using a supported browser (Chrome, Edge, Safari)</li>
                   <li>Check that you're accessing the site via HTTPS</li>
                   <li>Try refreshing the page</li>
@@ -397,7 +397,7 @@ export default function PWAInstallPage() {
                 <h3 className="font-semibold mb-2">
                   Already installed but can't find the app?
                 </h3>
-                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                <ul className="list-disc list-inside text-sm text-neutral-600 space-y-1">
                   <li>Check your home screen (mobile) or app drawer</li>
                   <li>Check your Dock or Applications folder (Mac)</li>
                   <li>Search for "Candy Kush" in your device search</li>
@@ -407,7 +407,7 @@ export default function PWAInstallPage() {
                 <h3 className="font-semibold mb-2">
                   Want to uninstall?
                 </h3>
-                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                <ul className="list-disc list-inside text-sm text-neutral-600 space-y-1">
                   <li>Mobile: Long-press the icon and select "Uninstall" or "Remove"</li>
                   <li>Desktop: Right-click the app window and select "Uninstall"</li>
                   <li>Or remove it from your browser's installed apps settings</li>
@@ -441,12 +441,12 @@ export default function PWAInstallPage() {
                 <span>Samsung Internet (Android)</span>
               </div>
               <div className="flex items-center gap-3">
-                <XCircle className="h-5 w-5 text-gray-400" />
-                <span className="text-gray-500">Firefox (limited support)</span>
+                <XCircle className="h-5 w-5 text-neutral-400" />
+                <span className="text-neutral-500">Firefox (limited support)</span>
               </div>
               <div className="flex items-center gap-3">
-                <XCircle className="h-5 w-5 text-gray-400" />
-                <span className="text-gray-500">Opera (limited support)</span>
+                <XCircle className="h-5 w-5 text-neutral-400" />
+                <span className="text-neutral-500">Opera (limited support)</span>
               </div>
             </div>
           </CardContent>
@@ -462,3 +462,4 @@ export default function PWAInstallPage() {
     </div>
   );
 }
+

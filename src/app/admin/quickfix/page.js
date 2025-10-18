@@ -216,7 +216,7 @@ export default function QuickFixPage() {
                 <Check className="h-8 w-8" />
                 <span className="text-lg font-semibold">Setup Complete!</span>
               </div>
-              <p className="text-center text-gray-600">
+              <p className="text-center text-neutral-600">
                 Redirecting to login...
               </p>
             </div>
@@ -226,3 +226,4 @@ export default function QuickFixPage() {
     </div>
   );
 }
+

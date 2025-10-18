@@ -217,7 +217,7 @@ export default function CustomersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Customer Management</h1>
-          <p className="text-gray-500 mt-2">
+          <p className="text-neutral-500 mt-2">
             Manage your store customers and track their activity
           </p>
         </div>
@@ -233,7 +233,7 @@ export default function CustomersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Customers</p>
+                <p className="text-sm text-neutral-500">Total Customers</p>
                 <p className="text-2xl font-bold">{customers.length}</p>
               </div>
               <UserCircle className="h-8 w-8 text-blue-500" />
@@ -244,7 +244,7 @@ export default function CustomersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Synced from Loyverse</p>
+                <p className="text-sm text-neutral-500">Synced from Loyverse</p>
                 <p className="text-2xl font-bold">
                   {customers.filter((c) => c.source === "loyverse").length}
                 </p>
@@ -257,7 +257,7 @@ export default function CustomersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Local Customers</p>
+                <p className="text-sm text-neutral-500">Local Customers</p>
                 <p className="text-2xl font-bold">
                   {customers.filter((c) => c.source === "local").length}
                 </p>
@@ -270,7 +270,7 @@ export default function CustomersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Spent</p>
+                <p className="text-sm text-neutral-500">Total Spent</p>
                 <p className="text-2xl font-bold">
                   {formatCurrency(
                     customers.reduce(
@@ -290,7 +290,7 @@ export default function CustomersPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <Input
               placeholder="Search by name, email, phone, or customer code..."
               value={searchQuery}
@@ -304,13 +304,13 @@ export default function CustomersPage() {
       {/* Customers List */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500">Loading customers...</p>
+          <p className="text-neutral-500">Loading customers...</p>
         </div>
       ) : filteredCustomers.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <UserCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">
+            <UserCircle className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
+            <p className="text-neutral-500">
               {searchQuery ? "No customers found" : "No customers yet"}
             </p>
             {!searchQuery && (
@@ -331,11 +331,11 @@ export default function CustomersPage() {
               {filteredCustomers.map((customer) => (
                 <div
                   key={customer.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-neutral-50 transition-colors"
                 >
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center space-x-3">
-                      <UserCircle className="h-10 w-10 text-gray-400" />
+                      <UserCircle className="h-10 w-10 text-neutral-400" />
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-lg">
@@ -354,13 +354,13 @@ export default function CustomersPage() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-neutral-500">
                           {customer.customerCode}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-4 text-sm text-gray-600 ml-13">
+                    <div className="flex flex-wrap gap-4 text-sm text-neutral-600 ml-13">
                       {customer.email && (
                         <div className="flex items-center gap-1">
                           <Mail className="h-4 w-4" />
@@ -384,7 +384,7 @@ export default function CustomersPage() {
                     </div>
 
                     <div className="flex gap-4 text-sm ml-13">
-                      <div className="flex items-center gap-1 text-gray-600">
+                      <div className="flex items-center gap-1 text-neutral-600">
                         <ShoppingBag className="h-4 w-4" />
                         <span>
                           {customer.totalVisits || customer.visits || 0} visits
@@ -612,7 +612,7 @@ export default function CustomersPage() {
             <div className="space-y-6">
               {/* Customer Info */}
               <div className="flex items-start gap-4">
-                <UserCircle className="h-16 w-16 text-gray-400" />
+                <UserCircle className="h-16 w-16 text-neutral-400" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h2 className="text-2xl font-bold">
@@ -630,7 +630,7 @@ export default function CustomersPage() {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-gray-500">
+                  <p className="text-neutral-500">
                     {selectedCustomer.customerCode}
                   </p>
                 </div>
@@ -641,13 +641,13 @@ export default function CustomersPage() {
                 <h3 className="font-semibold mb-3">Contact Information</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-gray-500">Email</p>
+                    <p className="text-neutral-500">Email</p>
                     <p className="font-medium">
                       {selectedCustomer.email || "N/A"}
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Phone</p>
+                    <p className="text-neutral-500">Phone</p>
                     <p className="font-medium">
                       {selectedCustomer.phone || "N/A"}
                     </p>
@@ -697,7 +697,7 @@ export default function CustomersPage() {
                           selectedCustomer.visits ||
                           0}
                       </p>
-                      <p className="text-sm text-gray-500">Total Visits</p>
+                      <p className="text-sm text-neutral-500">Total Visits</p>
                     </CardContent>
                   </Card>
                   <Card>
@@ -710,7 +710,7 @@ export default function CustomersPage() {
                             0
                         )}
                       </p>
-                      <p className="text-sm text-gray-500">Total Spent</p>
+                      <p className="text-sm text-neutral-500">Total Spent</p>
                     </CardContent>
                   </Card>
                   <Card>
@@ -721,7 +721,7 @@ export default function CustomersPage() {
                           selectedCustomer.points ||
                           0}
                       </p>
-                      <p className="text-sm text-gray-500">Loyalty Points</p>
+                      <p className="text-sm text-neutral-500">Loyalty Points</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -733,13 +733,13 @@ export default function CustomersPage() {
                   <h3 className="font-semibold mb-3">Visit History</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500">First Visit</p>
+                      <p className="text-neutral-500">First Visit</p>
                       <p className="font-medium">
                         {formatDate(selectedCustomer.firstVisit)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Last Visit</p>
+                      <p className="text-neutral-500">Last Visit</p>
                       <p className="font-medium">
                         {formatDate(selectedCustomer.lastVisit)}
                       </p>
@@ -752,7 +752,7 @@ export default function CustomersPage() {
               {selectedCustomer.note && (
                 <div>
                   <h3 className="font-semibold mb-3">Notes</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-neutral-600">
                     {selectedCustomer.note}
                   </p>
                 </div>
@@ -763,13 +763,13 @@ export default function CustomersPage() {
                 <h3 className="font-semibold mb-3">Record Information</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-gray-500">Created</p>
+                    <p className="text-neutral-500">Created</p>
                     <p className="font-medium">
                       {formatDate(selectedCustomer.createdAt)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Last Updated</p>
+                    <p className="text-neutral-500">Last Updated</p>
                     <p className="font-medium">
                       {formatDate(selectedCustomer.updatedAt)}
                     </p>
@@ -804,3 +804,4 @@ export default function CustomersPage() {
     </div>
   );
 }
+

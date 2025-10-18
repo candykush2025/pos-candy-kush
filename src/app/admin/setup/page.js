@@ -232,7 +232,7 @@ export default function AdminSetupPage() {
                   disabled={isLoading}
                   className="h-12"
                 />
-                <p className="text-xs text-gray-500">Minimum 6 characters</p>
+                <p className="text-xs text-neutral-500">Minimum 6 characters</p>
               </div>
 
               <Button
@@ -265,13 +265,13 @@ export default function AdminSetupPage() {
                 </div>
               )}
               <div className="pt-4 text-center">
-                <p className="text-sm text-gray-600">Redirecting to login...</p>
+                <p className="text-sm text-neutral-600">Redirecting to login...</p>
               </div>
             </div>
           )}
 
           {step === 1 && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg text-sm text-gray-700">
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg text-sm text-neutral-700">
               <p className="font-semibold mb-2">What happens next:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>Admin account will be created</li>
@@ -286,3 +286,4 @@ export default function AdminSetupPage() {
     </div>
   );
 }
+

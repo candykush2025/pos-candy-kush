@@ -39,6 +39,19 @@ export default function AdminLayout({ children }) {
   const { isAuthenticated, user, logout } = useAuthStore();
   const [expandedMenus, setExpandedMenus] = useState({});
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Pages that don't require authentication
   const publicPages = ["/admin/setup", "/admin/quickfix"];
@@ -98,7 +111,8 @@ export default function AdminLayout({ children }) {
     return null;
   }
 
-  const navigation = [
+  // Desktop navigation - all items
+  const desktopNavigation = [
     { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
     {
       name: "Products",
@@ -121,6 +135,13 @@ export default function AdminLayout({ children }) {
     { name: "Settings", href: "/admin/settings", icon: Settings },
   ];
 
+  // Mobile bottom navigation - main 3 items
+  const mobileBottomNav = [
+    { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+    { name: "Products", href: "/admin/products/items", icon: Package },
+    { name: "Settings", href: "/admin/settings", icon: Settings }, // Navigate to settings page
+  ];
+
   const toggleMenu = (itemName) => {
     setExpandedMenus((prev) => ({
       ...prev,
@@ -128,76 +149,88 @@ export default function AdminLayout({ children }) {
     }));
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      {/* Mobile Header - Extra Large Touch Target */}
-      <div className="md:hidden bg-white border-b sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div>
-            <h1 className="text-2xl font-bold text-green-700">Admin</h1>
-            <p className="text-sm text-gray-500">Candy Kush POS</p>
+  // Mobile Layout with Bottom Navigation
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex flex-col pb-20">
+        {/* Mobile Header */}
+        <div className="bg-white dark:bg-neutral-900 border-b dark:border-neutral-800 sticky top-0 z-40 shadow-sm">
+          <div className="px-4 py-3">
+            <h1 className="text-xl font-bold text-green-700 dark:text-green-500">
+              Candy Kush POS
+            </h1>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Admin Panel
+            </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-14 w-14 hover:bg-green-50"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? (
-              <X className="h-8 w-8 text-green-700" />
-            ) : (
-              <Menu className="h-8 w-8 text-green-700" />
-            )}
-          </Button>
         </div>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto bg-neutral-50 dark:bg-neutral-950">
+          <div className="p-4">{children}</div>
+        </main>
+
+        {/* Bottom Navigation */}
+        <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-neutral-900 border-t dark:border-neutral-800 shadow-lg z-50">
+          <div className="grid grid-cols-3 gap-1 p-2">
+            {mobileBottomNav.map((item) => {
+              const Icon = item.icon;
+              const isActive = item.href && pathname.startsWith(item.href);
+
+              return (
+                <Link key={item.name} href={item.href}>
+                  <button
+                    className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-colors ${
+                      isActive
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                        : "hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
+                    }`}
+                  >
+                    <Icon
+                      className={`h-6 w-6 mb-1 ${
+                        isActive
+                          ? "text-green-700 dark:text-green-400"
+                          : "text-neutral-600 dark:text-neutral-400"
+                      }`}
+                    />
+                    <span
+                      className={`text-xs font-medium ${
+                        isActive
+                          ? "text-green-700 dark:text-green-400"
+                          : "text-neutral-600 dark:text-neutral-400"
+                      }`}
+                    >
+                      {item.name}
+                    </span>
+                  </button>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
       </div>
+    );
+  }
 
-      {/* Mobile Menu Overlay */}
-      {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* Sidebar - Desktop and Mobile Slide-in */}
-      <aside
-        className={`
-          fixed md:static inset-y-0 left-0 z-50
-          w-80 md:w-64 bg-white border-r flex flex-col shadow-2xl md:shadow-none
-          transform transition-transform duration-300 ease-in-out
-          ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
-          md:translate-x-0
-        `}
-      >
-        {/* Logo - Desktop Only */}
-        <div className="hidden md:block p-6 border-b">
-          <h1 className="text-2xl font-bold text-green-700">Admin Panel</h1>
-          <p className="text-sm text-gray-500">Candy Kush POS</p>
-        </div>
-
-        {/* Mobile Menu Header */}
-        <div className="md:hidden p-5 border-b bg-green-50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-green-700">Navigation</h2>
-              <p className="text-sm text-gray-600 mt-0.5">Choose a section</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <X className="h-6 w-6 text-gray-600" />
-            </Button>
-          </div>
+  // Desktop Layout (original)
+  return (
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex flex-col md:flex-row">
+      {/* Sidebar - Desktop Only */}
+      <aside className="w-64 bg-white dark:bg-neutral-900 border-r dark:border-neutral-800 flex flex-col shadow-sm">
+        {/* Logo */}
+        <div className="p-6 border-b dark:border-neutral-800">
+          <h1 className="text-2xl font-bold text-green-700 dark:text-green-500">
+            Admin Panel
+          </h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            Candy Kush POS
+          </p>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 md:p-4 overflow-y-auto">
+        <nav className="flex-1 p-4 overflow-y-auto">
           <div className="space-y-2">
-            {navigation.map((item) => {
+            {desktopNavigation.map((item) => {
               const Icon = item.icon;
               const isExpanded = expandedMenus[item.name];
               const isActive =
@@ -210,25 +243,25 @@ export default function AdminLayout({ children }) {
                   <div key={item.name}>
                     <Button
                       variant="ghost"
-                      className={`w-full justify-start h-14 md:h-12 text-lg md:text-base font-medium rounded-xl ${
+                      className={`w-full justify-start h-12 text-base font-medium rounded-xl ${
                         isActive
                           ? "bg-green-100 text-green-700 hover:bg-green-100"
-                          : "hover:bg-gray-100"
+                          : "hover:bg-neutral-100"
                       }`}
                       onClick={() => toggleMenu(item.name)}
                     >
-                      <Icon className="mr-4 h-7 w-7 md:mr-3 md:h-5 md:w-5" />
+                      <Icon className="mr-3 h-5 w-5" />
                       <span className="flex-1 text-left">{item.name}</span>
                       {isExpanded ? (
-                        <ChevronDown className="h-6 w-6 md:h-5 md:w-5" />
+                        <ChevronDown className="h-5 w-5" />
                       ) : (
-                        <ChevronRight className="h-6 w-6 md:h-5 md:w-5" />
+                        <ChevronRight className="h-5 w-5" />
                       )}
                     </Button>
 
                     {/* Submenu items */}
                     {isExpanded && (
-                      <div className="ml-4 md:ml-4 mt-2 space-y-2 pb-2">
+                      <div className="ml-4 mt-2 space-y-2 pb-2">
                         {item.subItems.map((subItem) => {
                           const SubIcon = subItem.icon;
                           const isSubActive = pathname === subItem.href;
@@ -236,13 +269,13 @@ export default function AdminLayout({ children }) {
                             <Link key={subItem.name} href={subItem.href}>
                               <Button
                                 variant="ghost"
-                                className={`w-full justify-start pl-12 md:pl-8 h-13 md:h-11 text-base rounded-lg ${
+                                className={`w-full justify-start pl-8 h-11 text-base rounded-lg ${
                                   isSubActive
-                                    ? "bg-green-50 text-green-700 font-semibold hover:bg-green-50"
-                                    : "hover:bg-gray-50"
+                                    ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-semibold hover:bg-green-50 dark:hover:bg-green-900/30"
+                                    : "hover:bg-neutral-50 dark:hover:bg-neutral-800"
                                 }`}
                               >
-                                <SubIcon className="mr-3 h-6 w-6 md:h-4 md:w-4" />
+                                <SubIcon className="mr-3 h-4 w-4" />
                                 {subItem.name}
                               </Button>
                             </Link>
@@ -259,13 +292,13 @@ export default function AdminLayout({ children }) {
                 <Link key={item.name} href={item.href}>
                   <Button
                     variant="ghost"
-                    className={`w-full justify-start h-14 md:h-12 text-lg md:text-base font-medium rounded-xl ${
+                    className={`w-full justify-start h-12 text-base font-medium rounded-xl ${
                       pathname === item.href
                         ? "bg-green-100 text-green-700 hover:bg-green-100"
-                        : "hover:bg-gray-100"
+                        : "hover:bg-neutral-100"
                     }`}
                   >
-                    <Icon className="mr-4 h-7 w-7 md:mr-3 md:h-5 md:w-5" />
+                    <Icon className="mr-3 h-5 w-5" />
                     {item.name}
                   </Button>
                 </Link>
@@ -275,42 +308,42 @@ export default function AdminLayout({ children }) {
         </nav>
 
         {/* User Menu */}
-        <div className="p-4 border-t mt-auto bg-gray-50">
+        <div className="p-4 border-t dark:border-neutral-800 mt-auto bg-neutral-50 dark:bg-neutral-900">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className="w-full justify-start h-16 md:h-14 hover:bg-white rounded-xl"
+                className="w-full justify-start h-14 hover:bg-white dark:hover:bg-neutral-800 rounded-xl"
               >
-                <div className="h-10 w-10 md:h-8 md:w-8 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                  <User className="h-6 w-6 md:h-5 md:w-5 text-green-700" />
+                <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mr-3">
+                  <User className="h-5 w-5 text-green-700 dark:text-green-400" />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="text-base md:text-sm font-semibold text-gray-900">
+                  <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
                     {user?.name}
                   </p>
-                  <p className="text-sm md:text-xs text-gray-500 truncate">
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
                     {user?.email}
                   </p>
                 </div>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
+                <ChevronRight className="h-5 w-5 text-neutral-400 dark:text-neutral-500" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64 md:w-56">
-              <DropdownMenuLabel className="text-base md:text-sm">
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="text-sm">
                 My Account
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="h-12 md:h-10 text-base md:text-sm">
-                <User className="mr-3 h-5 w-5 md:h-4 md:w-4" />
+              <DropdownMenuItem className="h-10 text-sm">
+                <User className="mr-3 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleLogout}
-                className="h-12 md:h-10 text-base md:text-sm text-red-600 font-medium"
+                className="h-10 text-sm text-red-600 font-medium"
               >
-                <LogOut className="mr-3 h-5 w-5 md:h-4 md:w-4" />
+                <LogOut className="mr-3 h-4 w-4" />
                 Logout
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -319,9 +352,10 @@ export default function AdminLayout({ children }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto bg-gray-50">
-        <div className="p-5 md:p-6 lg:p-8 max-w-7xl mx-auto">{children}</div>
+      <main className="flex-1 overflow-auto bg-neutral-50 dark:bg-neutral-950">
+        <div className="p-6 lg:p-8 max-w-7xl mx-auto">{children}</div>
       </main>
     </div>
   );
 }
+

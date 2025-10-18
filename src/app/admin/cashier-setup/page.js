@@ -111,11 +111,11 @@ export default function CashierSetupPage() {
   };
 
   return (
-    <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen p-8 bg-neutral-50 dark:bg-neutral-900">
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Cashier Setup</h1>
-          <p className="text-gray-500 mt-2">
+          <p className="text-neutral-500 mt-2">
             Add cashiers to test the offline POS login system
           </p>
         </div>
@@ -171,21 +171,21 @@ export default function CashierSetupPage() {
             <CardTitle>Quick Test Setup</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-neutral-600">
               Add pre-configured test cashiers for quick testing:
             </p>
             <div className="space-y-2 text-sm">
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded">
                 <p className="font-medium">John Doe</p>
-                <p className="text-gray-500">PIN: 1234 | Role: Cashier</p>
+                <p className="text-neutral-500">PIN: 1234 | Role: Cashier</p>
               </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded">
                 <p className="font-medium">Jane Smith</p>
-                <p className="text-gray-500">PIN: 5678 | Role: Cashier</p>
+                <p className="text-neutral-500">PIN: 5678 | Role: Cashier</p>
               </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded">
                 <p className="font-medium">Admin User</p>
-                <p className="text-gray-500">PIN: 0000 | Role: Admin</p>
+                <p className="text-neutral-500">PIN: 0000 | Role: Admin</p>
               </div>
             </div>
             <Button
@@ -238,3 +238,4 @@ export default function CashierSetupPage() {
     </div>
   );
 }
+

@@ -188,7 +188,7 @@ export default function StockManagementPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Stock Management</h1>
-          <p className="text-gray-500 mt-2">
+          <p className="text-neutral-500 mt-2">
             Track inventory levels for stock-tracked items
           </p>
         </div>
@@ -206,7 +206,7 @@ export default function StockManagementPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Items</p>
+                <p className="text-sm text-neutral-500">Total Items</p>
                 <p className="text-2xl font-bold">{totalProducts}</p>
               </div>
               <Package className="h-8 w-8 text-blue-600" />
@@ -218,7 +218,7 @@ export default function StockManagementPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Low Stock</p>
+                <p className="text-sm text-neutral-500">Low Stock</p>
                 <p className="text-2xl font-bold text-orange-600">{lowStock}</p>
               </div>
               <AlertTriangle className="h-8 w-8 text-orange-600" />
@@ -230,7 +230,7 @@ export default function StockManagementPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Out of Stock</p>
+                <p className="text-sm text-neutral-500">Out of Stock</p>
                 <p className="text-2xl font-bold text-red-600">{outOfStock}</p>
               </div>
               <TrendingDown className="h-8 w-8 text-red-600" />
@@ -242,7 +242,7 @@ export default function StockManagementPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Value</p>
+                <p className="text-sm text-neutral-500">Total Value</p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(totalValue)}
                 </p>
@@ -255,7 +255,7 @@ export default function StockManagementPage() {
 
       {/* Last Sync Info */}
       {lastSyncTime && (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-neutral-500">
           <CheckCircle className="h-4 w-4 text-green-600" />
           <span>Last synced: {lastSyncTime.toLocaleString()}</span>
         </div>
@@ -265,7 +265,7 @@ export default function StockManagementPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <Input
               placeholder="Search by name, SKU, or barcode..."
               value={searchQuery}
@@ -279,14 +279,14 @@ export default function StockManagementPage() {
       {/* Products List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-gray-500">Loading products...</p>
+          <p className="text-neutral-500">Loading products...</p>
         </div>
       ) : filteredProducts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No tracked stock items found</p>
-            <p className="text-sm text-gray-400 mt-2">
+            <Package className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
+            <p className="text-neutral-500">No tracked stock items found</p>
+            <p className="text-sm text-neutral-400 mt-2">
               Items with "Track Stock" enabled will appear here
             </p>
           </CardContent>
@@ -347,7 +347,7 @@ export default function StockManagementPage() {
 
                     return (
                       <React.Fragment key={product.id}>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="border-b hover:bg-neutral-50">
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-3">
                               {hasInventoryDetails && (
@@ -358,7 +358,7 @@ export default function StockManagementPage() {
                                       [product.id]: !prev[product.id],
                                     }))
                                   }
-                                  className="p-1 hover:bg-gray-200 rounded"
+                                  className="p-1 hover:bg-neutral-200 rounded"
                                 >
                                   {isExpanded ? (
                                     <ChevronDown className="h-4 w-4" />
@@ -374,19 +374,19 @@ export default function StockManagementPage() {
                                   className="w-10 h-10 object-cover rounded"
                                 />
                               ) : (
-                                <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center">
-                                  <Package className="h-5 w-5 text-gray-400" />
+                                <div className="w-10 h-10 bg-neutral-100 rounded flex items-center justify-center">
+                                  <Package className="h-5 w-5 text-neutral-400" />
                                 </div>
                               )}
                               <div>
                                 <p className="font-medium">{product.name}</p>
                                 {product.handle && (
-                                  <p className="text-xs text-gray-500">
+                                  <p className="text-xs text-neutral-500">
                                     @{product.handle}
                                   </p>
                                 )}
                                 {product.variantId && (
-                                  <p className="text-xs text-gray-400">
+                                  <p className="text-xs text-neutral-400">
                                     Variant: {product.variantId.slice(0, 8)}...
                                   </p>
                                 )}
@@ -405,7 +405,7 @@ export default function StockManagementPage() {
                                 ? "text-red-600"
                                 : stock <= 10
                                 ? "text-orange-600"
-                                : "text-gray-900"
+                                : "text-neutral-900"
                             }`}
                           >
                             {stock}
@@ -425,11 +425,11 @@ export default function StockManagementPage() {
 
                         {/* Expanded Row - Store Details */}
                         {isExpanded && hasInventoryDetails && (
-                          <tr className="bg-gray-50">
+                          <tr className="bg-neutral-50">
                             <td colSpan="7" className="py-4 px-8">
                               <div className="space-y-2">
                                 <div className="flex items-center gap-2 mb-3">
-                                  <Store className="h-4 w-4 text-gray-600" />
+                                  <Store className="h-4 w-4 text-neutral-600" />
                                   <h4 className="font-semibold text-sm">
                                     Store Inventory Levels
                                   </h4>
@@ -438,10 +438,10 @@ export default function StockManagementPage() {
                                   {product.inventoryLevels.map((level, idx) => (
                                     <div
                                       key={idx}
-                                      className="bg-white p-3 rounded-lg border"
+                                      className="bg-white dark:bg-neutral-800 p-3 rounded-lg border dark:border-neutral-700"
                                     >
                                       <div className="flex items-center justify-between mb-2">
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-neutral-500 dark:text-neutral-400">
                                           Store ID
                                         </span>
                                         <Badge
@@ -468,7 +468,7 @@ export default function StockManagementPage() {
                                         </span>
                                       </div>
                                       {level.updated_at && (
-                                        <div className="mt-2 pt-2 border-t text-xs text-gray-500">
+                                        <div className="mt-2 pt-2 border-t text-xs text-neutral-500">
                                           Updated:{" "}
                                           {new Date(
                                             level.updated_at
@@ -494,3 +494,4 @@ export default function StockManagementPage() {
     </div>
   );
 }
+

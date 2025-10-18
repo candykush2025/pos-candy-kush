@@ -169,7 +169,7 @@ function ItemListTab() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Products</h1>
-          <p className="text-gray-500 mt-2">Manage your product inventory</p>
+          <p className="text-neutral-500 mt-2">Manage your product inventory</p>
         </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
@@ -299,7 +299,7 @@ function ItemListTab() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <Input
               placeholder="Search products by name, barcode, or SKU..."
               value={searchQuery}
@@ -313,13 +313,13 @@ function ItemListTab() {
       {/* Products List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-gray-500">Loading products...</p>
+          <p className="text-neutral-500">Loading products...</p>
         </div>
       ) : filteredProducts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No products found</p>
+            <Package className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
+            <p className="text-neutral-500">No products found</p>
             <Button className="mt-4" onClick={() => setIsModalOpen(true)}>
               Add your first product
             </Button>
@@ -344,7 +344,7 @@ function ItemListTab() {
                         <Badge variant="secondary">{product.category}</Badge>
                       )}
                     </div>
-                    <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                    <div className="flex items-center space-x-4 mt-2 text-sm text-neutral-500">
                       {product.sku && <span>SKU: {product.sku}</span>}
                       {product.barcode && (
                         <span>Barcode: {product.barcode}</span>
@@ -524,7 +524,7 @@ function CategoriesTab() {
       <div className="flex items-center justify-between">
         <div className="flex-1 max-w-md">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <Input
               placeholder="Search categories..."
               value={searchQuery}
@@ -542,13 +542,13 @@ function CategoriesTab() {
       {/* Categories Grid */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500">Loading categories...</p>
+          <p className="text-neutral-500">Loading categories...</p>
         </div>
       ) : filteredCategories.length === 0 ? (
         <Card className="py-12">
           <CardContent className="text-center">
-            <FolderTree className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">
+            <FolderTree className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
+            <p className="text-neutral-500">
               {searchQuery ? "No categories found" : "No categories yet"}
             </p>
             {!searchQuery && (
@@ -592,7 +592,7 @@ function CategoriesTab() {
                   </div>
                 </div>
                 <h3 className="font-semibold text-lg mb-2">{category.name}</h3>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center gap-2 text-sm text-neutral-500">
                   {category.source && (
                     <Badge variant="secondary" className="text-xs">
                       {category.source}
@@ -643,7 +643,7 @@ function CategoriesTab() {
                     type="button"
                     className={`h-10 w-10 rounded-lg border-2 transition-all ${
                       formData.color === color
-                        ? "border-gray-900 dark:border-white scale-110"
+                        ? "border-neutral-900 dark:border-white scale-110"
                         : "border-transparent"
                     }`}
                     style={{ backgroundColor: color }}
@@ -689,7 +689,7 @@ export default function AdminProducts() {
     <div>
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Products & Categories</h1>
-        <p className="text-gray-500 mt-2">
+        <p className="text-neutral-500 mt-2">
           Manage your inventory and product categories
         </p>
       </div>
@@ -717,3 +717,4 @@ export default function AdminProducts() {
     </div>
   );
 }
+
