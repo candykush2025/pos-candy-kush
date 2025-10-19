@@ -530,19 +530,105 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-neutral-500">Loading sales data...</p>
+      <div className="space-y-4 md:space-y-6 pb-20 md:pb-8 animate-pulse">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <div className="h-8 bg-neutral-200 dark:bg-neutral-800 rounded w-64"></div>
+            <div className="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-48"></div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="h-10 bg-neutral-200 dark:bg-neutral-800 rounded w-full sm:w-40"></div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <div className="h-10 bg-neutral-200 dark:bg-neutral-800 rounded flex-1 sm:w-32"></div>
+              <div className="h-10 bg-neutral-200 dark:bg-neutral-800 rounded flex-1 sm:w-24"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Cards Skeleton - 2x2 on mobile, 4 on desktop */}
+        <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-24"></div>
+                  <div className="h-3 bg-neutral-200 dark:bg-neutral-800 rounded w-16"></div>
+                </div>
+                <div className="w-10 h-10 bg-neutral-200 dark:bg-neutral-800 rounded-lg"></div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="h-8 bg-neutral-200 dark:bg-neutral-800 rounded w-32"></div>
+                <div className="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-28"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Charts Skeleton - Stacked on mobile */}
+        <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
+          {[1, 2].map((i) => (
+            <Card key={i}>
+              <CardHeader className="space-y-2">
+                <div className="h-6 bg-neutral-200 dark:bg-neutral-800 rounded w-48"></div>
+                <div className="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-36"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64 md:h-80 bg-neutral-100 dark:bg-neutral-900 rounded-lg flex items-end justify-around p-4 gap-2">
+                  {[40, 60, 45, 70, 55, 80, 65].map((height, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-neutral-200 dark:bg-neutral-800 rounded-t w-full animate-pulse"
+                      style={{
+                        height: `${height}%`,
+                        animationDelay: `${idx * 0.1}s`,
+                      }}
+                    ></div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Bottom Row Skeleton - 3 sections */}
+        <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader className="space-y-2">
+                <div className="h-6 bg-neutral-200 dark:bg-neutral-800 rounded w-40"></div>
+                <div className="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-32"></div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[1, 2, 3, 4, 5].map((j) => (
+                  <div key={j} className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-neutral-200 dark:bg-neutral-800 rounded"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-full"></div>
+                      <div className="h-3 bg-neutral-200 dark:bg-neutral-800 rounded w-3/4"></div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Loading indicator at bottom */}
+        <div className="flex items-center justify-center py-4">
+          <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600"></div>
+            <span className="text-sm font-medium">Loading sales data...</span>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 md:space-y-6 pb-20 md:pb-8">
+    <div className="space-y-4 md:space-y-6 pb-20 md:pb-8 animate-in fade-in duration-500">
       {/* Header with Month Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-in slide-in-from-top duration-300">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Sales Dashboard</h1>
           <p className="text-sm md:text-base text-neutral-500 dark:text-neutral-400 mt-1">
@@ -610,13 +696,17 @@ export default function AdminDashboard() {
       </div>
 
       {/* Key Stats Grid - Mobile Friendly (2x2 on mobile, 4 columns on desktop) */}
-      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4 animate-in slide-in-from-bottom duration-500">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           const isPositive = stat.change ? stat.change > 0 : null;
 
           return (
-            <Card key={index} className="hover:shadow-lg transition-shadow">
+            <Card 
+              key={index} 
+              className="hover:shadow-lg transition-all hover:scale-105 duration-300"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <div className="flex-1">
                   <CardTitle className="text-xs md:text-sm font-medium text-neutral-600 dark:text-neutral-300">
@@ -664,9 +754,9 @@ export default function AdminDashboard() {
       </div>
 
       {/* Charts Row - Mobile Stacked */}
-      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
+      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2 animate-in slide-in-from-left duration-700">
         {/* Daily Sales Chart */}
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow duration-300">
           <CardHeader>
             <CardTitle className="text-base md:text-lg">
               Daily Sales - {months[selectedMonth]} {selectedYear}
@@ -698,7 +788,7 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Monthly Revenue Trend */}
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow duration-300">
           <CardHeader>
             <CardTitle className="text-base md:text-lg">
               Monthly Revenue - {selectedYear}
@@ -734,9 +824,9 @@ export default function AdminDashboard() {
       </div>
 
       {/* Top Products & Payment Methods - Mobile Stacked */}
-      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
+      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2 animate-in slide-in-from-right duration-700">
         {/* Top Products */}
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow duration-300">
           <CardHeader>
             <CardTitle className="text-base md:text-lg">
               Top Selling Products
@@ -755,7 +845,7 @@ export default function AdminDashboard() {
                 {topProducts.map((product, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between pb-3 border-b last:border-0"
+                    className="flex items-center justify-between pb-3 border-b last:border-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 -mx-4 px-4 rounded-lg transition-all duration-200 cursor-pointer hover:scale-102"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm md:text-base truncate">
@@ -778,7 +868,7 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Payment Methods Distribution */}
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow duration-300">
           <CardHeader>
             <CardTitle className="text-base md:text-lg">
               Payment Methods
@@ -851,7 +941,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Latest Transactions - Mobile Friendly */}
-      <Card>
+      <Card className="hover:shadow-lg transition-shadow duration-300 animate-in slide-in-from-bottom animation-duration-700">
         <CardHeader>
           <CardTitle className="text-base md:text-lg flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
@@ -876,7 +966,7 @@ export default function AdminDashboard() {
                 return (
                   <div
                     key={transaction.id}
-                    className="flex items-center justify-between border-b pb-3 last:border-0 gap-4"
+                    className="flex items-center justify-between border-b pb-3 last:border-0 gap-4 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 -mx-4 px-4 rounded-lg transition-all duration-200 cursor-pointer"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm md:text-base">
