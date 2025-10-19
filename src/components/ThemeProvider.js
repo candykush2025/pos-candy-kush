@@ -13,12 +13,12 @@ export function ThemeProvider({ children }) {
   // Initial mount - apply theme from localStorage (automatically loaded by Zustand persist)
   useEffect(() => {
     setMounted(true);
-    
+
     // Small delay to ensure localStorage is loaded by Zustand persist
     const timer = setTimeout(() => {
       applyTheme();
     }, 0);
-    
+
     return () => clearTimeout(timer);
   }, [applyTheme]);
 

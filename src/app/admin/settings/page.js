@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useThemeStore } from "@/store/useThemeStore";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Database,
   Wifi,
@@ -24,9 +25,17 @@ import {
   Moon,
   Sun,
   Monitor,
+  Package,
+  ShoppingCart,
+  Users,
+  UserCog,
+  BarChart3,
+  Plug,
+  ChevronRight,
 } from "lucide-react";
 
 export default function AdminSettings() {
+  const router = useRouter();
   const {
     primaryColor,
     secondaryColor,
@@ -40,6 +49,58 @@ export default function AdminSettings() {
 
   const [isSaving, setIsSaving] = useState(false);
 
+  // Quick links for mobile only
+  const quickLinks = [
+    {
+      title: "Stock",
+      description: "Manage inventory levels",
+      icon: Package,
+      href: "/admin/stock",
+      color: "text-blue-600 dark:text-blue-400",
+      bgColor: "bg-blue-50 dark:bg-blue-900/20",
+    },
+    {
+      title: "Orders",
+      description: "View order history",
+      icon: ShoppingCart,
+      href: "/admin/orders",
+      color: "text-purple-600 dark:text-purple-400",
+      bgColor: "bg-purple-50 dark:bg-purple-900/20",
+    },
+    {
+      title: "Customers",
+      description: "Customer management",
+      icon: Users,
+      href: "/admin/customers",
+      color: "text-green-600 dark:text-green-400",
+      bgColor: "bg-green-50 dark:bg-green-900/20",
+    },
+    {
+      title: "Users",
+      description: "Manage staff accounts",
+      icon: UserCog,
+      href: "/admin/users",
+      color: "text-amber-600 dark:text-amber-400",
+      bgColor: "bg-amber-50 dark:bg-amber-900/20",
+    },
+    {
+      title: "Analytics",
+      description: "Sales insights",
+      icon: BarChart3,
+      href: "/admin/analytics",
+      color: "text-pink-600 dark:text-pink-400",
+      bgColor: "bg-pink-50 dark:bg-pink-900/20",
+    },
+    {
+      title: "Integration",
+      description: "Loyverse sync",
+      icon: Plug,
+      href: "/admin/integration",
+      color: "text-cyan-600 dark:text-cyan-400",
+      bgColor: "bg-cyan-50 dark:bg-cyan-900/20",
+    },
+  ];
+
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
@@ -49,6 +110,42 @@ export default function AdminSettings() {
           System configuration and information
         </p>
       </div>
+
+      {/* Quick Links - Mobile Only */}
+      <Card className="lg:hidden">
+        <CardHeader>
+          <CardTitle className="flex items-center text-lg">
+            <SettingsIcon className="mr-2 h-5 w-5" />
+            Quick Access
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Navigate to other admin pages
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3">
+          {quickLinks.map((link) => {
+            const Icon = link.icon;
+            return (
+              <button
+                key={link.href}
+                onClick={() => router.push(link.href)}
+                className="flex flex-col items-start p-4 rounded-lg border-2 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all hover:shadow-md active:scale-95"
+              >
+                <div
+                  className={`w-10 h-10 rounded-lg ${link.bgColor} flex items-center justify-center mb-3`}
+                >
+                  <Icon className={`h-5 w-5 ${link.color}`} />
+                </div>
+                <span className="text-sm font-semibold mb-1">{link.title}</span>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400 text-left">
+                  {link.description}
+                </span>
+                <ChevronRight className="h-4 w-4 text-neutral-400 ml-auto mt-1" />
+              </button>
+            );
+          })}
+        </CardContent>
+      </Card>
 
       {/* Dark Mode Toggle */}
       <Card>
@@ -468,4 +565,3 @@ export default function AdminSettings() {
     </div>
   );
 }
-

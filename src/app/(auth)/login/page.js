@@ -101,11 +101,13 @@ export default function LoginPage() {
   // Show loading while checking authentication
   if (isCheckingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100 p-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-green-100 to-emerald-50 dark:from-neutral-950 dark:via-neutral-900 dark:to-green-950/20 p-4">
+        <Card className="w-full max-w-md shadow-2xl border-2 dark:border-neutral-800">
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="h-12 w-12 animate-spin text-green-600 mb-4" />
-            <p className="text-gray-600">Checking authentication...</p>
+            <Loader2 className="h-12 w-12 animate-spin text-green-600 dark:text-green-500 mb-4" />
+            <p className="text-neutral-600 dark:text-neutral-400">
+              Checking authentication...
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -113,20 +115,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-3xl font-bold text-green-700">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-green-100 to-emerald-50 dark:from-neutral-950 dark:via-neutral-900 dark:to-green-950/20 p-4">
+      <Card className="w-full max-w-md shadow-2xl border-2 dark:border-neutral-800">
+        <CardHeader className="space-y-1 text-center pb-8">
+          <div className="mx-auto w-16 h-16 bg-green-600 dark:bg-green-700 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
+            <span className="text-3xl font-bold text-white">CK</span>
+          </div>
+          <CardTitle className="text-3xl font-bold text-green-700 dark:text-green-500">
             Candy Kush POS
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-neutral-600 dark:text-neutral-400">
             Enter your credentials to access the system
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
+              <label
+                htmlFor="email"
+                className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
+              >
                 Email
               </label>
               <Input
@@ -142,7 +150,10 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
+              <label
+                htmlFor="password"
+                className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
+              >
                 Password
               </label>
               <Input
@@ -158,7 +169,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full h-12 text-lg"
+              className="w-full h-12 text-lg bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white shadow-lg"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -172,9 +183,9 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-gray-600">
+          <div className="mt-6 pt-6 border-t dark:border-neutral-700 text-center text-sm text-neutral-600 dark:text-neutral-400">
             <p>Use your Firebase email and password</p>
-            <p className="mt-2 text-xs">
+            <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-500">
               Note: Create users in Firebase Authentication
             </p>
           </div>
