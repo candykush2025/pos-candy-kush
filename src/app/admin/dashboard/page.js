@@ -13,6 +13,7 @@ import {
   receiptsService,
   productsService,
   customersService,
+  categoriesService,
 } from "@/lib/firebase/firestore";
 import {
   DollarSign,
@@ -25,6 +26,8 @@ import {
   CreditCard,
   ArrowUpRight,
   ArrowDownRight,
+  Filter,
+  Tag,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import {
@@ -65,23 +68,86 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("all");
 
   useEffect(() => {
-    loadDashboardData();
-  }, [selectedMonth, selectedYear]);
+    loadCategories();
+  }, []);
+
+  useEffect(() => {
+    if (categories.length > 0) {
+      loadDashboardData();
+    }
+  }, [selectedMonth, selectedYear, selectedCategory, categories]);
+
+  const loadCategories = async () => {
+    try {
+      const data = await categoriesService.getAll();
+      setCategories(data);
+    } catch (error) {
+      console.error("Error loading categories:", error);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
 
       // Get receipts (transactions) from Loyverse
-      const receipts = await receiptsService.getAll({
+      let receipts = await receiptsService.getAll({
         orderBy: ["createdAt", "desc"],
       });
 
-      // Get products and customers
+      // Get products and customers first (needed for category filtering)
       const products = await productsService.getAll();
       const customers = await customersService.getAll();
+
+      // Debug: Check receipt structure before filtering
+      if (receipts.length > 0 && receipts[0].lineItems) {
+        console.log("🔍 Sample receipt lineItem:", receipts[0].lineItems[0]);
+        console.log(
+          "🔍 Available fields:",
+          Object.keys(receipts[0].lineItems[0])
+        );
+      }
+
+      // Filter by category if selected
+      if (selectedCategory !== "all") {
+        console.log("🔍 Filtering by category:", selectedCategory);
+        console.log("🔍 Total products:", products.length);
+        const originalCount = receipts.length;
+
+        // Create a map of item_id -> categoryId for quick lookup
+        const itemCategoryMap = {};
+        products.forEach((product) => {
+          if (product.id && product.categoryId) {
+            itemCategoryMap[product.id] = product.categoryId;
+          }
+        });
+
+        console.log(
+          "🔍 Item category map size:",
+          Object.keys(itemCategoryMap).length
+        );
+
+        receipts = receipts.filter((receipt) => {
+          if (receipt.lineItems && Array.isArray(receipt.lineItems)) {
+            const hasCategory = receipt.lineItems.some((item) => {
+              // Get category from product using item_id
+              const itemCategory = itemCategoryMap[item.item_id];
+              const matches = itemCategory === selectedCategory;
+              return matches;
+            });
+            return hasCategory;
+          }
+          return false;
+        });
+
+        console.log(
+          `🔍 Filtered from ${originalCount} to ${receipts.length} receipts`
+        );
+      }
 
       // Date calculations
       const now = new Date();
@@ -481,31 +547,65 @@ export default function AdminDashboard() {
           <h1 className="text-2xl md:text-3xl font-bold">Sales Dashboard</h1>
           <p className="text-sm md:text-base text-neutral-500 dark:text-neutral-400 mt-1">
             Candy Kush POS - Sales Analytics
+            {selectedCategory !== "all" && (
+              <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+                <Tag className="h-3 w-3 mr-1" />
+                {categories.find((c) => c.id === selectedCategory)?.name}
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="px-3 py-2 border rounded-lg text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-          >
-            {months.map((month, index) => (
-              <option key={index} value={index}>
-                {month}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="px-3 py-2 border rounded-lg text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-          >
-            {[2024, 2025, 2026].map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          {/* Category Filter - Full width on mobile */}
+          <div className="relative w-full sm:w-auto">
+            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400 pointer-events-none" />
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full sm:w-auto pl-10 pr-3 py-2 border rounded-lg text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white appearance-none cursor-pointer sm:min-w-[180px]"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Month & Year Row - 50/50 on mobile, inline on desktop */}
+          <div className="flex gap-2 w-full sm:w-auto">
+            {/* Month Selector */}
+            <div className="relative flex-1 sm:flex-initial">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400 pointer-events-none" />
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="w-full pl-10 pr-3 py-2 border rounded-lg text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white appearance-none cursor-pointer"
+              >
+                {months.map((month, index) => (
+                  <option key={index} value={index}>
+                    {month}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Year Selector */}
+            <div className="flex-1 sm:flex-initial">
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="w-full px-3 py-2 border rounded-lg text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white appearance-none cursor-pointer"
+              >
+                {[2024, 2025, 2026].map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -820,5 +920,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
-

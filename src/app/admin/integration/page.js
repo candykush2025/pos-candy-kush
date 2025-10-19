@@ -280,7 +280,27 @@ export default function IntegrationPage() {
         const existing = await getDocument(collectionName, docId);
 
         if (needsUpdate(existing, doc)) {
-          await setDocument(collectionName, docId, doc);
+          // For products collection: preserve manually synced stock data
+          let docToSave = { ...doc };
+          if (collectionName === COLLECTIONS.PRODUCTS && existing) {
+            // Preserve stock fields if they exist and were manually synced
+            if (
+              existing.lastInventorySync &&
+              (existing.stock > 0 ||
+                existing.inStock > 0 ||
+                existing.inventoryLevels)
+            ) {
+              console.log(
+                `📦 Preserving stock data for product: ${doc.name || doc.id}`
+              );
+              docToSave.stock = existing.stock;
+              docToSave.inStock = existing.inStock;
+              docToSave.inventoryLevels = existing.inventoryLevels;
+              docToSave.lastInventorySync = existing.lastInventorySync;
+            }
+          }
+
+          await setDocument(collectionName, docId, docToSave);
           if (existing) {
             updatedCount++;
           } else {
