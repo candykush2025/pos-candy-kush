@@ -656,7 +656,7 @@ export default function IntegrationPage() {
   };
 
   // Sync Receipts (Orders)
-  const handleSyncReceipts = async () => {
+  const handleSyncReceipts = async (quickSync = false) => {
     setSyncing({ ...syncing, receipts: true });
     setSyncProgress({
       ...syncProgress,
@@ -664,21 +664,54 @@ export default function IntegrationPage() {
     });
 
     try {
-      // Fetch receipts with progress tracking
-      console.log("🔄 Starting receipt sync with progress tracking...");
+      // Determine sync mode
+      let created_at_min = null;
+
+      if (quickSync) {
+        // Quick sync: Only fetch receipts since last sync
+        const lastSync = await getDocument(
+          COLLECTIONS.SYNC_HISTORY,
+          "latest_receipt_sync"
+        );
+
+        if (lastSync && lastSync.timestamp) {
+          created_at_min = lastSync.timestamp;
+          console.log(
+            `⚡ Quick sync: Fetching receipts created after ${created_at_min}`
+          );
+          toast.info("Quick syncing latest receipts only...", {
+            id: "receipt-fetch",
+          });
+        } else {
+          console.log("ℹ️ No previous sync found, doing full sync");
+          toast.info("No previous sync found. Doing full sync...", {
+            id: "receipt-fetch",
+          });
+          quickSync = false; // Force full sync if no history
+        }
+      } else {
+        console.log("🔄 Starting full receipt sync with progress tracking...");
+        toast.info("Fetching all receipts from Loyverse...", {
+          id: "receipt-fetch",
+        });
+      }
 
       const allReceipts = [];
       let cursor = null;
       let hasMore = true;
 
-      // Estimate total (we'll update as we go)
-      toast.info("Fetching receipts from Loyverse...", { id: "receipt-fetch" });
-
       while (hasMore) {
-        const response = await loyverseService.getReceipts({
+        const requestParams = {
           limit: 250,
           cursor: cursor,
-        });
+        };
+
+        // Add created_at_min for quick sync
+        if (created_at_min) {
+          requestParams.created_at_min = created_at_min;
+        }
+
+        const response = await loyverseService.getReceipts(requestParams);
 
         const receipts = response.receipts || [];
         allReceipts.push(...receipts);
@@ -824,13 +857,16 @@ export default function IntegrationPage() {
         `✅ Sync complete: ${newCount} new, ${updatedCount} updated, ${skippedCount} skipped`
       );
 
+      const syncTimestamp = new Date().toISOString();
+
       const result = {
         success: true,
         count: receipts.length,
         newCount,
         updatedCount,
         skippedCount,
-        timestamp: new Date().toISOString(),
+        timestamp: syncTimestamp,
+        syncType: quickSync ? "quick" : "full",
       };
 
       setSyncResults({
@@ -847,14 +883,27 @@ export default function IntegrationPage() {
         false
       );
 
+      // Save latest receipt sync timestamp for quick sync
+      await setDocument(COLLECTIONS.SYNC_HISTORY, "latest_receipt_sync", {
+        timestamp: syncTimestamp,
+        count: receipts.length,
+        newCount,
+        updatedCount,
+        skippedCount,
+        syncType: quickSync ? "quick" : "full",
+      });
+
+      console.log(`💾 Saved latest receipt sync timestamp: ${syncTimestamp}`);
+
       // Reset progress
       setSyncProgress({
         ...syncProgress,
         receipts: { current: 0, total: 0, percentage: 0 },
       });
 
+      const syncTypeLabel = quickSync ? "⚡ Quick sync" : "✅ Full sync";
       toast.success(
-        `✅ Synced receipts: ${newCount} new, ${updatedCount} updated, ${skippedCount} unchanged`
+        `${syncTypeLabel} complete: ${newCount} new, ${updatedCount} updated, ${skippedCount} unchanged`
       );
       setDebugData({ receipts: allReceipts });
       setShowDebugData(true);
@@ -1585,24 +1634,44 @@ export default function IntegrationPage() {
                 </div>
               )}
 
-            <Button
-              onClick={handleSyncReceipts}
-              disabled={syncing.receipts}
-              className="w-full h-12 md:h-10 text-base"
-              variant="outline"
-            >
-              {syncing.receipts ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
-                  Syncing...
-                </>
-              ) : (
-                <>
-                  <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
-                  Sync Receipts
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => handleSyncReceipts(true)}
+                disabled={syncing.receipts}
+                className="flex-1 h-12 md:h-10 text-base"
+                variant="default"
+              >
+                {syncing.receipts ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
+                    Quick Sync
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={() => handleSyncReceipts(false)}
+                disabled={syncing.receipts}
+                className="flex-1 h-12 md:h-10 text-base"
+                variant="outline"
+              >
+                {syncing.receipts ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
+                    Full Sync
+                  </>
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -14,7 +14,12 @@ import {
   productsService,
   customersService,
   categoriesService,
+  getDocument,
+  setDocument,
+  COLLECTIONS,
 } from "@/lib/firebase/firestore";
+import { loyverseService } from "@/lib/api/loyverse";
+import { toast } from "sonner";
 import {
   DollarSign,
   ShoppingCart,
@@ -70,6 +75,307 @@ export default function AdminDashboard() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(30);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Auto-sync check on dashboard mount
+  useEffect(() => {
+    checkAndAutoSync();
+  }, []);
+
+  const checkAndAutoSync = async () => {
+    try {
+      // Load sync settings
+      const settings = await getDocument(COLLECTIONS.SETTINGS, "sync_settings");
+      const autoSyncEnabledSetting = settings?.autoSyncEnabled ?? true;
+      const intervalMinutes = settings?.syncIntervalMinutes ?? 30;
+
+      setAutoSyncEnabled(autoSyncEnabledSetting);
+      setSyncIntervalMinutes(intervalMinutes);
+
+      if (!autoSyncEnabledSetting) {
+        console.log("⏭️ Auto-sync is disabled");
+        return;
+      }
+
+      // Check last sync time
+      const history = await getDocument(
+        COLLECTIONS.SYNC_HISTORY,
+        "latest_sync"
+      );
+
+      if (!history || !history.timestamp) {
+        console.log("ℹ️ No sync history found, running first sync...");
+        toast.info("Running initial data sync from Loyverse...");
+        await performAutoSync();
+        return;
+      }
+
+      const lastSyncTime = new Date(history.timestamp);
+      const now = new Date();
+      const minutesSinceSync = (now - lastSyncTime) / (1000 * 60);
+
+      console.log(
+        `⏱️ Dashboard: Time since last sync: ${minutesSinceSync.toFixed(
+          1
+        )} minutes (interval: ${intervalMinutes} minutes)`
+      );
+
+      if (minutesSinceSync >= intervalMinutes) {
+        console.log(
+          `🔄 Dashboard: Auto-sync triggered - ${minutesSinceSync.toFixed(
+            1
+          )} minutes since last sync`
+        );
+        toast.info("Auto-syncing data from Loyverse...", { duration: 2000 });
+        await performAutoSync();
+      }
+    } catch (error) {
+      console.error("Error checking auto-sync:", error);
+    }
+  };
+
+  const performAutoSync = async () => {
+    if (isSyncing) {
+      console.log("⏭️ Sync already in progress");
+      return;
+    }
+
+    try {
+      setIsSyncing(true);
+
+      // Sync categories first (needed for products)
+      console.log("🔄 Syncing categories...");
+      const categoriesResponse = await loyverseService.getAllCategories({
+        show_deleted: false,
+      });
+
+      const categoriesData = categoriesResponse.categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        color: cat.color || "#808080",
+        createdAt: cat.created_at,
+        updatedAt: cat.updated_at,
+        deletedAt: cat.deleted_at,
+        source: "loyverse",
+      }));
+
+      // Save categories
+      for (const cat of categoriesData) {
+        await setDocument(COLLECTIONS.CATEGORIES, cat.id, cat);
+      }
+
+      console.log(`✅ Synced ${categoriesData.length} categories`);
+
+      // Sync products/items
+      console.log("🔄 Syncing products...");
+      const itemsResponse = await loyverseService.getAllItems({
+        show_deleted: false,
+      });
+
+      const items = itemsResponse.items.map((item) => {
+        const primaryVariant = item.variants?.[0] || {};
+        return {
+          id: item.id,
+          handle: item.handle || "",
+          name: item.item_name || "",
+          description: item.description || "",
+          referenceId: item.reference_id || "",
+          categoryId: item.category_id || null,
+          trackStock: item.track_stock || false,
+          soldByWeight: item.sold_by_weight || false,
+          isComposite: item.is_composite || false,
+          useProduction: item.use_production || false,
+          form: item.form || null,
+          color: item.color || null,
+          imageUrl: item.image_url || null,
+          option1Name: item.option1_name || null,
+          option2Name: item.option2_name || null,
+          option3Name: item.option3_name || null,
+          variantId: primaryVariant.variant_id || null,
+          sku: primaryVariant.sku || "",
+          barcode: primaryVariant.barcode || "",
+          price: parseFloat(primaryVariant.default_price || 0),
+          cost: parseFloat(primaryVariant.cost || 0),
+          purchaseCost: parseFloat(primaryVariant.purchase_cost || 0),
+          pricingType: primaryVariant.default_pricing_type || "FIXED",
+          stock: primaryVariant.stores?.[0]?.stock_quantity || 0,
+          availableForSale:
+            primaryVariant.stores?.[0]?.available_for_sale !== false,
+          variants: item.variants || [],
+          primarySupplierId: item.primary_supplier_id || null,
+          taxIds: item.tax_ids || [],
+          modifiersIds: item.modifiers_ids || [],
+          components: item.components || [],
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          deletedAt: item.deleted_at || null,
+          source: "loyverse",
+        };
+      });
+
+      // Save products (preserve stock data if exists)
+      let productsUpdated = 0;
+      for (const item of items) {
+        const existing = await getDocument(COLLECTIONS.PRODUCTS, item.id);
+        let itemToSave = { ...item };
+
+        // Preserve manually synced stock data
+        if (
+          existing &&
+          existing.lastInventorySync &&
+          (existing.stock > 0 ||
+            existing.inStock > 0 ||
+            existing.inventoryLevels)
+        ) {
+          itemToSave.stock = existing.stock;
+          itemToSave.inStock = existing.inStock;
+          itemToSave.inventoryLevels = existing.inventoryLevels;
+          itemToSave.lastInventorySync = existing.lastInventorySync;
+        }
+
+        await setDocument(COLLECTIONS.PRODUCTS, item.id, itemToSave);
+        productsUpdated++;
+      }
+
+      console.log(`✅ Synced ${productsUpdated} products`);
+
+      // Quick sync receipts (only fetch new receipts since last sync)
+      console.log("🔄 Quick syncing receipts...");
+      let receiptsCount = 0;
+
+      try {
+        // Get last receipt sync timestamp
+        const lastReceiptSync = await getDocument(
+          COLLECTIONS.SYNC_HISTORY,
+          "latest_receipt_sync"
+        );
+
+        let created_at_min = null;
+        if (lastReceiptSync && lastReceiptSync.timestamp) {
+          created_at_min = lastReceiptSync.timestamp;
+          console.log(
+            `⚡ Quick sync: Fetching receipts created after ${created_at_min}`
+          );
+        } else {
+          console.log(
+            "ℹ️ No previous receipt sync found, fetching recent receipts"
+          );
+        }
+
+        const allReceipts = [];
+        let cursor = null;
+        let hasMore = true;
+
+        while (hasMore) {
+          const requestParams = {
+            limit: 250,
+            cursor: cursor,
+          };
+
+          // Add created_at_min for quick sync
+          if (created_at_min) {
+            requestParams.created_at_min = created_at_min;
+          }
+
+          const response = await loyverseService.getReceipts(requestParams);
+          const receipts = response.receipts || [];
+          allReceipts.push(...receipts);
+
+          cursor = response.cursor;
+          hasMore = !!cursor;
+        }
+
+        console.log(`📥 Fetched ${allReceipts.length} receipts`);
+
+        // Save receipts to Firestore
+        const syncTimestamp = new Date().toISOString();
+        let newCount = 0;
+        let updatedCount = 0;
+
+        for (const receipt of allReceipts) {
+          const existing = await getDocument(
+            COLLECTIONS.RECEIPTS,
+            receipt.receipt_number
+          );
+
+          const receiptData = {
+            id: receipt.receipt_number,
+            receiptNumber: receipt.receipt_number,
+            receiptType: receipt.receipt_type || "SALE",
+            refundFor: receipt.refund_for || null,
+            order: receipt.order || null,
+            receiptDate: receipt.receipt_date,
+            createdAt: receipt.created_at,
+            updatedAt: receipt.updated_at,
+            totalMoney: parseFloat(receipt.total_money || 0),
+            totalTax: parseFloat(receipt.total_tax || 0),
+            pointsEarned: receipt.points_earned || 0,
+            pointsDeducted: receipt.points_deducted || 0,
+            note: receipt.note || "",
+            lineItems: receipt.line_items || [],
+            payments: receipt.payments || [],
+            customerId: receipt.customer_id || null,
+            employeeId: receipt.employee_id || null,
+            storeId: receipt.store_id || null,
+            source: "loyverse",
+            syncedAt: syncTimestamp,
+          };
+
+          await setDocument(
+            COLLECTIONS.RECEIPTS,
+            receipt.receipt_number,
+            receiptData
+          );
+
+          if (existing) {
+            updatedCount++;
+          } else {
+            newCount++;
+          }
+        }
+
+        receiptsCount = allReceipts.length;
+        console.log(
+          `✅ Quick synced ${receiptsCount} receipts (${newCount} new, ${updatedCount} updated)`
+        );
+
+        // Save latest receipt sync timestamp
+        await setDocument(COLLECTIONS.SYNC_HISTORY, "latest_receipt_sync", {
+          timestamp: syncTimestamp,
+          count: allReceipts.length,
+          newCount,
+          updatedCount,
+          syncType: "quick",
+          source: "dashboard_auto",
+        });
+      } catch (receiptError) {
+        console.error("❌ Receipt quick sync failed:", receiptError);
+        // Don't fail entire auto-sync if receipts fail
+      }
+
+      // Update last sync timestamp
+      await setDocument(COLLECTIONS.SYNC_HISTORY, "latest_sync", {
+        timestamp: new Date().toISOString(),
+        type: "auto",
+        source: "dashboard",
+        categoriesCount: categoriesData.length,
+        productsCount: productsUpdated,
+        receiptsCount,
+      });
+
+      toast.success("Auto-sync completed successfully", { duration: 3000 });
+
+      // Reload categories and dashboard data after sync
+      await loadCategories();
+    } catch (error) {
+      console.error("❌ Auto-sync failed:", error);
+      toast.error("Auto-sync failed: " + error.message, { duration: 5000 });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     loadCategories();
@@ -639,6 +945,31 @@ export default function AdminDashboard() {
                 {categories.find((c) => c.id === selectedCategory)?.name}
               </span>
             )}
+            {isSyncing && (
+              <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 animate-pulse">
+                <svg
+                  className="animate-spin h-3 w-3 mr-1"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Syncing...
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -702,8 +1033,8 @@ export default function AdminDashboard() {
           const isPositive = stat.change ? stat.change > 0 : null;
 
           return (
-            <Card 
-              key={index} 
+            <Card
+              key={index}
               className="hover:shadow-lg transition-all hover:scale-105 duration-300"
               style={{ animationDelay: `${index * 100}ms` }}
             >
