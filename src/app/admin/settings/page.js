@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useThemeStore } from "@/store/useThemeStore";
+import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "sonner";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -32,10 +33,12 @@ import {
   BarChart3,
   Plug,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 
 export default function AdminSettings() {
   const router = useRouter();
+  const { logout } = useAuthStore();
   const {
     primaryColor,
     secondaryColor,
@@ -48,6 +51,12 @@ export default function AdminSettings() {
   } = useThemeStore();
 
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    toast.success("Logged out successfully");
+    router.push("/login");
+  };
 
   // Quick links for mobile only
   const quickLinks = [
@@ -560,6 +569,30 @@ export default function AdminSettings() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Account Actions */}
+      <Card className="border-red-200 dark:border-red-900/50">
+        <CardHeader>
+          <CardTitle className="text-red-600 dark:text-red-400">
+            Account Actions
+          </CardTitle>
+          <CardDescription>Sign out of your admin account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleLogout}
+            variant="destructive"
+            className="w-full md:w-auto"
+            size="lg"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+            You will be redirected to the login page
+          </p>
         </CardContent>
       </Card>
     </div>
