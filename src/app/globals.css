@@ -154,3 +154,58 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Force Light Mode for POS/Cashier Layout */
+html.pos-light-mode,
+html.pos-light-mode * {
+  color-scheme: light !important;
+}
+
+/* Override all dark mode styles for POS */
+html.pos-light-mode {
+  /* Light mode color scheme */
+  --background: oklch(1 0 0) !important;
+  --foreground: oklch(0.1 0 0) !important;
+
+  --card: oklch(1 0 0) !important;
+  --card-foreground: oklch(0.1 0 0) !important;
+
+  --popover: oklch(1 0 0) !important;
+  --popover-foreground: oklch(0.1 0 0) !important;
+
+  --primary: oklch(0.5 0.19 145) !important;
+  --primary-foreground: oklch(0.98 0 0) !important;
+
+  --secondary: oklch(0.96 0 0) !important;
+  --secondary-foreground: oklch(0.1 0 0) !important;
+
+  --muted: oklch(0.96 0 0) !important;
+  --muted-foreground: oklch(0.45 0 0) !important;
+
+  --accent: oklch(0.96 0 0) !important;
+  --accent-foreground: oklch(0.1 0 0) !important;
+
+  --destructive: oklch(0.55 0.25 25) !important;
+
+  --border: oklch(0.9 0 0) !important;
+  --input: oklch(0.9 0 0) !important;
+  --ring: oklch(0.5 0.19 145) !important;
+}
+
+/* Ensure all elements respect light mode */
+html.pos-light-mode .dark\:bg-neutral-900,
+html.pos-light-mode .dark\:bg-neutral-950,
+html.pos-light-mode .dark\:bg-neutral-800 {
+  background-color: white !important;
+}
+
+html.pos-light-mode .dark\:text-neutral-100,
+html.pos-light-mode .dark\:text-neutral-200,
+html.pos-light-mode .dark\:text-neutral-300 {
+  color: #171717 !important;
+}
+
+html.pos-light-mode .dark\:border-neutral-700,
+html.pos-light-mode .dark\:border-neutral-800 {
+  border-color: #e5e5e5 !important;
+}

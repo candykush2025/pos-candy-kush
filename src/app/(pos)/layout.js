@@ -43,6 +43,20 @@ export default function POSLayout({ children }) {
   const [cashier, setCashier] = useState(null);
   const { activeTab, setActiveTab } = usePosTabStore();
 
+  // Force light theme for POS/Cashier layout
+  useEffect(() => {
+    // Remove dark class from html element
+    document.documentElement.classList.remove("dark");
+
+    // Add light mode enforcement class
+    document.documentElement.classList.add("pos-light-mode");
+
+    return () => {
+      // Clean up when component unmounts
+      document.documentElement.classList.remove("pos-light-mode");
+    };
+  }, []);
+
   // Get cashier from localStorage and listen for updates
   useEffect(() => {
     const loadCashier = () => {
@@ -123,7 +137,7 @@ export default function POSLayout({ children }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col light">
       {/* ONE SINGLE UNIFIED HEADER ROW */}
       <header className="bg-white border-b shadow-sm sticky top-0 z-50">
         <div className="flex items-center justify-between gap-3 px-4 py-2">

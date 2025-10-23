@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { registerUser } from "@/lib/firebase/auth";
-import { getDocuments, COLLECTIONS } from "@/lib/firebase/firestore";
+import { registerUser, adminResetUserPassword } from "@/lib/firebase/auth";
+import {
+  getDocuments,
+  updateDocument,
+  COLLECTIONS,
+} from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, UserPlus } from "lucide-react";
+import { Plus, Search, UserPlus, Edit, Save, X, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { USER_ROLES } from "@/config/constants";
 
@@ -23,7 +27,9 @@ export default function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -31,6 +37,14 @@ export default function AdminUsers() {
     password: "",
     role: USER_ROLES.CASHIER,
     pin: "",
+  });
+
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    email: "",
+    role: USER_ROLES.CASHIER,
+    pin: "",
+    newPassword: "", // Optional new password
   });
 
   useEffect(() => {
@@ -98,6 +112,78 @@ export default function AdminUsers() {
       role: USER_ROLES.CASHIER,
       pin: "",
     });
+  };
+
+  const handleEditUser = (user) => {
+    setEditingUser(user);
+    setEditFormData({
+      name: user.name || "",
+      email: user.email || "",
+      role: user.role || USER_ROLES.CASHIER,
+      pin: user.pin || "",
+      newPassword: "", // Clear password field when opening edit
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+
+    try {
+      // Validate PIN for cashiers and admins
+      if (
+        (editFormData.role === USER_ROLES.CASHIER ||
+          editFormData.role === USER_ROLES.ADMIN) &&
+        editFormData.pin &&
+        editFormData.pin.length < 4
+      ) {
+        toast.error("PIN must be at least 4 digits");
+        return;
+      }
+
+      // Validate new password if provided
+      if (editFormData.newPassword && editFormData.newPassword.length < 6) {
+        toast.error("Password must be at least 6 characters");
+        return;
+      }
+
+      // Update user document in Firestore
+      await updateDocument(COLLECTIONS.USERS, editingUser.id, {
+        name: editFormData.name,
+        email: editFormData.email,
+        role: editFormData.role,
+        pin: editFormData.pin || null,
+      });
+
+      // If new password provided, send password reset email
+      if (editFormData.newPassword) {
+        // Note: Firebase doesn't allow direct password change from client-side for other users
+        // We send a password reset email instead
+        await adminResetUserPassword(editFormData.email);
+        toast.success(
+          "User updated! Password reset email sent to " + editFormData.email
+        );
+      } else {
+        toast.success("User updated successfully");
+      }
+
+      setIsEditModalOpen(false);
+      setEditingUser(null);
+      loadUsers();
+    } catch (error) {
+      console.error("Error updating user:", error);
+      toast.error("Failed to update user");
+    }
+  };
+
+  const handleSendPasswordReset = async (user) => {
+    try {
+      await adminResetUserPassword(user.email);
+      toast.success(`Password reset email sent to ${user.email}`);
+    } catch (error) {
+      console.error("Error sending password reset:", error);
+      toast.error("Failed to send password reset email");
+    }
   };
 
   const filteredUsers = users.filter(
@@ -283,7 +369,7 @@ export default function AdminUsers() {
               {filteredUsers.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
+                  className="flex items-center justify-between p-4 border rounded-lg hover:border-green-300 transition-colors"
                 >
                   <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
@@ -294,8 +380,11 @@ export default function AdminUsers() {
                     <div>
                       <h3 className="font-semibold">{user.name}</h3>
                       <p className="text-sm text-neutral-500">{user.email}</p>
+                      <p className="text-xs text-neutral-400 mt-1">
+                        ID: {user.id}
+                      </p>
                       {user.pin && (
-                        <p className="text-xs text-neutral-400 mt-1">
+                        <p className="text-xs text-neutral-400">
                           🔒 PIN: {"*".repeat(user.pin.length)}
                         </p>
                       )}
@@ -311,6 +400,25 @@ export default function AdminUsers() {
                         {new Date(user.createdAt.toDate()).toLocaleDateString()}
                       </span>
                     )}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSendPasswordReset(user)}
+                        title="Send password reset email"
+                      >
+                        <KeyRound className="h-4 w-4 mr-1" />
+                        Reset Password
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditUser(user)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -318,7 +426,144 @@ export default function AdminUsers() {
           </CardContent>
         </Card>
       )}
+
+      {/* Edit User Dialog */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update staff member information and role. User ID cannot be
+              changed.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateUser} className="space-y-4">
+            {/* Display User ID (read-only) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-neutral-500">
+                User ID (Cannot be changed)
+              </label>
+              <Input
+                value={editingUser?.id || ""}
+                disabled
+                className="bg-neutral-100 dark:bg-neutral-800 cursor-not-allowed"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Full Name*</label>
+              <Input
+                value={editFormData.name}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, name: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email*</label>
+              <Input
+                type="email"
+                value={editFormData.email}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, email: e.target.value })
+                }
+                required
+              />
+              <p className="text-xs text-neutral-500">
+                Note: Changing email updates Firestore only, not Firebase Auth
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                New Password (Optional)
+              </label>
+              <Input
+                type="password"
+                value={editFormData.newPassword}
+                onChange={(e) =>
+                  setEditFormData({
+                    ...editFormData,
+                    newPassword: e.target.value,
+                  })
+                }
+                placeholder="Leave blank to keep current password"
+                minLength={6}
+              />
+              <p className="text-xs text-neutral-500">
+                <KeyRound className="inline h-3 w-3 mr-1" />
+                Enter a new password (min 6 characters) or leave blank. A
+                password reset email will be sent if changed.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role*</label>
+              <select
+                className="w-full px-3 py-2 border rounded-md dark:bg-neutral-900"
+                value={editFormData.role}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, role: e.target.value })
+                }
+                required
+              >
+                <option value={USER_ROLES.CASHIER}>Cashier</option>
+                <option value={USER_ROLES.MANAGER}>Manager</option>
+                <option value={USER_ROLES.ADMIN}>Admin</option>
+              </select>
+              <p className="text-xs text-neutral-500 mt-1">
+                Cashier: Basic sales only • Manager: Sales + reports • Admin:
+                Full access
+              </p>
+            </div>
+
+            {(editFormData.role === USER_ROLES.CASHIER ||
+              editFormData.role === USER_ROLES.ADMIN) && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">PIN (4-6 digits)</label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Enter 4-6 digit PIN"
+                  value={editFormData.pin}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      pin: e.target.value.replace(/\D/g, "").slice(0, 6),
+                    })
+                  }
+                  minLength={4}
+                  maxLength={6}
+                />
+                <p className="text-xs text-neutral-500 mt-1">
+                  🔒 PIN is required for POS login (cashiers and admins only)
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingUser(null);
+                }}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancel
+              </Button>
+              <Button type="submit">
+                <Save className="h-4 w-4 mr-1" />
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

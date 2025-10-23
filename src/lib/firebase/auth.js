@@ -5,6 +5,9 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   updateProfile,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./config";
@@ -120,6 +123,21 @@ export const resetPassword = async (email) => {
 };
 
 /**
+ * Update user password (admin function - sends password reset email)
+ * Note: Firebase doesn't allow changing another user's password directly from client-side
+ * This function sends a password reset email to the user
+ */
+export const adminResetUserPassword = async (email) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    return { success: true, message: "Password reset email sent" };
+  } catch (error) {
+    console.error("Admin reset password error:", error);
+    throw error;
+  }
+};
+
+/**
  * Get current user
  */
 export const getCurrentUser = () => {
@@ -165,6 +183,7 @@ export default {
   logout,
   registerUser,
   resetPassword,
+  adminResetUserPassword,
   getCurrentUser,
   getUserToken,
   onAuthChange,
