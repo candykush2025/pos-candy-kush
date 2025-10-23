@@ -209,3 +209,13 @@ html.pos-light-mode .dark\:border-neutral-700,
 html.pos-light-mode .dark\:border-neutral-800 {
   border-color: #e5e5e5 !important;
 }
+
+/* Hide scrollbar for category tabs */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCartStore } from "@/store/useCartStore";
 import { useTicketStore } from "@/store/useTicketStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -74,9 +74,27 @@ export default function SalesSection({ cashier }) {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState("grid");
   const [isLoading, setIsLoading] = useState(true);
   const [unsyncedOrders, setUnsyncedOrders] = useState(0);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [customCategories, setCustomCategories] = useState([]);
+
+  // Custom category products: { categoryName: [20 product slots] }
+  const [customCategoryProducts, setCustomCategoryProducts] = useState({});
+  const [showProductSelectModal, setShowProductSelectModal] = useState(false);
+  const [selectedSlotIndex, setSelectedSlotIndex] = useState(null);
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+
+  // Long press menu state
+  const [showTabMenu, setShowTabMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [selectedTabForMenu, setSelectedTabForMenu] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editCategoryName, setEditCategoryName] = useState("");
+  const longPressTimer = useRef(null);
 
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -132,21 +150,31 @@ export default function SalesSection({ cashier }) {
     }
   };
 
-  // Filter products based on search
+  // Filter products based on search and category
   useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredProducts(products);
-    } else {
+    let filtered = products;
+
+    // Filter by category
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter((p) => {
+        const productCategory = getProductCategory(p);
+        return productCategory === selectedCategory;
+      });
+    }
+
+    // Filter by search query
+    if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
-      const filtered = products.filter(
+      filtered = filtered.filter(
         (p) =>
           p.name?.toLowerCase().includes(query) ||
           p.barcode?.includes(query) ||
           p.sku?.toLowerCase().includes(query)
       );
-      setFilteredProducts(filtered);
     }
-  }, [searchQuery, products]);
+
+    setFilteredProducts(filtered);
+  }, [searchQuery, products, selectedCategory]);
 
   const loadProducts = async () => {
     try {
@@ -158,10 +186,58 @@ export default function SalesSection({ cashier }) {
       setProducts(productsData);
       setFilteredProducts(productsData);
 
+      // Extract unique categories from products
+      const uniqueCategories = [
+        ...new Set(
+          productsData
+            .map((p) => getProductCategory(p))
+            .filter((cat) => cat !== null)
+        ),
+      ].sort();
+      setCategories(uniqueCategories);
+
+      // Load custom categories from localStorage
+      const savedCustomCategories = localStorage.getItem("custom_categories");
+      if (savedCustomCategories) {
+        setCustomCategories(JSON.parse(savedCustomCategories));
+      }
+
+      // Load custom category products from localStorage
+      const savedCustomCategoryProducts = localStorage.getItem(
+        "custom_category_products"
+      );
+      if (savedCustomCategoryProducts) {
+        setCustomCategoryProducts(JSON.parse(savedCustomCategoryProducts));
+      }
+
       // Sync to IndexedDB for offline access
       if (productsData.length > 0) {
         await dbService.upsertProducts(productsData);
       }
+
+      // Debug: Log heights after products load
+      setTimeout(() => {
+        const mainContent = document.querySelector(".main-content-debug");
+        const productsSection = document.querySelector(
+          ".products-section-debug"
+        );
+        const productsGrid = document.querySelector(".products-grid-debug");
+        const cartSection = document.querySelector(".cart-section-debug");
+
+        console.log("=== HEIGHT DEBUG ===");
+        console.log("Viewport Height:", window.innerHeight);
+        console.log("Main Content:", mainContent?.offsetHeight, "px");
+        console.log("Products Section:", productsSection?.offsetHeight, "px");
+        console.log(
+          "Products Grid:",
+          productsGrid?.scrollHeight,
+          "px (scroll height)"
+        );
+        console.log("Products Grid Visible:", productsGrid?.offsetHeight, "px");
+        console.log("Cart Section:", cartSection?.offsetHeight, "px");
+        console.log("Total Products:", productsData.length);
+        console.log("==================");
+      }, 100);
     } catch (error) {
       console.error(
         "Failed to load products from Firebase, trying IndexedDB:",
@@ -236,6 +312,27 @@ export default function SalesSection({ cashier }) {
       product.category_name ||
       null
     );
+  };
+
+  const getProductColor = (product) => {
+    return product.color || null;
+  };
+
+  const getColorClasses = (color) => {
+    if (!color) return null;
+
+    const colorMap = {
+      GREY: "bg-gray-400",
+      RED: "bg-red-500",
+      PINK: "bg-pink-500",
+      ORANGE: "bg-orange-500",
+      YELLOW: "bg-yellow-400",
+      GREEN: "bg-green-500",
+      BLUE: "bg-blue-500",
+      PURPLE: "bg-purple-500",
+    };
+
+    return colorMap[color.toUpperCase()] || null;
   };
 
   const getProductSku = (product) => {
@@ -315,6 +412,202 @@ export default function SalesSection({ cashier }) {
 
     addItem(product, 1);
     toast.success(`Added ${product.name} to cart`);
+  };
+
+  const handleAddCustomCategory = () => {
+    if (!newCategoryName.trim()) {
+      toast.error("Please enter a category name");
+      return;
+    }
+
+    const updatedCategories = [...customCategories, newCategoryName.trim()];
+    setCustomCategories(updatedCategories);
+    localStorage.setItem(
+      "custom_categories",
+      JSON.stringify(updatedCategories)
+    );
+    setSelectedCategory(newCategoryName.trim());
+    setNewCategoryName("");
+    setShowAddCategoryModal(false);
+    toast.success(`Category "${newCategoryName.trim()}" added`);
+  };
+
+  const handleDeleteCustomCategory = (categoryName) => {
+    const updatedCategories = customCategories.filter(
+      (c) => c !== categoryName
+    );
+    setCustomCategories(updatedCategories);
+    localStorage.setItem(
+      "custom_categories",
+      JSON.stringify(updatedCategories)
+    );
+    if (selectedCategory === categoryName) {
+      setSelectedCategory("all");
+    }
+    toast.success(`Category "${categoryName}" deleted`);
+  };
+
+  // Custom category product slot handlers
+  const handleSlotClick = (index) => {
+    setSelectedSlotIndex(index);
+    setShowProductSelectModal(true);
+    setProductSearchQuery("");
+  };
+
+  const handleProductSelect = (product) => {
+    if (
+      selectedSlotIndex !== null &&
+      customCategories.includes(selectedCategory)
+    ) {
+      const currentSlots =
+        customCategoryProducts[selectedCategory] || Array(20).fill(null);
+      const updatedSlots = [...currentSlots];
+      updatedSlots[selectedSlotIndex] = product;
+
+      const updatedCategories = {
+        ...customCategoryProducts,
+        [selectedCategory]: updatedSlots,
+      };
+
+      setCustomCategoryProducts(updatedCategories);
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(updatedCategories)
+      );
+      setShowProductSelectModal(false);
+      setSelectedSlotIndex(null);
+      toast.success(`${product.name} added to slot ${selectedSlotIndex + 1}`);
+    }
+  };
+
+  const handleRemoveFromSlot = (index, e) => {
+    e.stopPropagation();
+    if (customCategories.includes(selectedCategory)) {
+      const currentSlots =
+        customCategoryProducts[selectedCategory] || Array(20).fill(null);
+      const updatedSlots = [...currentSlots];
+      updatedSlots[index] = null;
+
+      const updatedCategories = {
+        ...customCategoryProducts,
+        [selectedCategory]: updatedSlots,
+      };
+
+      setCustomCategoryProducts(updatedCategories);
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(updatedCategories)
+      );
+      toast.success("Product removed from slot");
+    }
+  };
+
+  // Long press handlers for tab menu
+  const handleTabLongPressStart = (category, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    longPressTimer.current = setTimeout(() => {
+      setSelectedTabForMenu(category);
+      setMenuPosition({
+        x: rect.left,
+        y: rect.top - 100, // Position menu above the tab
+      });
+      setShowTabMenu(true);
+    }, 500); // 500ms long press
+  };
+
+  const handleTabLongPressEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleEditCategory = () => {
+    setEditCategoryName(selectedTabForMenu);
+    setShowEditModal(true);
+    setShowTabMenu(false);
+  };
+
+  const handleSaveEditCategory = () => {
+    if (!editCategoryName.trim()) {
+      toast.error("Please enter a category name");
+      return;
+    }
+
+    const oldName = selectedTabForMenu;
+    const newName = editCategoryName.trim();
+
+    if (oldName === newName) {
+      setShowEditModal(false);
+      return;
+    }
+
+    if (customCategories.includes(newName)) {
+      toast.error("Category name already exists");
+      return;
+    }
+
+    // Update category name in the list
+    const updatedCategories = customCategories.map((cat) =>
+      cat === oldName ? newName : cat
+    );
+    setCustomCategories(updatedCategories);
+    localStorage.setItem(
+      "custom_categories",
+      JSON.stringify(updatedCategories)
+    );
+
+    // Update products mapping if exists
+    if (customCategoryProducts[oldName]) {
+      const updatedProducts = { ...customCategoryProducts };
+      updatedProducts[newName] = updatedProducts[oldName];
+      delete updatedProducts[oldName];
+      setCustomCategoryProducts(updatedProducts);
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(updatedProducts)
+      );
+    }
+
+    // Update selected category if it was the renamed one
+    if (selectedCategory === oldName) {
+      setSelectedCategory(newName);
+    }
+
+    setShowEditModal(false);
+    setEditCategoryName("");
+    toast.success(`Category renamed to "${newName}"`);
+  };
+
+  const handleDeleteCategoryFromMenu = () => {
+    const categoryToDelete = selectedTabForMenu;
+
+    const updatedCategories = customCategories.filter(
+      (c) => c !== categoryToDelete
+    );
+    setCustomCategories(updatedCategories);
+    localStorage.setItem(
+      "custom_categories",
+      JSON.stringify(updatedCategories)
+    );
+
+    // Remove products for this category
+    if (customCategoryProducts[categoryToDelete]) {
+      const updatedProducts = { ...customCategoryProducts };
+      delete updatedProducts[categoryToDelete];
+      setCustomCategoryProducts(updatedProducts);
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(updatedProducts)
+      );
+    }
+
+    if (selectedCategory === categoryToDelete) {
+      setSelectedCategory("all");
+    }
+
+    setShowTabMenu(false);
+    toast.success(`Category "${categoryToDelete}" deleted`);
   };
 
   const handleSaveTicket = () => {
@@ -962,7 +1255,7 @@ export default function SalesSection({ cashier }) {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Sync Status Bar */}
       {(!isOnline || unsyncedOrders > 0) && (
         <div
@@ -999,59 +1292,121 @@ export default function SalesSection({ cashier }) {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0 main-content-debug">
         {/* Products Section */}
-        <div className="flex-1 flex flex-col p-4 overflow-hidden">
-          {/* Search Bar */}
-          <div className="flex items-center space-x-2 mb-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <Input
-                placeholder="Search products by name, barcode, or SKU..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-12 text-lg"
-              />
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 products-section-debug">
+          {/* Search Bar - Only show for non-custom categories */}
+          {!customCategories.includes(selectedCategory) && (
+            <div className="flex items-center space-x-2 p-4 pb-0 flex-shrink-0">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Input
+                  placeholder="Search products by name, barcode, or SKU..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-12 text-lg"
+                />
+              </div>
             </div>
-            <div className="flex space-x-1">
-              <Button
-                variant={viewMode === "grid" ? "default" : "outline"}
-                size="icon"
-                onClick={() => setViewMode("grid")}
-                className="h-12 w-12"
-              >
-                <Grid className="h-5 w-5" />
-              </Button>
-              <Button
-                variant={viewMode === "list" ? "default" : "outline"}
-                size="icon"
-                onClick={() => setViewMode("list")}
-                className="h-12 w-12"
-              >
-                <List className="h-5 w-5" />
-              </Button>
-            </div>
-          </div>
+          )}
 
           {/* Products Grid */}
-          <div className="flex-1 overflow-auto">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 min-h-0 products-grid-debug">
+            {customCategories.includes(selectedCategory) ? (
+              /* Custom Category - 5x4 Grid of Product Slots */
+              <div className="grid gap-4 grid-cols-5 grid-rows-4">
+                {(
+                  customCategoryProducts[selectedCategory] ||
+                  Array(20).fill(null)
+                ).map((product, index) => (
+                  <Card
+                    key={index}
+                    className="p-0 group overflow-hidden border bg-white transition-all cursor-pointer hover:border-primary/50 hover:shadow-md"
+                    onClick={() =>
+                      product
+                        ? handleAddToCart(product)
+                        : handleSlotClick(index)
+                    }
+                  >
+                    <div className="relative w-full pt-[100%] overflow-hidden">
+                      <div className="absolute inset-0">
+                        {product ? (
+                          <>
+                            {/* Display selected product */}
+                            {(() => {
+                              const imageUrl = getProductImage(product);
+                              const productColor = getProductColor(product);
+                              const colorClass = getColorClasses(productColor);
+
+                              return imageUrl ? (
+                                <>
+                                  <img
+                                    src={imageUrl}
+                                    alt={product.name || "Product image"}
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                    loading="lazy"
+                                  />
+                                  <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1.5">
+                                    <h3 className="text-xs font-semibold text-white text-center line-clamp-2">
+                                      {product.name}
+                                    </h3>
+                                  </div>
+                                </>
+                              ) : colorClass ? (
+                                <div
+                                  className={cn(
+                                    "w-full h-full flex items-center justify-center",
+                                    colorClass
+                                  )}
+                                >
+                                  <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
+                                    {product.name}
+                                  </h3>
+                                </div>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400">
+                                  <div className="text-center">
+                                    <div className="text-4xl font-semibold text-white mb-2">
+                                      {product.name?.charAt(0).toUpperCase() ||
+                                        "?"}
+                                    </div>
+                                    <h3 className="text-sm font-semibold text-white px-4 line-clamp-2">
+                                      {product.name}
+                                    </h3>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                            {/* Remove button on hover */}
+                            <button
+                              onClick={(e) => handleRemoveFromSlot(index, e)}
+                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-red-500 hover:bg-red-600 rounded"
+                              title="Remove from slot"
+                            >
+                              <X className="h-4 w-4 text-white" />
+                            </button>
+                          </>
+                        ) : (
+                          /* Empty slot with + icon */
+                          <div className="w-full h-full flex items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors">
+                            <Plus className="h-12 w-12 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : isLoading ? (
+              <div className="flex items-center justify-center min-h-full">
                 <p className="text-gray-500">Loading products...</p>
               </div>
             ) : filteredProducts.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
+              <div className="flex items-center justify-center min-h-full">
                 <p className="text-gray-500">No products found</p>
               </div>
             ) : (
-              <div
-                className={cn(
-                  "grid gap-4",
-                  viewMode === "grid"
-                    ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-                    : "grid-cols-1"
-                )}
-              >
+              <div className="grid gap-4 grid-cols-5">
                 {filteredProducts.map((product) => {
                   const trackStock = parseBoolean(product.trackStock, true);
                   const availableForSale = isProductAvailable(product);
@@ -1059,148 +1414,82 @@ export default function SalesSection({ cashier }) {
                   const isOutOfStock = trackStock && stock <= 0;
                   const canSell = availableForSale && !isOutOfStock;
                   const imageUrl = getProductImage(product);
-                  const categoryLabel = getProductCategory(product);
-                  const sku = getProductSku(product);
-
-                  let stockBadge;
-                  if (!availableForSale) {
-                    stockBadge = (
-                      <Badge variant="destructive" className="uppercase">
-                        Not for sale
-                      </Badge>
-                    );
-                  } else if (trackStock) {
-                    if (stock <= 0) {
-                      stockBadge = (
-                        <Badge variant="destructive" className="uppercase">
-                          Out of stock
-                        </Badge>
-                      );
-                    } else if (stock <= 5) {
-                      stockBadge = (
-                        <Badge variant="secondary" className="uppercase">
-                          Low stock • {stock}
-                        </Badge>
-                      );
-                    } else {
-                      stockBadge = (
-                        <Badge variant="outline" className="uppercase">
-                          In stock • {stock}
-                        </Badge>
-                      );
-                    }
-                  } else {
-                    stockBadge = (
-                      <Badge variant="outline" className="uppercase">
-                        On demand
-                      </Badge>
-                    );
-                  }
-
-                  const cardClasses = cn(
-                    "group overflow-hidden border bg-white transition-all",
-                    viewMode === "list"
-                      ? "flex gap-4 p-4"
-                      : "flex flex-col p-3",
-                    canSell
-                      ? "cursor-pointer hover:border-primary/50 hover:shadow-md"
-                      : "cursor-not-allowed opacity-70"
-                  );
-
-                  const imageClasses = cn(
-                    "relative overflow-hidden rounded-md bg-gray-100",
-                    viewMode === "list"
-                      ? "h-24 w-24 flex-shrink-0"
-                      : "w-full h-48"
-                  );
+                  const productColor = getProductColor(product);
+                  const colorClass = getColorClasses(productColor);
 
                   const handleCardClick = () => {
                     if (!canSell) return;
                     handleAddToCart(product);
                   };
 
-                  const productInitial = product.name
-                    ? product.name.charAt(0).toUpperCase()
-                    : "?";
-
                   return (
                     <Card
                       key={product.id || product.sku}
-                      className={cardClasses}
+                      className={cn(
+                        "p-0 group overflow-hidden border bg-white transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
+                        !canSell && "cursor-not-allowed opacity-70"
+                      )}
                       onClick={handleCardClick}
                     >
-                      <div className={imageClasses}>
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt={product.name || "Product image"}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 text-2xl font-semibold text-white">
-                            {productInitial}
-                          </div>
-                        )}
-                        {(!availableForSale || isOutOfStock) && (
-                          <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" />
-                        )}
-                        {(!availableForSale || isOutOfStock) && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="rounded bg-black/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
-                              {!availableForSale
-                                ? "Not for sale"
-                                : "Out of stock"}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div
-                        className={cn(
-                          "flex flex-1 flex-col",
-                          viewMode === "list" ? "py-1 pr-2" : "pt-3"
-                        )}
-                      >
-                        <div className="space-y-1">
-                          <h3 className="text-base font-semibold text-gray-900">
-                            {product.name}
-                          </h3>
-                          {categoryLabel && (
-                            <p className="text-xs text-gray-500">
-                              {categoryLabel}
-                            </p>
+                      {/* 1:1 Ratio Container */}
+                      <div className="relative w-full pt-[100%] overflow-hidden">
+                        {/* Content positioned absolutely to maintain 1:1 ratio */}
+                        <div className="absolute inset-0">
+                          {imageUrl ? (
+                            <>
+                              {/* Image fills entire 1:1 container */}
+                              <img
+                                src={imageUrl}
+                                alt={product.name || "Product image"}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                loading="lazy"
+                              />
+                              {/* Title overlay at bottom */}
+                              <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1.5">
+                                <h3 className="text-xs font-semibold text-white text-center line-clamp-2">
+                                  {product.name}
+                                </h3>
+                              </div>
+                            </>
+                          ) : colorClass ? (
+                            /* Color background with centered title */
+                            <div
+                              className={cn(
+                                "w-full h-full flex items-center justify-center",
+                                colorClass
+                              )}
+                            >
+                              <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
+                                {product.name}
+                              </h3>
+                            </div>
+                          ) : (
+                            /* Fallback: gradient with initial */
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400">
+                              <div className="text-center">
+                                <div className="text-4xl font-semibold text-white mb-2">
+                                  {product.name?.charAt(0).toUpperCase() || "?"}
+                                </div>
+                                <h3 className="text-sm font-semibold text-white px-4 line-clamp-2">
+                                  {product.name}
+                                </h3>
+                              </div>
+                            </div>
                           )}
-                          {sku && (
-                            <p className="text-[11px] uppercase tracking-wide text-gray-400">
-                              SKU • {sku}
-                            </p>
+
+                          {/* Out of stock overlay */}
+                          {(!availableForSale || isOutOfStock) && (
+                            <>
+                              <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="rounded bg-black/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                                  {!availableForSale
+                                    ? "Not for sale"
+                                    : "Out of stock"}
+                                </span>
+                              </div>
+                            </>
                           )}
-                          <p className="text-lg font-semibold text-emerald-600 pt-1">
-                            {formatCurrency(product.price || 0)}
-                          </p>
-                        </div>
-
-                        {viewMode === "list" && product.description && (
-                          <p className="mt-2 text-xs text-gray-500">
-                            {product.description}
-                          </p>
-                        )}
-
-                        <div className="mt-auto flex flex-col gap-2 pt-3">
-                          {stockBadge}
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="font-semibold w-full"
-                            disabled={!canSell}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleCardClick();
-                            }}
-                          >
-                            <Plus className="mr-1 h-4 w-4" /> Add
-                          </Button>
                         </div>
                       </div>
                     </Card>
@@ -1209,12 +1498,77 @@ export default function SalesSection({ cashier }) {
               </div>
             )}
           </div>
+
+          {/* Excel-Style Category Tabs (Bottom) */}
+          <div className="flex-shrink-0 bg-gray-100 border-t">
+            <div className="flex items-center overflow-x-auto scrollbar-hide">
+              {/* All Tab */}
+              <button
+                onClick={() => setSelectedCategory("all")}
+                className={cn(
+                  "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors",
+                  selectedCategory === "all"
+                    ? "bg-white text-gray-900 border-t-2 border-t-green-600"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                )}
+              >
+                All
+              </button>
+
+              {/* Product Categories */}
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  className={cn(
+                    "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors",
+                    selectedCategory === category
+                      ? "bg-white text-gray-900 border-t-2 border-t-green-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  )}
+                >
+                  {category}
+                </button>
+              ))}
+
+              {/* Custom Categories */}
+              {customCategories.map((category) => (
+                <div key={category} className="relative">
+                  <button
+                    onClick={() => setSelectedCategory(category)}
+                    onMouseDown={(e) => handleTabLongPressStart(category, e)}
+                    onMouseUp={handleTabLongPressEnd}
+                    onMouseLeave={handleTabLongPressEnd}
+                    onTouchStart={(e) => handleTabLongPressStart(category, e)}
+                    onTouchEnd={handleTabLongPressEnd}
+                    className={cn(
+                      "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors",
+                      selectedCategory === category
+                        ? "bg-white text-gray-900 border-t-2 border-t-green-600"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    )}
+                  >
+                    {category}
+                  </button>
+                </div>
+              ))}
+
+              {/* Add Button */}
+              <button
+                onClick={() => setShowAddCategoryModal(true)}
+                className="px-6 py-4 text-xl font-medium border-r border-gray-300 bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                title="Add new category"
+              >
+                <Plus className="h-6 w-6" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Cart Section */}
-        <div className="w-96 bg-white border-l flex flex-col">
+        <div className="w-96 bg-white border-l flex flex-col min-h-0 cart-section-debug">
           {/* Cart Header */}
-          <div className="p-4 border-b space-y-3">
+          <div className="p-4 border-b space-y-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <ShoppingCart className="h-6 w-6" />
@@ -1263,9 +1617,9 @@ export default function SalesSection({ cashier }) {
           </div>
 
           {/* Cart Items */}
-          <div className="flex-1 overflow-auto p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 min-h-0">
             {items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <div className="flex flex-col items-center justify-center min-h-full text-gray-400">
                 <ShoppingCart className="h-16 w-16 mb-2" />
                 <p>Cart is empty</p>
               </div>
@@ -1324,7 +1678,7 @@ export default function SalesSection({ cashier }) {
           </div>
 
           {/* Cart Summary */}
-          <div className="border-t p-4 space-y-3">
+          <div className="border-t p-4 space-y-3 flex-shrink-0">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Subtotal</span>
@@ -1849,6 +2203,241 @@ export default function SalesSection({ cashier }) {
                   </p>
                 </div>
               )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Category Modal */}
+        <Dialog
+          open={showAddCategoryModal}
+          onOpenChange={setShowAddCategoryModal}
+        >
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Add New Category Tab</DialogTitle>
+              <DialogDescription>
+                Create a custom category to organize your products
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Category Name</label>
+                <Input
+                  placeholder="Enter category name..."
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleAddCustomCategory();
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowAddCategoryModal(false);
+                  setNewCategoryName("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleAddCustomCategory}
+                disabled={!newCategoryName.trim()}
+              >
+                Add Category
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Product Select Modal for Custom Tab Slots */}
+        <Dialog
+          open={showProductSelectModal}
+          onOpenChange={setShowProductSelectModal}
+        >
+          <DialogContent className="max-w-4xl max-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle>
+                Select Product for Slot{" "}
+                {selectedSlotIndex !== null ? selectedSlotIndex + 1 : ""}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Input
+                  placeholder="Search products by name, barcode, or SKU..."
+                  value={productSearchQuery}
+                  onChange={(e) => setProductSearchQuery(e.target.value)}
+                  className="pl-10"
+                  autoFocus
+                />
+              </div>
+
+              {/* Products List */}
+              <div className="max-h-96 overflow-y-auto border rounded-lg">
+                <div className="grid gap-2 p-2">
+                  {products
+                    .filter((product) => {
+                      const query = productSearchQuery.toLowerCase();
+                      return (
+                        product.name?.toLowerCase().includes(query) ||
+                        product.sku?.toLowerCase().includes(query) ||
+                        product.barcode?.toLowerCase().includes(query)
+                      );
+                    })
+                    .map((product) => {
+                      const imageUrl = getProductImage(product);
+                      const productColor = getProductColor(product);
+                      const colorClass = getColorClasses(productColor);
+
+                      return (
+                        <button
+                          key={product.id || product.sku}
+                          onClick={() => handleProductSelect(product)}
+                          className="flex items-center gap-3 p-3 hover:bg-gray-100 rounded-lg transition-colors text-left w-full"
+                        >
+                          {/* Product Image/Color Preview */}
+                          <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border">
+                            {imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt={product.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : colorClass ? (
+                              <div
+                                className={cn("w-full h-full", colorClass)}
+                              ></div>
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 flex items-center justify-center">
+                                <span className="text-2xl font-semibold text-white">
+                                  {product.name?.charAt(0).toUpperCase() || "?"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Product Info */}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 truncate">
+                              {product.name}
+                            </h3>
+                            <p className="text-sm text-gray-500">
+                              {product.sku && `SKU: ${product.sku}`}
+                              {product.barcode &&
+                                ` | Barcode: ${product.barcode}`}
+                            </p>
+                            <p className="text-sm font-medium text-gray-700">
+                              {formatCurrency(product.price || 0)}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowProductSelectModal(false);
+                  setSelectedSlotIndex(null);
+                  setProductSearchQuery("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Tab Context Menu */}
+        {showTabMenu && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setShowTabMenu(false)}
+            />
+            <div
+              className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-lg py-2 min-w-[150px]"
+              style={{
+                left: `${menuPosition.x}px`,
+                top: `${menuPosition.y}px`,
+              }}
+            >
+              <button
+                onClick={handleEditCategory}
+                className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
+              >
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={handleDeleteCategoryFromMenu}
+                className="w-full px-4 py-2 text-left hover:bg-gray-100 text-red-600 flex items-center gap-2"
+              >
+                <span>Delete</span>
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Edit Category Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Category</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Category Name</label>
+                <Input
+                  placeholder="Enter category name..."
+                  value={editCategoryName}
+                  onChange={(e) => setEditCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSaveEditCategory();
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditCategoryName("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSaveEditCategory}
+                disabled={!editCategoryName.trim()}
+              >
+                Save
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

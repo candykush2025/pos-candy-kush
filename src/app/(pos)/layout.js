@@ -137,9 +137,9 @@ export default function POSLayout({ children }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col light">
+    <div className="h-screen bg-gray-50 flex flex-col light overflow-hidden">
       {/* ONE SINGLE UNIFIED HEADER ROW */}
-      <header className="bg-white border-b shadow-sm sticky top-0 z-50">
+      <header className="bg-white border-b shadow-sm flex-shrink-0 z-50">
         <div className="flex items-center justify-between gap-3 px-4 py-2">
           {/* Left: Logo & Cashier Info */}
           <div className="flex items-center gap-3">
@@ -319,7 +319,7 @@ export default function POSLayout({ children }) {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-hidden">{children}</main>
     </div>
   );
 }
