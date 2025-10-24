@@ -32,6 +32,7 @@ export const COLLECTIONS = {
   TICKETS: "tickets",
   SETTINGS: "settings",
   SYNC_HISTORY: "sync_history",
+  CUSTOM_TABS: "custom_tabs",
 };
 
 /**
@@ -243,6 +244,53 @@ export const receiptsService = {
     subscribeToCollection(COLLECTIONS.RECEIPTS, callback, options),
 };
 
+// Custom Tabs - store per user
+export const customTabsService = {
+  // Save user's custom tabs configuration
+  saveUserTabs: async (userId, tabsData) => {
+    try {
+      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, userId);
+      await setDoc(docRef, {
+        userId,
+        categories: tabsData.categories || [],
+        categoryProducts: tabsData.categoryProducts || {},
+        updatedAt: serverTimestamp(),
+      });
+      return true;
+    } catch (error) {
+      console.error("Error saving custom tabs:", error);
+      throw error;
+    }
+  },
+
+  // Get user's custom tabs configuration
+  getUserTabs: async (userId) => {
+    try {
+      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, userId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data();
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting custom tabs:", error);
+      throw error;
+    }
+  },
+
+  // Delete user's custom tabs
+  deleteUserTabs: async (userId) => {
+    try {
+      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, userId);
+      await deleteDoc(docRef);
+      return true;
+    } catch (error) {
+      console.error("Error deleting custom tabs:", error);
+      throw error;
+    }
+  },
+};
+
 export default {
   createDocument,
   getDocument,
@@ -256,4 +304,5 @@ export default {
   customers: customersService,
   categories: categoriesService,
   receipts: receiptsService,
+  customTabs: customTabsService,
 };

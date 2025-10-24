@@ -1,34 +1,32 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { productsService, categoriesService } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2, Package, FolderTree } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Package, FolderTree, Tag, Percent } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
-import { dbService } from "@/lib/db/dbService";
+import { cn } from "@/lib/utils";
 
-// Item List Component
-function ItemListTab() {
+export default function AdminProducts() {
+  const [activeMenu, setActiveMenu] = useState("products");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [discounts, setDiscounts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -37,51 +35,31 @@ function ItemListTab() {
     sku: "",
     category: "",
     description: "",
+    color: "#3b82f6",
+    discountType: "percentage",
+    discountValue: "",
   });
 
   useEffect(() => {
-    loadProducts();
-    loadCategories();
+    loadData();
   }, []);
 
-  const loadProducts = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await productsService.getAll({
-        orderBy: ["name", "asc"],
-      });
-      setProducts(data);
+      const [productsData, categoriesData] = await Promise.all([
+        productsService.getAll({ orderBy: ["name", "asc"] }),
+        categoriesService.getAll(),
+      ]);
+      setProducts(productsData);
+      setCategories(categoriesData.filter(cat => !cat.deletedAt));
+      // TODO: Load discounts from your discount service when ready
+      setDiscounts([]);
     } catch (error) {
-      console.error("Error loading products:", error);
-      toast.error("Failed to load products");
+      console.error("Error loading data:", error);
+      toast.error("Failed to load data");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const data = await categoriesService.getAll();
-      setCategories(data);
-
-      // Create default categories if none exist
-      if (data.length === 0) {
-        const defaultCategories = [
-          { name: "Flower" },
-          { name: "Pre-Rolls" },
-          { name: "Edibles" },
-          { name: "Concentrates" },
-          { name: "Accessories" },
-        ];
-
-        for (const cat of defaultCategories) {
-          await categoriesService.create(cat);
-        }
-
-        loadCategories();
-      }
-    } catch (error) {
-      console.error("Error loading categories:", error);
     }
   };
 

@@ -1,12 +1,35 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  horizontalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useCartStore } from "@/store/useCartStore";
 import { useTicketStore } from "@/store/useTicketStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSyncStore } from "@/store/useSyncStore";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
-import { productsService, customersService } from "@/lib/firebase/firestore";
+import {
+  productsService,
+  customersService,
+  customTabsService,
+  categoriesService,
+} from "@/lib/firebase/firestore";
+import { discountsService } from "@/lib/firebase/discountsService";
 import { dbService } from "@/lib/db/dbService";
 import db from "@/lib/db/index";
 import { Button } from "@/components/ui/button";
@@ -45,13 +68,72 @@ import {
   AlertCircle,
   ArrowLeftRight,
   Bitcoin,
+  Folder,
+  ArrowLeft,
+  Percent,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
 
+// Sortable Tab Component
+function SortableTab({
+  id,
+  category,
+  isSelected,
+  onClick,
+  onLongPressStart,
+  onLongPressEnd,
+  isDragMode,
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled: !isDragMode });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(isDragMode && "touch-none")}
+      {...(isDragMode ? { ...attributes, ...listeners } : {})}
+    >
+      <button
+        onClick={!isDragMode ? onClick : undefined}
+        onMouseDown={!isDragMode ? onLongPressStart : undefined}
+        onMouseUp={!isDragMode ? onLongPressEnd : undefined}
+        onMouseLeave={!isDragMode ? onLongPressEnd : undefined}
+        onTouchStart={!isDragMode ? onLongPressStart : undefined}
+        onTouchEnd={!isDragMode ? onLongPressEnd : undefined}
+        className={cn(
+          "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors w-full",
+          isSelected
+            ? "bg-white text-gray-900 border-t-2 border-t-green-600"
+            : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+          isDragMode && "ring-2 ring-blue-400 cursor-move"
+        )}
+      >
+        {category}
+      </button>
+    </div>
+  );
+}
+
 export default function SalesSection({ cashier }) {
-  const { user } = useAuthStore();
+  // Use cashier for Firebase operations (cashier.id is the user ID)
+  const userId = cashier?.id;
+
   const {
     items,
     addItem,
@@ -65,6 +147,8 @@ export default function SalesSection({ cashier }) {
     getCartData,
     customer: cartCustomer,
     setCustomer: setCartCustomer,
+    setDiscount,
+    discount: cartDiscount,
   } = useCartStore();
 
   const { createTicket } = useTicketStore();
@@ -76,17 +160,24 @@ export default function SalesSection({ cashier }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [unsyncedOrders, setUnsyncedOrders] = useState(0);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState([]); // category names for tabs
+  const [categoriesData, setCategoriesData] = useState([]); // full category objects from Firebase
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [customCategories, setCustomCategories] = useState([]);
 
-  // Custom category products: { categoryName: [20 product slots] }
+  // Custom category products: { categoryName: [20 slots with {type, id, data}] }
   const [customCategoryProducts, setCustomCategoryProducts] = useState({});
   const [showProductSelectModal, setShowProductSelectModal] = useState(false);
   const [selectedSlotIndex, setSelectedSlotIndex] = useState(null);
   const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [selectionType, setSelectionType] = useState("product"); // 'product' or 'category'
+
+  // Category view state (when viewing category from slot click)
+  const [viewingCategoryId, setViewingCategoryId] = useState(null);
+  const [viewingCategoryName, setViewingCategoryName] = useState(null);
+  const [previousCustomCategory, setPreviousCustomCategory] = useState(null);
 
   // Long press menu state
   const [showTabMenu, setShowTabMenu] = useState(false);
@@ -94,7 +185,24 @@ export default function SalesSection({ cashier }) {
   const [selectedTabForMenu, setSelectedTabForMenu] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editCategoryName, setEditCategoryName] = useState("");
+  const [isDragMode, setIsDragMode] = useState(false);
+  const [activeId, setActiveId] = useState(null);
   const longPressTimer = useRef(null);
+
+  // DnD Kit sensors
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: isDragMode
+      ? undefined
+      : {
+          distance: 8,
+        },
+  });
+
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: sortableKeyboardCoordinates,
+  });
+
+  const sensors = useSensors(pointerSensor, keyboardSensor);
 
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -111,6 +219,11 @@ export default function SalesSection({ cashier }) {
   const [showCustomerSelectModal, setShowCustomerSelectModal] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+
+  // Discount state
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [availableDiscounts, setAvailableDiscounts] = useState([]);
+  const [selectedDiscount, setSelectedDiscount] = useState(null);
 
   // Initialize device ID on first load
   useEffect(() => {
@@ -133,6 +246,63 @@ export default function SalesSection({ cashier }) {
     loadCustomers();
     checkUnsyncedOrders();
   }, []);
+
+  // Reload custom tabs when user changes (login/logout)
+  useEffect(() => {
+    if (userId && products.length > 0) {
+      loadCustomTabsFromUser();
+    }
+  }, [userId]);
+
+  const loadCustomTabsFromUser = async () => {
+    if (!userId || products.length === 0) return;
+
+    try {
+      const firebaseTabs = await customTabsService.getUserTabs(userId);
+
+      if (firebaseTabs) {
+        setCustomCategories(firebaseTabs.categories || []);
+
+        // Convert slot IDs back to full objects
+        const productMap = {};
+        products.forEach((p) => (productMap[p.id] = p));
+
+        const resolvedSlots = {};
+        Object.keys(firebaseTabs.categoryProducts || {}).forEach((category) => {
+          const slots = firebaseTabs.categoryProducts[category];
+          resolvedSlots[category] = slots.map((slot) => {
+            if (!slot) return null;
+
+            if (slot.type === "product") {
+              const product = productMap[slot.id];
+              return product
+                ? { type: "product", id: slot.id, data: product }
+                : null;
+            } else if (slot.type === "category") {
+              return { type: "category", id: slot.id, data: { name: slot.id } };
+            }
+            return null;
+          });
+        });
+        setCustomCategoryProducts(resolvedSlots);
+
+        // Also save to localStorage as backup
+        localStorage.setItem(
+          "custom_categories",
+          JSON.stringify(firebaseTabs.categories || [])
+        );
+        localStorage.setItem(
+          "custom_category_products",
+          JSON.stringify(resolvedProducts)
+        );
+
+        toast.success("Custom tabs loaded from cloud");
+      }
+    } catch (error) {
+      console.error("Error loading custom tabs from Firebase:", error);
+      toast.error("Failed to load custom tabs from cloud");
+    }
+  };
 
   // Check for unsynced orders periodically
   useEffect(() => {
@@ -180,34 +350,128 @@ export default function SalesSection({ cashier }) {
     try {
       setIsLoading(true);
 
-      // Load products from Firebase
-      const productsData = await productsService.getAll();
+      // Load products and categories from Firebase in parallel
+      const [productsData, categoriesData] = await Promise.all([
+        productsService.getAll(),
+        categoriesService.getAll(),
+      ]);
 
       setProducts(productsData);
       setFilteredProducts(productsData);
 
-      // Extract unique categories from products
-      const uniqueCategories = [
-        ...new Set(
-          productsData
-            .map((p) => getProductCategory(p))
-            .filter((cat) => cat !== null)
-        ),
-      ].sort();
-      setCategories(uniqueCategories);
-
-      // Load custom categories from localStorage
-      const savedCustomCategories = localStorage.getItem("custom_categories");
-      if (savedCustomCategories) {
-        setCustomCategories(JSON.parse(savedCustomCategories));
-      }
-
-      // Load custom category products from localStorage
-      const savedCustomCategoryProducts = localStorage.getItem(
-        "custom_category_products"
+      // Store full category objects and filter out deleted ones
+      const activeCategories = categoriesData.filter(
+        (cat) => cat.name && !cat.deletedAt
       );
-      if (savedCustomCategoryProducts) {
-        setCustomCategoryProducts(JSON.parse(savedCustomCategoryProducts));
+      setCategoriesData(activeCategories);
+
+      // Set category names for modal selection
+      const categoryNames = activeCategories.map((cat) => cat.name).sort();
+      setCategories(categoryNames);
+
+      // Load custom tabs from Firebase if user is logged in
+      if (userId) {
+        try {
+          const firebaseTabs = await customTabsService.getUserTabs(userId);
+
+          if (firebaseTabs) {
+            setCustomCategories(firebaseTabs.categories || []);
+            // Convert slot IDs back to full objects
+            const productMap = {};
+            productsData.forEach((p) => (productMap[p.id] = p));
+
+            // Create category map for resolving category slots
+            const categoryMap = {};
+            activeCategories.forEach((cat) => (categoryMap[cat.id] = cat));
+
+            const resolvedSlots = {};
+            Object.keys(firebaseTabs.categoryProducts || {}).forEach(
+              (category) => {
+                const slots = firebaseTabs.categoryProducts[category];
+                resolvedSlots[category] = slots.map((slot) => {
+                  if (!slot) return null;
+
+                  if (slot.type === "product") {
+                    const product = productMap[slot.id];
+                    return product
+                      ? { type: "product", id: slot.id, data: product }
+                      : null;
+                  } else if (slot.type === "category") {
+                    // Resolve category from categoryMap
+                    const categoryData = categoryMap[slot.id];
+                    return categoryData
+                      ? {
+                          type: "category",
+                          id: slot.id,
+                          data: {
+                            name: categoryData.name,
+                            categoryId: slot.id,
+                          },
+                        }
+                      : null;
+                  }
+                  return null;
+                });
+              }
+            );
+            setCustomCategoryProducts(resolvedSlots);
+
+            // Also save to localStorage as backup
+            localStorage.setItem(
+              "custom_categories",
+              JSON.stringify(firebaseTabs.categories || [])
+            );
+            localStorage.setItem(
+              "custom_category_products",
+              JSON.stringify(resolvedSlots)
+            );
+          } else {
+            console.log("No Firebase data found, loading from localStorage");
+            // Fallback to localStorage if no Firebase data
+            const savedCustomCategories =
+              localStorage.getItem("custom_categories");
+            if (savedCustomCategories) {
+              setCustomCategories(JSON.parse(savedCustomCategories));
+            }
+
+            const savedCustomCategoryProducts = localStorage.getItem(
+              "custom_category_products"
+            );
+            if (savedCustomCategoryProducts) {
+              setCustomCategoryProducts(
+                JSON.parse(savedCustomCategoryProducts)
+              );
+            }
+          }
+        } catch (error) {
+          console.error("Error loading custom tabs from Firebase:", error);
+          // Fallback to localStorage
+          const savedCustomCategories =
+            localStorage.getItem("custom_categories");
+          if (savedCustomCategories) {
+            setCustomCategories(JSON.parse(savedCustomCategories));
+          }
+
+          const savedCustomCategoryProducts = localStorage.getItem(
+            "custom_category_products"
+          );
+          if (savedCustomCategoryProducts) {
+            setCustomCategoryProducts(JSON.parse(savedCustomCategoryProducts));
+          }
+        }
+      } else {
+        // Not logged in, use localStorage only
+        const savedCustomCategories = localStorage.getItem("custom_categories");
+        if (savedCustomCategories) {
+          setCustomCategories(JSON.parse(savedCustomCategories));
+        }
+
+        const savedCustomCategoryProducts = localStorage.getItem(
+          "custom_category_products"
+        );
+        if (savedCustomCategoryProducts) {
+          setCustomCategoryProducts(JSON.parse(savedCustomCategoryProducts));
+        }
       }
 
       // Sync to IndexedDB for offline access
@@ -305,6 +569,7 @@ export default function SalesSection({ cashier }) {
   };
 
   const getProductCategory = (product) => {
+    if (!product) return null;
     return (
       product.categoryName ||
       product.category ||
@@ -315,7 +580,7 @@ export default function SalesSection({ cashier }) {
   };
 
   const getProductColor = (product) => {
-    return product.color || null;
+    return product?.color || null;
   };
 
   const getColorClasses = (color) => {
@@ -414,7 +679,56 @@ export default function SalesSection({ cashier }) {
     toast.success(`Added ${product.name} to cart`);
   };
 
-  const handleAddCustomCategory = () => {
+  // Helper function to save custom tabs to Firebase
+  const saveCustomTabsToFirebase = async (categories, categoryProducts) => {
+    if (!userId) {
+      localStorage.setItem("custom_categories", JSON.stringify(categories));
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(categoryProducts)
+      );
+      return;
+    }
+
+    try {
+      // Convert slots to minimal structure (type and id only)
+      const slotIds = {};
+      Object.keys(categoryProducts).forEach((category) => {
+        slotIds[category] = categoryProducts[category].map((slot) => {
+          if (!slot) return null;
+          return {
+            type: slot.type,
+            id: slot.id,
+          };
+        });
+      });
+
+      await customTabsService.saveUserTabs(userId, {
+        categories,
+        categoryProducts: slotIds,
+      });
+
+      toast.success("Custom tabs synced to cloud");
+
+      // Also save to localStorage as backup
+      localStorage.setItem("custom_categories", JSON.stringify(categories));
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(categoryProducts)
+      );
+    } catch (error) {
+      console.error("Error saving to Firebase:", error);
+      toast.error("Failed to sync to cloud, saved locally only");
+      // Fallback to localStorage only
+      localStorage.setItem("custom_categories", JSON.stringify(categories));
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(categoryProducts)
+      );
+    }
+  };
+
+  const handleAddCustomCategory = async () => {
     if (!newCategoryName.trim()) {
       toast.error("Please enter a category name");
       return;
@@ -422,25 +736,27 @@ export default function SalesSection({ cashier }) {
 
     const updatedCategories = [...customCategories, newCategoryName.trim()];
     setCustomCategories(updatedCategories);
-    localStorage.setItem(
-      "custom_categories",
-      JSON.stringify(updatedCategories)
-    );
+
+    try {
+      await saveCustomTabsToFirebase(updatedCategories, customCategoryProducts);
+      toast.success(
+        `Category "${newCategoryName.trim()}" added and synced to cloud`
+      );
+    } catch (error) {
+      toast.error(`Category added but failed to sync to cloud`);
+    }
+
     setSelectedCategory(newCategoryName.trim());
     setNewCategoryName("");
     setShowAddCategoryModal(false);
-    toast.success(`Category "${newCategoryName.trim()}" added`);
   };
 
-  const handleDeleteCustomCategory = (categoryName) => {
+  const handleDeleteCustomCategory = async (categoryName) => {
     const updatedCategories = customCategories.filter(
       (c) => c !== categoryName
     );
     setCustomCategories(updatedCategories);
-    localStorage.setItem(
-      "custom_categories",
-      JSON.stringify(updatedCategories)
-    );
+    await saveCustomTabsToFirebase(updatedCategories, customCategoryProducts);
     if (selectedCategory === categoryName) {
       setSelectedCategory("all");
     }
@@ -448,13 +764,37 @@ export default function SalesSection({ cashier }) {
   };
 
   // Custom category product slot handlers
-  const handleSlotClick = (index) => {
-    setSelectedSlotIndex(index);
-    setShowProductSelectModal(true);
-    setProductSearchQuery("");
+  const slotLongPressTimer = useRef(null);
+  const isLongPress = useRef(false);
+
+  const handleSlotLongPressStart = (index) => {
+    isLongPress.current = false;
+    slotLongPressTimer.current = setTimeout(() => {
+      isLongPress.current = true;
+      const currentSlots = customCategoryProducts[selectedCategory] || [];
+      const currentSlot = currentSlots[index];
+
+      setSelectedSlotIndex(index);
+      setShowProductSelectModal(true);
+      setProductSearchQuery("");
+
+      // Set selection type based on current slot type, or default to product
+      if (currentSlot && currentSlot.type === "category") {
+        setSelectionType("category");
+      } else {
+        setSelectionType("product");
+      }
+    }, 500); // 500ms long press
   };
 
-  const handleProductSelect = (product) => {
+  const handleSlotLongPressEnd = () => {
+    if (slotLongPressTimer.current) {
+      clearTimeout(slotLongPressTimer.current);
+      slotLongPressTimer.current = null;
+    }
+  };
+
+  const handleItemSelect = async (item) => {
     if (
       selectedSlotIndex !== null &&
       customCategories.includes(selectedCategory)
@@ -462,7 +802,23 @@ export default function SalesSection({ cashier }) {
       const currentSlots =
         customCategoryProducts[selectedCategory] || Array(20).fill(null);
       const updatedSlots = [...currentSlots];
-      updatedSlots[selectedSlotIndex] = product;
+
+      // Store as object with type and data
+      if (selectionType === "product") {
+        updatedSlots[selectedSlotIndex] = {
+          type: "product",
+          id: item.id,
+          data: item,
+        };
+      } else {
+        // item is category name, find the full category object
+        const categoryObj = categoriesData.find((cat) => cat.name === item);
+        updatedSlots[selectedSlotIndex] = {
+          type: "category",
+          id: categoryObj?.id || item,
+          data: { name: item, categoryId: categoryObj?.id },
+        };
+      }
 
       const updatedCategories = {
         ...customCategoryProducts,
@@ -470,17 +826,17 @@ export default function SalesSection({ cashier }) {
       };
 
       setCustomCategoryProducts(updatedCategories);
-      localStorage.setItem(
-        "custom_category_products",
-        JSON.stringify(updatedCategories)
-      );
+      await saveCustomTabsToFirebase(customCategories, updatedCategories);
+
+      const itemName = selectionType === "product" ? item.name : item;
+      toast.success(`${itemName} added to slot ${selectedSlotIndex + 1}`);
+
       setShowProductSelectModal(false);
       setSelectedSlotIndex(null);
-      toast.success(`${product.name} added to slot ${selectedSlotIndex + 1}`);
     }
   };
 
-  const handleRemoveFromSlot = (index, e) => {
+  const handleRemoveFromSlot = async (index, e) => {
     e.stopPropagation();
     if (customCategories.includes(selectedCategory)) {
       const currentSlots =
@@ -494,11 +850,13 @@ export default function SalesSection({ cashier }) {
       };
 
       setCustomCategoryProducts(updatedCategories);
-      localStorage.setItem(
-        "custom_category_products",
-        JSON.stringify(updatedCategories)
-      );
-      toast.success("Product removed from slot");
+
+      try {
+        await saveCustomTabsToFirebase(customCategories, updatedCategories);
+        toast.success("Product removed and synced");
+      } catch (error) {
+        toast.error("Product removed but failed to sync to cloud");
+      }
     }
   };
 
@@ -509,7 +867,7 @@ export default function SalesSection({ cashier }) {
       setSelectedTabForMenu(category);
       setMenuPosition({
         x: rect.left,
-        y: rect.top - 100, // Position menu above the tab
+        y: rect.top - 150, // Position menu above the tab
       });
       setShowTabMenu(true);
     }, 500); // 500ms long press
@@ -522,13 +880,69 @@ export default function SalesSection({ cashier }) {
     }
   };
 
+  const handleEnterDragMode = () => {
+    setIsDragMode(true);
+    setShowTabMenu(false);
+    toast.success("Drag mode enabled - Reorder your tabs");
+  };
+
+  const handleExitDragMode = () => {
+    setIsDragMode(false);
+    toast.success("Drag mode disabled");
+  };
+
+  // Track active id when dragging starts
+  const handleDragStart = (event) => {
+    const { active } = event;
+    setActiveId(active?.id ?? null);
+  };
+
+  // Optimistically reorder while dragging to avoid snap-back
+  const handleDragOver = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = customCategories.indexOf(active.id);
+    const newIndex = customCategories.indexOf(over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const next = arrayMove(customCategories, oldIndex, newIndex);
+    setCustomCategories(next);
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      setActiveId(null);
+      return;
+    }
+
+    const oldIndex = customCategories.indexOf(active.id);
+    const newIndex = customCategories.indexOf(over.id);
+    if (oldIndex === -1 || newIndex === -1) {
+      setActiveId(null);
+      return;
+    }
+
+    const newOrder = arrayMove(customCategories, oldIndex, newIndex);
+    setCustomCategories(newOrder);
+    setActiveId(null);
+
+    saveCustomTabsToFirebase(newOrder, customCategoryProducts)
+      .then(() => toast.success("Tab order updated"))
+      .catch((error) => {
+        console.error("Failed to save order:", error);
+        toast.error("Failed to save tab order");
+      });
+  };
+
   const handleEditCategory = () => {
     setEditCategoryName(selectedTabForMenu);
     setShowEditModal(true);
     setShowTabMenu(false);
   };
 
-  const handleSaveEditCategory = () => {
+  const handleSaveEditCategory = async () => {
     if (!editCategoryName.trim()) {
       toast.error("Please enter a category name");
       return;
@@ -552,22 +966,17 @@ export default function SalesSection({ cashier }) {
       cat === oldName ? newName : cat
     );
     setCustomCategories(updatedCategories);
-    localStorage.setItem(
-      "custom_categories",
-      JSON.stringify(updatedCategories)
-    );
 
     // Update products mapping if exists
+    let updatedProducts = customCategoryProducts;
     if (customCategoryProducts[oldName]) {
-      const updatedProducts = { ...customCategoryProducts };
+      updatedProducts = { ...customCategoryProducts };
       updatedProducts[newName] = updatedProducts[oldName];
       delete updatedProducts[oldName];
       setCustomCategoryProducts(updatedProducts);
-      localStorage.setItem(
-        "custom_category_products",
-        JSON.stringify(updatedProducts)
-      );
     }
+
+    await saveCustomTabsToFirebase(updatedCategories, updatedProducts);
 
     // Update selected category if it was the renamed one
     if (selectedCategory === oldName) {
@@ -579,28 +988,23 @@ export default function SalesSection({ cashier }) {
     toast.success(`Category renamed to "${newName}"`);
   };
 
-  const handleDeleteCategoryFromMenu = () => {
+  const handleDeleteCategoryFromMenu = async () => {
     const categoryToDelete = selectedTabForMenu;
 
     const updatedCategories = customCategories.filter(
       (c) => c !== categoryToDelete
     );
     setCustomCategories(updatedCategories);
-    localStorage.setItem(
-      "custom_categories",
-      JSON.stringify(updatedCategories)
-    );
 
     // Remove products for this category
+    let updatedProducts = customCategoryProducts;
     if (customCategoryProducts[categoryToDelete]) {
-      const updatedProducts = { ...customCategoryProducts };
+      updatedProducts = { ...customCategoryProducts };
       delete updatedProducts[categoryToDelete];
       setCustomCategoryProducts(updatedProducts);
-      localStorage.setItem(
-        "custom_category_products",
-        JSON.stringify(updatedProducts)
-      );
     }
+
+    await saveCustomTabsToFirebase(updatedCategories, updatedProducts);
 
     if (selectedCategory === categoryToDelete) {
       setSelectedCategory("all");
@@ -608,6 +1012,50 @@ export default function SalesSection({ cashier }) {
 
     setShowTabMenu(false);
     toast.success(`Category "${categoryToDelete}" deleted`);
+  };
+
+  // Load available discounts
+  const loadDiscounts = async () => {
+    try {
+      const discounts = await discountsService.getAll();
+      setAvailableDiscounts(discounts);
+    } catch (error) {
+      console.error("Error loading discounts:", error);
+      toast.error("Failed to load discounts");
+    }
+  };
+
+  // Handle discount button click
+  const handleShowDiscounts = () => {
+    loadDiscounts();
+    setShowDiscountModal(true);
+  };
+
+  // Handle discount selection
+  const handleApplyDiscount = (discount) => {
+    const subtotal = getSubtotal();
+
+    // Check if discount is applicable
+    const isApplicable = discountsService.isApplicable(discount, subtotal);
+
+    if (!isApplicable.valid) {
+      toast.error(isApplicable.reason);
+      return;
+    }
+
+    // Apply discount to cart
+    setDiscount(discount.type, discount.value);
+    setSelectedDiscount(discount);
+    setShowDiscountModal(false);
+
+    toast.success(`Discount "${discount.name}" applied!`);
+  };
+
+  // Remove discount
+  const handleRemoveDiscount = () => {
+    setDiscount("percentage", 0);
+    setSelectedDiscount(null);
+    toast.success("Discount removed");
   };
 
   const handleSaveTicket = () => {
@@ -1295,96 +1743,263 @@ export default function SalesSection({ cashier }) {
       <div className="flex-1 flex overflow-hidden min-h-0 main-content-debug">
         {/* Products Section */}
         <div className="flex-1 flex flex-col overflow-hidden min-h-0 products-section-debug">
-          {/* Search Bar - Only show for non-custom categories */}
-          {!customCategories.includes(selectedCategory) && (
-            <div className="flex items-center space-x-2 p-4 pb-0 flex-shrink-0">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  placeholder="Search products by name, barcode, or SKU..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-12 text-lg"
-                />
-              </div>
+          {/* Back Button - Show when viewing category */}
+          {viewingCategoryId && (
+            <div className="flex items-center gap-4 p-4 pb-2 flex-shrink-0 bg-blue-50 border-b">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setViewingCategoryId(null);
+                  setViewingCategoryName(null);
+                  if (previousCustomCategory) {
+                    setSelectedCategory(previousCustomCategory);
+                    setPreviousCustomCategory(null);
+                  }
+                }}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to {previousCustomCategory || "Custom Page"}
+              </Button>
+              <h2 className="text-xl font-semibold">{viewingCategoryName}</h2>
             </div>
           )}
 
+          {/* Search Bar - Only show for non-custom categories and not viewing category */}
+          {!customCategories.includes(selectedCategory) &&
+            !viewingCategoryId && (
+              <div className="flex items-center space-x-2 p-4 pb-0 flex-shrink-0">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Input
+                    placeholder="Search products by name, barcode, or SKU..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 h-12 text-lg"
+                  />
+                </div>
+              </div>
+            )}
+
           {/* Products Grid */}
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 min-h-0 products-grid-debug">
-            {customCategories.includes(selectedCategory) ? (
+            {viewingCategoryId ? (
+              /* Category Products View - Regular Grid of Products from Category */
+              <div className="grid gap-4 grid-cols-5 auto-rows-fr">
+                {products
+                  .filter((product) => product.categoryId === viewingCategoryId)
+                  .map((product) => {
+                    const availableForSale =
+                      product.available_for_sale !== false;
+                    const hasVariants =
+                      product.variants && product.variants.length > 0;
+                    const isOutOfStock = hasVariants
+                      ? product.variants.every(
+                          (v) =>
+                            !v.sku ||
+                            (v.stock_quantity !== undefined &&
+                              v.stock_quantity === 0)
+                        )
+                      : product.stock_quantity !== undefined &&
+                        product.stock_quantity === 0;
+                    const canSell = availableForSale && !isOutOfStock;
+                    const imageUrl = getProductImage(product);
+                    const productColor = getProductColor(product);
+                    const colorClass = getColorClasses(productColor);
+
+                    const handleCardClick = () => {
+                      if (!canSell) return;
+                      handleAddToCart(product);
+                    };
+
+                    return (
+                      <Card
+                        key={product.id || product.sku}
+                        className={cn(
+                          "p-0 group overflow-hidden border bg-white transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
+                          !canSell && "cursor-not-allowed opacity-70"
+                        )}
+                        onClick={handleCardClick}
+                      >
+                        {/* 1:1 Ratio Container */}
+                        <div className="relative w-full pt-[100%] overflow-hidden">
+                          {/* Content positioned absolutely to maintain 1:1 ratio */}
+                          <div className="absolute inset-0">
+                            {imageUrl ? (
+                              <>
+                                {/* Image fills entire 1:1 container */}
+                                <img
+                                  src={imageUrl}
+                                  alt={product.name || "Product image"}
+                                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                  loading="lazy"
+                                />
+                                {/* Title overlay at bottom */}
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1.5">
+                                  <h3 className="text-xs font-semibold text-white text-center line-clamp-2">
+                                    {product.name}
+                                  </h3>
+                                </div>
+                              </>
+                            ) : colorClass ? (
+                              /* Color background with centered title */
+                              <div
+                                className={cn(
+                                  "w-full h-full flex items-center justify-center",
+                                  colorClass
+                                )}
+                              >
+                                <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
+                                  {product.name}
+                                </h3>
+                              </div>
+                            ) : (
+                              /* Fallback: gradient with initial */
+                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400">
+                                <div className="text-center">
+                                  <div className="text-4xl font-semibold text-white mb-2">
+                                    {product.name?.charAt(0).toUpperCase() ||
+                                      "?"}
+                                  </div>
+                                  <h3 className="text-sm font-semibold text-white px-4 line-clamp-2">
+                                    {product.name}
+                                  </h3>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Out of stock overlay */}
+                            {(!availableForSale || isOutOfStock) && (
+                              <>
+                                <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <span className="rounded bg-black/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                                    {!availableForSale
+                                      ? "Unavailable"
+                                      : "Out of Stock"}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+              </div>
+            ) : customCategories.includes(selectedCategory) ? (
               /* Custom Category - 5x4 Grid of Product Slots */
               <div className="grid gap-4 grid-cols-5 grid-rows-4">
                 {(
                   customCategoryProducts[selectedCategory] ||
                   Array(20).fill(null)
-                ).map((product, index) => (
+                ).map((slot, index) => (
                   <Card
                     key={index}
                     className="p-0 group overflow-hidden border bg-white transition-all cursor-pointer hover:border-primary/50 hover:shadow-md"
-                    onClick={() =>
-                      product
-                        ? handleAddToCart(product)
-                        : handleSlotClick(index)
+                    onClick={
+                      slot
+                        ? () => {
+                            // Skip click action if it was a long press
+                            if (isLongPress.current) {
+                              isLongPress.current = false;
+                              return;
+                            }
+
+                            if (slot.type === "product") {
+                              handleAddToCart(slot.data);
+                            } else if (slot.type === "category") {
+                              // Navigate to category view
+                              setPreviousCustomCategory(selectedCategory);
+                              setViewingCategoryId(slot.data.categoryId);
+                              setViewingCategoryName(slot.data.name);
+                            }
+                          }
+                        : undefined
                     }
+                    onMouseDown={() => handleSlotLongPressStart(index)}
+                    onMouseUp={handleSlotLongPressEnd}
+                    onMouseLeave={handleSlotLongPressEnd}
+                    onTouchStart={() => handleSlotLongPressStart(index)}
+                    onTouchEnd={handleSlotLongPressEnd}
                   >
                     <div className="relative w-full pt-[100%] overflow-hidden">
                       <div className="absolute inset-0">
-                        {product ? (
+                        {slot ? (
                           <>
-                            {/* Display selected product */}
-                            {(() => {
-                              const imageUrl = getProductImage(product);
-                              const productColor = getProductColor(product);
-                              const colorClass = getColorClasses(productColor);
+                            {slot.type === "category" ? (
+                              /* Category Slot */
+                              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 relative">
+                                <h3 className="text-lg font-bold text-white text-center px-2">
+                                  {slot.data.name}
+                                </h3>
+                                <div className="absolute top-2 right-2 bg-white/20 px-2 py-0.5 rounded text-xs text-white">
+                                  Category
+                                </div>
+                              </div>
+                            ) : slot.type === "product" && slot.data ? (
+                              /* Product Slot */
+                              <>
+                                {(() => {
+                                  const product = slot.data;
+                                  const imageUrl = getProductImage(product);
+                                  const productColor = getProductColor(product);
+                                  const colorClass =
+                                    getColorClasses(productColor);
 
-                              return imageUrl ? (
-                                <>
-                                  <img
-                                    src={imageUrl}
-                                    alt={product.name || "Product image"}
-                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                    loading="lazy"
-                                  />
-                                  <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1.5">
-                                    <h3 className="text-xs font-semibold text-white text-center line-clamp-2">
-                                      {product.name}
-                                    </h3>
-                                  </div>
-                                </>
-                              ) : colorClass ? (
-                                <div
-                                  className={cn(
-                                    "w-full h-full flex items-center justify-center",
-                                    colorClass
-                                  )}
-                                >
-                                  <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
-                                    {product.name}
-                                  </h3>
-                                </div>
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400">
-                                  <div className="text-center">
-                                    <div className="text-4xl font-semibold text-white mb-2">
-                                      {product.name?.charAt(0).toUpperCase() ||
-                                        "?"}
+                                  return imageUrl ? (
+                                    <>
+                                      <img
+                                        src={imageUrl}
+                                        alt={product.name || "Product image"}
+                                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                        loading="lazy"
+                                      />
+                                      <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1.5">
+                                        <h3 className="text-xs font-semibold text-white text-center line-clamp-2">
+                                          {product.name}
+                                        </h3>
+                                      </div>
+                                    </>
+                                  ) : colorClass ? (
+                                    <div
+                                      className={cn(
+                                        "w-full h-full flex items-center justify-center",
+                                        colorClass
+                                      )}
+                                    >
+                                      <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
+                                        {product.name}
+                                      </h3>
                                     </div>
-                                    <h3 className="text-sm font-semibold text-white px-4 line-clamp-2">
-                                      {product.name}
-                                    </h3>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                            {/* Remove button on hover */}
-                            <button
-                              onClick={(e) => handleRemoveFromSlot(index, e)}
-                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-red-500 hover:bg-red-600 rounded"
-                              title="Remove from slot"
-                            >
-                              <X className="h-4 w-4 text-white" />
-                            </button>
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400">
+                                      <div className="text-center">
+                                        <div className="text-4xl font-semibold text-white mb-2">
+                                          {product.name
+                                            ?.charAt(0)
+                                            .toUpperCase() || "?"}
+                                        </div>
+                                        <h3 className="text-sm font-semibold text-white px-4 line-clamp-2">
+                                          {product.name}
+                                        </h3>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                                {/* Remove button on hover */}
+                                <button
+                                  onClick={(e) =>
+                                    handleRemoveFromSlot(index, e)
+                                  }
+                                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-red-500 hover:bg-red-600 rounded"
+                                  title="Remove from slot"
+                                >
+                                  <X className="h-4 w-4 text-white" />
+                                </button>
+                              </>
+                            ) : null}
                           </>
                         ) : (
                           /* Empty slot with + icon */
@@ -1501,66 +2116,77 @@ export default function SalesSection({ cashier }) {
 
           {/* Excel-Style Category Tabs (Bottom) */}
           <div className="flex-shrink-0 bg-gray-100 border-t">
-            <div className="flex items-center overflow-x-auto scrollbar-hide">
-              {/* All Tab */}
-              <button
-                onClick={() => setSelectedCategory("all")}
-                className={cn(
-                  "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors",
-                  selectedCategory === "all"
-                    ? "bg-white text-gray-900 border-t-2 border-t-green-600"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                )}
-              >
-                All
-              </button>
-
-              {/* Product Categories */}
-              {categories.map((category) => (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center overflow-x-auto scrollbar-hide flex-1">
+                {/* All Tab */}
                 <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => setSelectedCategory("all")}
                   className={cn(
                     "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors",
-                    selectedCategory === category
+                    selectedCategory === "all"
                       ? "bg-white text-gray-900 border-t-2 border-t-green-600"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   )}
                 >
-                  {category}
+                  All
                 </button>
-              ))}
 
-              {/* Custom Categories */}
-              {customCategories.map((category) => (
-                <div key={category} className="relative">
-                  <button
-                    onClick={() => setSelectedCategory(category)}
-                    onMouseDown={(e) => handleTabLongPressStart(category, e)}
-                    onMouseUp={handleTabLongPressEnd}
-                    onMouseLeave={handleTabLongPressEnd}
-                    onTouchStart={(e) => handleTabLongPressStart(category, e)}
-                    onTouchEnd={handleTabLongPressEnd}
-                    className={cn(
-                      "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors",
-                      selectedCategory === category
-                        ? "bg-white text-gray-900 border-t-2 border-t-green-600"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    )}
+                {/* Custom Categories with Drag & Drop */}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={customCategories}
+                    strategy={horizontalListSortingStrategy}
                   >
-                    {category}
-                  </button>
-                </div>
-              ))}
+                    {customCategories.map((category) => (
+                      <SortableTab
+                        key={category}
+                        id={category}
+                        category={category}
+                        isSelected={selectedCategory === category}
+                        onClick={() => setSelectedCategory(category)}
+                        onLongPressStart={(e) =>
+                          handleTabLongPressStart(category, e)
+                        }
+                        onLongPressEnd={handleTabLongPressEnd}
+                        isDragMode={isDragMode}
+                      />
+                    ))}
+                  </SortableContext>
+                  <DragOverlay>
+                    {activeId ? (
+                      <button className="px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap bg-white text-gray-900 border-t-2 border-t-green-600 shadow-lg">
+                        {activeId}
+                      </button>
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
 
-              {/* Add Button */}
-              <button
-                onClick={() => setShowAddCategoryModal(true)}
-                className="px-6 py-4 text-xl font-medium border-r border-gray-300 bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
-                title="Add new category"
-              >
-                <Plus className="h-6 w-6" />
-              </button>
+                {/* Add Button */}
+                <button
+                  onClick={() => setShowAddCategoryModal(true)}
+                  className="px-6 py-4 text-xl font-medium border-r border-gray-300 bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                  title="Add new category"
+                >
+                  <Plus className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Done Button for Drag Mode */}
+              {isDragMode && (
+                <button
+                  onClick={handleExitDragMode}
+                  className="px-6 py-4 text-xl font-medium bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center gap-2 border-l border-gray-300"
+                >
+                  <CheckCircle className="h-5 w-5" />
+                  Done
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1680,17 +2306,49 @@ export default function SalesSection({ cashier }) {
           {/* Cart Summary */}
           <div className="border-t p-4 space-y-3 flex-shrink-0">
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Subtotal</span>
-                <span>{formatCurrency(getSubtotal())}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Discount</span>
-                <span className="text-red-600">
-                  -{formatCurrency(getDiscountAmount())}
-                </span>
-              </div>
-              <Separator />
+              {/* Show applied discount */}
+              {selectedDiscount && (
+                <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-green-600" />
+                    <div>
+                      <p className="text-sm font-medium text-green-900">
+                        {selectedDiscount.name}
+                      </p>
+                      <p className="text-xs text-green-600">
+                        {selectedDiscount.type === "percentage"
+                          ? `${selectedDiscount.value}% off`
+                          : `${formatCurrency(selectedDiscount.value)} off`}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveDiscount}
+                    className="h-6 w-6 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Only show Subtotal and Discount when discount is applied */}
+              {getDiscountAmount() > 0 && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(getSubtotal())}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Discount</span>
+                    <span className="text-red-600">
+                      -{formatCurrency(getDiscountAmount())}
+                    </span>
+                  </div>
+                  <Separator />
+                </>
+              )}
               <div className="flex justify-between text-xl font-bold">
                 <span>Total</span>
                 <span>{formatCurrency(getTotal())}</span>
@@ -1698,14 +2356,27 @@ export default function SalesSection({ cashier }) {
             </div>
 
             <div className="space-y-2">
-              <Button
-                className="w-full h-12 text-lg"
-                onClick={handleCheckout}
-                disabled={items.length === 0}
-              >
-                <CreditCard className="mr-2 h-5 w-5" />
-                Checkout
-              </Button>
+              {/* Discount button row */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-12 w-12 flex-shrink-0"
+                  onClick={handleShowDiscounts}
+                  disabled={items.length === 0}
+                  title="Apply Discount"
+                >
+                  <Percent className="h-5 w-5" />
+                </Button>
+                <Button
+                  className="flex-1 h-12 text-lg"
+                  onClick={handleCheckout}
+                  disabled={items.length === 0}
+                >
+                  <CreditCard className="mr-2 h-5 w-5" />
+                  Checkout
+                </Button>
+              </div>
               <Button
                 variant="outline"
                 className="w-full h-12"
@@ -1714,14 +2385,6 @@ export default function SalesSection({ cashier }) {
               >
                 <Save className="mr-2 h-5 w-5" />
                 Save Ticket
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={clearCart}
-                disabled={items.length === 0}
-              >
-                Clear Cart
               </Button>
             </div>
           </div>
@@ -2207,6 +2870,142 @@ export default function SalesSection({ cashier }) {
           </DialogContent>
         </Dialog>
 
+        {/* Discount Selection Modal */}
+        <Dialog open={showDiscountModal} onOpenChange={setShowDiscountModal}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Available Discounts</DialogTitle>
+              <DialogDescription>
+                Select a discount to apply to your cart. Subtotal:{" "}
+                {formatCurrency(getSubtotal())}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* Discount List */}
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {availableDiscounts.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Tag className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                    <p>No discounts available</p>
+                    <p className="text-sm">
+                      Create discounts in Products section
+                    </p>
+                  </div>
+                ) : (
+                  availableDiscounts
+                    .filter((discount) => discount.isActive)
+                    .map((discount) => {
+                      const subtotal = getSubtotal();
+                      const applicability = discountsService.isApplicable(
+                        discount,
+                        subtotal
+                      );
+                      const now = new Date();
+                      const validFrom = discount.validFrom?.toDate
+                        ? discount.validFrom.toDate()
+                        : discount.validFrom
+                        ? new Date(discount.validFrom)
+                        : null;
+                      const validTo = discount.validTo?.toDate
+                        ? discount.validTo.toDate()
+                        : discount.validTo
+                        ? new Date(discount.validTo)
+                        : null;
+
+                      // Determine status badge
+                      let statusColor = "bg-green-100 text-green-700";
+                      let statusText = "Active";
+
+                      if (validFrom && now < validFrom) {
+                        statusColor = "bg-blue-100 text-blue-700";
+                        statusText = "Upcoming";
+                      } else if (validTo && now > validTo) {
+                        statusColor = "bg-gray-100 text-gray-700";
+                        statusText = "Expired";
+                      }
+
+                      const isDisabled = !applicability.valid;
+
+                      return (
+                        <div
+                          key={discount.id}
+                          className={`p-4 border rounded-lg transition-colors ${
+                            isDisabled
+                              ? "opacity-50 cursor-not-allowed bg-gray-50"
+                              : "cursor-pointer hover:border-green-300 hover:bg-green-50"
+                          }`}
+                          onClick={() =>
+                            !isDisabled && handleApplyDiscount(discount)
+                          }
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Percent className="h-5 w-5 text-green-600" />
+                                <span className="font-semibold text-lg">
+                                  {discount.name}
+                                </span>
+                                <Badge className={statusColor}>
+                                  {statusText}
+                                </Badge>
+                              </div>
+
+                              <div className="space-y-1 text-sm text-gray-600">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-green-700">
+                                    {discount.type === "percentage"
+                                      ? `${discount.value}% OFF`
+                                      : `${formatCurrency(discount.value)} OFF`}
+                                  </span>
+                                </div>
+
+                                {discount.minPurchase > 0 && (
+                                  <div>
+                                    Min. Purchase:{" "}
+                                    {formatCurrency(discount.minPurchase)}
+                                  </div>
+                                )}
+
+                                {(validFrom || validTo) && (
+                                  <div className="text-xs">
+                                    {validFrom && (
+                                      <span>
+                                        From: {validFrom.toLocaleDateString()}
+                                      </span>
+                                    )}
+                                    {validFrom && validTo && <span> • </span>}
+                                    {validTo && (
+                                      <span>
+                                        To: {validTo.toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {!applicability.valid && (
+                                <div className="mt-2 text-xs text-red-600 font-medium">
+                                  ⚠ {applicability.reason}
+                                </div>
+                              )}
+                            </div>
+
+                            {!isDisabled && (
+                              <div className="text-green-600 font-semibold ml-4">
+                                Apply →
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Add Category Modal */}
         <Dialog
           open={showAddCategoryModal}
@@ -2259,7 +3058,7 @@ export default function SalesSection({ cashier }) {
           </DialogContent>
         </Dialog>
 
-        {/* Product Select Modal for Custom Tab Slots */}
+        {/* Product/Category Select Modal for Custom Tab Slots */}
         <Dialog
           open={showProductSelectModal}
           onOpenChange={setShowProductSelectModal}
@@ -2267,87 +3066,150 @@ export default function SalesSection({ cashier }) {
           <DialogContent className="max-w-4xl max-h-[80vh]">
             <DialogHeader>
               <DialogTitle>
-                Select Product for Slot{" "}
+                Select for Slot{" "}
                 {selectedSlotIndex !== null ? selectedSlotIndex + 1 : ""}
               </DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  placeholder="Search products by name, barcode, or SKU..."
-                  value={productSearchQuery}
-                  onChange={(e) => setProductSearchQuery(e.target.value)}
-                  className="pl-10"
-                  autoFocus
-                />
+              {/* Type Toggle */}
+              <div className="flex gap-2 border-b pb-2">
+                <Button
+                  variant={selectionType === "product" ? "default" : "outline"}
+                  onClick={() => setSelectionType("product")}
+                  className="flex-1"
+                >
+                  Product
+                </Button>
+                <Button
+                  variant={selectionType === "category" ? "default" : "outline"}
+                  onClick={() => setSelectionType("category")}
+                  className="flex-1"
+                >
+                  Category
+                </Button>
               </div>
 
-              {/* Products List */}
-              <div className="max-h-96 overflow-y-auto border rounded-lg">
-                <div className="grid gap-2 p-2">
-                  {products
-                    .filter((product) => {
-                      const query = productSearchQuery.toLowerCase();
-                      return (
-                        product.name?.toLowerCase().includes(query) ||
-                        product.sku?.toLowerCase().includes(query) ||
-                        product.barcode?.toLowerCase().includes(query)
-                      );
-                    })
-                    .map((product) => {
-                      const imageUrl = getProductImage(product);
-                      const productColor = getProductColor(product);
-                      const colorClass = getColorClasses(productColor);
+              {selectionType === "product" ? (
+                <>
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Input
+                      placeholder="Search products by name, barcode, or SKU..."
+                      value={productSearchQuery}
+                      onChange={(e) => setProductSearchQuery(e.target.value)}
+                      className="pl-10"
+                      autoFocus
+                    />
+                  </div>
 
-                      return (
-                        <button
-                          key={product.id || product.sku}
-                          onClick={() => handleProductSelect(product)}
-                          className="flex items-center gap-3 p-3 hover:bg-gray-100 rounded-lg transition-colors text-left w-full"
-                        >
-                          {/* Product Image/Color Preview */}
-                          <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border">
-                            {imageUrl ? (
-                              <img
-                                src={imageUrl}
-                                alt={product.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : colorClass ? (
-                              <div
-                                className={cn("w-full h-full", colorClass)}
-                              ></div>
-                            ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 flex items-center justify-center">
-                                <span className="text-2xl font-semibold text-white">
-                                  {product.name?.charAt(0).toUpperCase() || "?"}
-                                </span>
+                  {/* Products List */}
+                  <div className="max-h-96 overflow-y-auto border rounded-lg">
+                    <div className="grid gap-2 p-2">
+                      {products
+                        .filter((product) => {
+                          const query = productSearchQuery.toLowerCase();
+                          return (
+                            product.name?.toLowerCase().includes(query) ||
+                            product.sku?.toLowerCase().includes(query) ||
+                            product.barcode?.toLowerCase().includes(query)
+                          );
+                        })
+                        .map((product) => {
+                          const imageUrl = getProductImage(product);
+                          const productColor = getProductColor(product);
+                          const colorClass = getColorClasses(productColor);
+
+                          return (
+                            <button
+                              key={product.id || product.sku}
+                              onClick={() => handleItemSelect(product)}
+                              className="flex items-center gap-3 p-3 hover:bg-gray-100 rounded-lg transition-colors text-left w-full"
+                            >
+                              {/* Product Image/Color Preview */}
+                              <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border">
+                                {imageUrl ? (
+                                  <img
+                                    src={imageUrl}
+                                    alt={product.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : colorClass ? (
+                                  <div
+                                    className={cn("w-full h-full", colorClass)}
+                                  ></div>
+                                ) : (
+                                  <div className="w-full h-full bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 flex items-center justify-center">
+                                    <span className="text-2xl font-semibold text-white">
+                                      {product.name?.charAt(0).toUpperCase() ||
+                                        "?"}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
 
-                          {/* Product Info */}
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-gray-900 truncate">
-                              {product.name}
-                            </h3>
-                            <p className="text-sm text-gray-500">
-                              {product.sku && `SKU: ${product.sku}`}
-                              {product.barcode &&
-                                ` | Barcode: ${product.barcode}`}
-                            </p>
-                            <p className="text-sm font-medium text-gray-700">
-                              {formatCurrency(product.price || 0)}
-                            </p>
-                          </div>
+                              {/* Product Info */}
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-gray-900 truncate">
+                                  {product.name}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                  {product.sku && `SKU: ${product.sku}`}
+                                  {product.barcode &&
+                                    ` | Barcode: ${product.barcode}`}
+                                </p>
+                                <p className="text-sm font-medium text-gray-700">
+                                  {formatCurrency(product.price || 0)}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Category Selection */
+                <div className="max-h-96 overflow-y-auto border rounded-lg">
+                  <div className="grid gap-2 p-2">
+                    {isLoading ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <RefreshCw className="w-12 h-12 mx-auto mb-2 text-gray-300 animate-spin" />
+                        <p>Loading categories...</p>
+                      </div>
+                    ) : categories.length > 0 ? (
+                      categories.map((category) => (
+                        <button
+                          key={category}
+                          onClick={() => handleItemSelect(category)}
+                          className="p-4 hover:bg-blue-50 rounded-lg transition-colors text-left w-full border"
+                        >
+                          <h3 className="font-semibold text-gray-900">
+                            {category}
+                          </h3>
+                          <p className="text-sm text-gray-500">
+                            Click to browse products from this category
+                          </p>
                         </button>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <p className="font-medium mb-1">
+                          No categories available
+                        </p>
+                        <p className="text-sm">
+                          Categories are automatically extracted from your
+                          products.
+                        </p>
+                        <p className="text-sm mt-2">
+                          Make sure your products have category information.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="flex gap-2">
@@ -2385,6 +3247,12 @@ export default function SalesSection({ cashier }) {
                 className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
               >
                 <span>Edit</span>
+              </button>
+              <button
+                onClick={handleEnterDragMode}
+                className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
+              >
+                <span>Reorder</span>
               </button>
               <button
                 onClick={handleDeleteCategoryFromMenu}
