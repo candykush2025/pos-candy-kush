@@ -4,12 +4,21 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Lock } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Lock, DollarSign } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { dbService } from "@/lib/db/dbService";
 import { getDocuments } from "@/lib/firebase/firestore";
+import { shiftsService } from "@/lib/firebase/shiftsService";
 import { toast } from "sonner";
 import { usePosTabStore } from "@/store/usePosTabStore";
+import { formatCurrency } from "@/lib/utils/format";
 
 // Import section components
 import SalesSection from "@/components/pos/SalesSection";
@@ -18,11 +27,15 @@ import CustomersSection from "@/components/pos/CustomersSection";
 import HistorySection from "@/components/pos/HistorySection";
 import ProductsSection from "@/components/pos/ProductsSection";
 import SettingsSection from "@/components/pos/SettingsSection";
+import ShiftsSection from "@/components/pos/ShiftsSection";
 
 // Cashier Login Component
 function CashierLogin({ onLogin }) {
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showStartingCashModal, setShowStartingCashModal] = useState(false);
+  const [startingCash, setStartingCash] = useState("");
+  const [pendingCashier, setPendingCashier] = useState(null);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -98,8 +111,24 @@ function CashierLogin({ onLogin }) {
       );
 
       if (cashier) {
-        onLogin(cashier);
-        toast.success(`Welcome back, ${cashier.name || "Cashier"}!`);
+        // Always show starting cash modal to allow multiple shifts per day
+        // Check if user has today's shifts to display info
+        const todayShifts = await shiftsService.getTodayShifts(cashier.id);
+        const activeShift = todayShifts.find((s) => s.status === "active");
+
+        if (activeShift) {
+          // Has active shift - resume it
+          onLogin(cashier, activeShift);
+          toast.success(
+            `Welcome back, ${cashier.name || "Cashier"}! Shift resumed.`
+          );
+        } else {
+          // No active shift - show starting cash modal (could be first shift or new shift after clocking out)
+          setPendingCashier(cashier);
+          setShowStartingCashModal(true);
+          setLoading(false);
+          return;
+        }
       } else {
         toast.error(
           `Invalid PIN or no cashier access. Found ${users.length} users.`
@@ -109,6 +138,34 @@ function CashierLogin({ onLogin }) {
     } catch (error) {
       console.error("Login error:", error);
       toast.error("Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartShift = async () => {
+    if (!startingCash || parseFloat(startingCash) < 0) {
+      toast.error("Please enter a valid starting cash amount");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Create new shift
+      const shift = await shiftsService.createShift(
+        { startingCash: parseFloat(startingCash) },
+        pendingCashier.id,
+        pendingCashier.name
+      );
+
+      // Login cashier with shift
+      onLogin(pendingCashier, shift);
+      setShowStartingCashModal(false);
+      toast.success(`Shift started! Welcome, ${pendingCashier.name}!`);
+    } catch (error) {
+      console.error("Error starting shift:", error);
+      toast.error("Failed to start shift. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -154,12 +211,73 @@ function CashierLogin({ onLogin }) {
           </form>
         </CardContent>
       </Card>
+
+      {/* Starting Cash Modal */}
+      <Dialog
+        open={showStartingCashModal}
+        onOpenChange={setShowStartingCashModal}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start Your Shift</DialogTitle>
+            <DialogDescription>
+              Enter the starting cash amount in the register
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Starting Cash Amount
+              </label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={startingCash}
+                  onChange={(e) => setStartingCash(e.target.value)}
+                  className="pl-10 text-lg"
+                  autoFocus
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                This is the cash you have in the register at the start of your
+                shift
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowStartingCashModal(false);
+                  setPendingCashier(null);
+                  setStartingCash("");
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleStartShift}
+                disabled={loading || !startingCash}
+                className="flex-1"
+              >
+                {loading ? "Starting..." : "Start Shift"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 export default function SalesPage() {
   const [cashier, setCashier] = useState(null);
+  const [activeShift, setActiveShift] = useState(null);
   const { user } = useAuthStore();
   const { activeTab, setActiveTab } = usePosTabStore();
 
@@ -199,9 +317,14 @@ export default function SalesPage() {
     };
   }, []);
 
-  const handleCashierLogin = (user) => {
+  const handleCashierLogin = (user, shift = null) => {
     setCashier(user);
+    setActiveShift(shift);
+    const sessionData = { user, shift };
     localStorage.setItem("pos_cashier", JSON.stringify(user));
+    if (shift) {
+      localStorage.setItem("active_shift", JSON.stringify(shift));
+    }
     // Trigger layout update
     window.dispatchEvent(new Event("cashier-update"));
     setActiveTab("sales");
@@ -209,7 +332,9 @@ export default function SalesPage() {
 
   const handleCashierLogout = () => {
     setCashier(null);
+    setActiveShift(null);
     localStorage.removeItem("pos_cashier");
+    localStorage.removeItem("active_shift");
     toast.success("Logged out successfully");
   };
 
@@ -226,6 +351,7 @@ export default function SalesPage() {
       )}
       {activeTab === "customers" && <CustomersSection />}
       {activeTab === "history" && <HistorySection cashier={cashier} />}
+      {activeTab === "shifts" && <ShiftsSection cashier={cashier} />}
       {activeTab === "products" && <ProductsSection />}
       {activeTab === "settings" && <SettingsSection />}
     </div>

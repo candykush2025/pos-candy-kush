@@ -23,6 +23,7 @@ import {
   Database,
   Menu,
   X,
+  Clock,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -130,6 +131,7 @@ export default function AdminLayout({ children }) {
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Customers", href: "/admin/customers", icon: UserCircle },
     { name: "Users", href: "/admin/users", icon: Users },
+    { name: "Shifts", href: "/admin/shifts", icon: Clock },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { name: "Integration", href: "/admin/integration", icon: Link2 },
     { name: "Settings", href: "/admin/settings", icon: Settings },
@@ -358,4 +360,3 @@ export default function AdminLayout({ children }) {
     </div>
   );
 }
-

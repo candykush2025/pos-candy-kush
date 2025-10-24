@@ -30,6 +30,7 @@ import {
   categoriesService,
 } from "@/lib/firebase/firestore";
 import { discountsService } from "@/lib/firebase/discountsService";
+import { shiftsService } from "@/lib/firebase/shiftsService";
 import { dbService } from "@/lib/db/dbService";
 import db from "@/lib/db/index";
 import { Button } from "@/components/ui/button";
@@ -479,29 +480,7 @@ export default function SalesSection({ cashier }) {
         await dbService.upsertProducts(productsData);
       }
 
-      // Debug: Log heights after products load
-      setTimeout(() => {
-        const mainContent = document.querySelector(".main-content-debug");
-        const productsSection = document.querySelector(
-          ".products-section-debug"
-        );
-        const productsGrid = document.querySelector(".products-grid-debug");
-        const cartSection = document.querySelector(".cart-section-debug");
-
-        console.log("=== HEIGHT DEBUG ===");
-        console.log("Viewport Height:", window.innerHeight);
-        console.log("Main Content:", mainContent?.offsetHeight, "px");
-        console.log("Products Section:", productsSection?.offsetHeight, "px");
-        console.log(
-          "Products Grid:",
-          productsGrid?.scrollHeight,
-          "px (scroll height)"
-        );
-        console.log("Products Grid Visible:", productsGrid?.offsetHeight, "px");
-        console.log("Cart Section:", cartSection?.offsetHeight, "px");
-        console.log("Total Products:", productsData.length);
-        console.log("==================");
-      }, 100);
+      // Debug logging removed
     } catch (error) {
       console.error(
         "Failed to load products from Firebase, trying IndexedDB:",
@@ -1262,7 +1241,7 @@ export default function SalesSection({ cashier }) {
         // Additional info
         cashierId: cashier?.id || null,
         cashierName: cashier?.name || "Unknown Cashier",
-        userId: user?.id || null,
+        userId: cashier?.id || null,
         customerId: cartCustomer?.id || null,
         customerName: cartCustomer?.name || null,
 
@@ -1342,7 +1321,7 @@ export default function SalesSection({ cashier }) {
             subtotal: cartData.subtotal,
             discount: cartData.discountAmount,
             tax: 0,
-            userId: user?.id || null,
+            userId: cashier?.id || null,
             cashierId: cashier?.id || null,
             cashierName: cashier?.name || "Unknown Cashier",
             customerId: cartCustomer?.id || null,
@@ -1367,10 +1346,47 @@ export default function SalesSection({ cashier }) {
         // Don't fail the checkout if IndexedDB fails
       }
 
+      // Update shift if cashier has an active shift and payment is cash
+      if (cashier && paymentMethod === "cash") {
+        try {
+          const savedShift = localStorage.getItem("active_shift");
+          if (savedShift) {
+            const activeShift = JSON.parse(savedShift);
+            if (activeShift && activeShift.status === "active") {
+              // Add transaction to shift
+              await shiftsService.addTransaction(activeShift.id, {
+                id: receiptData.orderNumber,
+                total: total,
+                paymentMethod: paymentMethod,
+                createdAt: now.toISOString(),
+              });
+
+              // Refresh shift data
+              const updatedShift = await shiftsService.getById(activeShift.id);
+              localStorage.setItem(
+                "active_shift",
+                JSON.stringify(updatedShift)
+              );
+
+              // Notify layout to reload shift data
+              window.dispatchEvent(new Event("cashier-update"));
+            }
+          }
+        } catch (error) {
+          console.error("Error updating shift:", error);
+          // Don't fail checkout if shift update fails
+        }
+      }
+
       // Store completed order and show receipt modal
       setCompletedOrder(receiptData);
       setShowPaymentModal(false);
       setShowReceiptModal(true);
+
+      // Clear cart immediately after successful checkout
+      clearCart();
+      setCashReceived("");
+      setPaymentMethod("cash");
 
       if (syncStatus === "synced") {
         toast.success("Payment completed and synced to Loyverse!");
@@ -1425,7 +1441,9 @@ export default function SalesSection({ cashier }) {
   const handleNewTransaction = () => {
     setShowReceiptModal(false);
     setCompletedOrder(null);
-    clearCart(); // This will also clear the customer in cart store
+    // Cart is already cleared after successful checkout
+    // Just ensure everything is reset
+    clearCart();
     setCashReceived("");
     setPaymentMethod("cash");
     toast.success("Ready for new transaction");
@@ -1616,20 +1634,20 @@ export default function SalesSection({ cashier }) {
         </div>
 
         <div class="order-info">
-          <div>Order: ${order.orderNumber}</div>
+          <div>Order: ${order.orderNumber || order.order || "N/A"}</div>
           <div>Date: ${receiptDate}</div>
-          <div>Cashier: ${user?.name || "Staff"}</div>
+          <div>Cashier: ${cashier?.name || order.cashierName || "Staff"}</div>
         </div>
 
         <div class="items">
-          ${order.items
+          ${(order.line_items || order.items || [])
             .map(
               (item) => `
             <div class="item">
-              <div class="item-name">${item.name}</div>
+              <div class="item-name">${item.item_name || item.name}</div>
               <div class="item-detail">
                 <span>${item.quantity} x ${formatCurrency(item.price)}</span>
-                <span>${formatCurrency(item.total)}</span>
+                <span>${formatCurrency(item.total_money || item.total)}</span>
               </div>
             </div>
           `
@@ -1643,18 +1661,22 @@ export default function SalesSection({ cashier }) {
             <span>${formatCurrency(order.subtotal)}</span>
           </div>
           ${
-            order.discount > 0
+            (order.total_discount || order.discount || 0) > 0
               ? `
             <div class="total-row">
               <span>Discount:</span>
-              <span>-${formatCurrency(order.discount)}</span>
+              <span>-${formatCurrency(
+                order.total_discount || order.discount
+              )}</span>
             </div>
           `
               : ""
           }
           <div class="total-row grand">
             <span>TOTAL:</span>
-            <span>${formatCurrency(order.total)}</span>
+            <span>${formatCurrency(
+              order.total_money || order.total || 0
+            )}</span>
           </div>
         </div>
 
@@ -1662,7 +1684,8 @@ export default function SalesSection({ cashier }) {
           <div class="total-row">
             <span>Payment Method:</span>
             <span>${
-              order.paymentTypeName || order.paymentMethod.toUpperCase()
+              order.paymentTypeName ||
+              (order.paymentMethod ? order.paymentMethod.toUpperCase() : "N/A")
             }</span>
           </div>
           ${
@@ -1670,10 +1693,10 @@ export default function SalesSection({ cashier }) {
               ? `
             <div class="total-row">
               <span>Cash Received:</span>
-              <span>${formatCurrency(order.cashReceived)}</span>
+              <span>${formatCurrency(order.cashReceived || 0)}</span>
             </div>
             ${
-              order.change > 0
+              (order.change || 0) > 0
                 ? `
               <div class="change-highlight">
                 CHANGE: ${formatCurrency(order.change)}
@@ -2614,7 +2637,11 @@ export default function SalesSection({ cashier }) {
                         Total Amount:
                       </span>
                       <span className="font-bold text-lg">
-                        {formatCurrency(completedOrder.total)}
+                        {formatCurrency(
+                          completedOrder.total_money ||
+                            completedOrder.total ||
+                            0
+                        )}
                       </span>
                     </div>
 
@@ -2625,17 +2652,17 @@ export default function SalesSection({ cashier }) {
                             Cash Received:
                           </span>
                           <span className="font-medium">
-                            {formatCurrency(completedOrder.cashReceived)}
+                            {formatCurrency(completedOrder.cashReceived || 0)}
                           </span>
                         </div>
-                        {completedOrder.change > 0 && (
+                        {(completedOrder.change || 0) > 0 && (
                           <div className="bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 p-3 rounded mt-2">
                             <div className="flex justify-between items-center">
                               <span className="font-semibold text-yellow-800 dark:text-yellow-200">
                                 Change to Return:
                               </span>
                               <span className="font-bold text-xl text-yellow-800 dark:text-yellow-200">
-                                {formatCurrency(completedOrder.change)}
+                                {formatCurrency(completedOrder.change || 0)}
                               </span>
                             </div>
                           </div>
