@@ -67,6 +67,7 @@ import {
   RefreshCw,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   ArrowLeftRight,
   Bitcoin,
   Folder,
@@ -161,6 +162,7 @@ export default function SalesSection({ cashier }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [unsyncedOrders, setUnsyncedOrders] = useState(0);
+  const [hasActiveShift, setHasActiveShift] = useState(false);
   const [categories, setCategories] = useState([]); // category names for tabs
   const [categoriesData, setCategoriesData] = useState([]); // full category objects from Firebase
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -246,7 +248,60 @@ export default function SalesSection({ cashier }) {
     loadProducts();
     loadCustomers();
     checkUnsyncedOrders();
+    checkActiveShift();
   }, []);
+
+  // Check for active shift
+  const checkActiveShift = () => {
+    try {
+      const savedShift = localStorage.getItem("active_shift");
+      if (savedShift) {
+        const activeShift = JSON.parse(savedShift);
+        setHasActiveShift(activeShift && activeShift.status === "active");
+      } else {
+        setHasActiveShift(false);
+      }
+    } catch (error) {
+      console.error("Error checking active shift:", error);
+      setHasActiveShift(false);
+    }
+  };
+
+  // Reload data when cashier changes
+  useEffect(() => {
+    if (cashier?.id) {
+      console.log(
+        `👤 Cashier changed, reloading categories for: ${cashier.name} (${cashier.id})`
+      );
+
+      // Clear old categories first
+      setCategories([]);
+      setCategoriesData([]);
+      setCustomCategories([]);
+      setCustomCategoryProducts({});
+
+      // Reload products and categories
+      loadProducts();
+      
+      // Check for active shift
+      checkActiveShift();
+    }
+  }, [cashier?.id]);
+
+  // Listen for cashier-update events from other components
+  useEffect(() => {
+    const handleCashierUpdate = () => {
+      console.log("🔄 Received cashier-update event in SalesSection");
+      if (cashier?.id) {
+        loadProducts();
+        checkActiveShift();
+      }
+    };
+
+    window.addEventListener("cashier-update", handleCashierUpdate);
+    return () =>
+      window.removeEventListener("cashier-update", handleCashierUpdate);
+  }, [cashier?.id]);
 
   // Reload custom tabs when user changes (login/logout)
   useEffect(() => {
@@ -360,14 +415,20 @@ export default function SalesSection({ cashier }) {
       setProducts(productsData);
       setFilteredProducts(productsData);
 
-      // Store full category objects and filter out deleted ones
-      const activeCategories = categoriesData.filter(
-        (cat) => cat.name && !cat.deletedAt
+      // Filter categories for current user and filter out deleted ones
+      const userCategories = userId
+        ? categoriesData.filter(
+            (cat) => cat.userId === userId && cat.name && !cat.deletedAt
+          )
+        : categoriesData.filter((cat) => cat.name && !cat.deletedAt);
+
+      console.log(
+        `📂 Loaded ${userCategories.length} categories for user: ${userId}`
       );
-      setCategoriesData(activeCategories);
+      setCategoriesData(userCategories);
 
       // Set category names for modal selection
-      const categoryNames = activeCategories.map((cat) => cat.name).sort();
+      const categoryNames = userCategories.map((cat) => cat.name).sort();
       setCategories(categoryNames);
 
       // Load custom tabs from Firebase if user is logged in
@@ -383,7 +444,7 @@ export default function SalesSection({ cashier }) {
 
             // Create category map for resolving category slots
             const categoryMap = {};
-            activeCategories.forEach((cat) => (categoryMap[cat.id] = cat));
+            userCategories.forEach((cat) => (categoryMap[cat.id] = cat));
 
             const resolvedSlots = {};
             Object.keys(firebaseTabs.categoryProducts || {}).forEach(
@@ -1076,6 +1137,25 @@ export default function SalesSection({ cashier }) {
   const handleCheckout = () => {
     if (items.length === 0) {
       toast.error("Cart is empty");
+      return;
+    }
+
+    // Check if cashier has an active shift
+    const savedShift = localStorage.getItem("active_shift");
+    if (!savedShift) {
+      toast.error("No active shift! Please start a shift to make transactions.");
+      return;
+    }
+
+    try {
+      const activeShift = JSON.parse(savedShift);
+      if (!activeShift || activeShift.status !== "active") {
+        toast.error("No active shift! Please start a shift to make transactions.");
+        return;
+      }
+    } catch (error) {
+      console.error("Error parsing active shift:", error);
+      toast.error("No active shift! Please start a shift to make transactions.");
       return;
     }
 
@@ -2379,6 +2459,23 @@ export default function SalesSection({ cashier }) {
             </div>
 
             <div className="space-y-2">
+              {/* No Shift Warning */}
+              {!hasActiveShift && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                        View-Only Mode
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                        Start a shift to make transactions
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Discount button row */}
               <div className="flex gap-2">
                 <Button

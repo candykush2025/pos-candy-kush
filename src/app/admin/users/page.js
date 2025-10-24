@@ -80,6 +80,17 @@ export default function AdminUsers() {
         return;
       }
 
+      // Check if PIN is already in use by another user
+      if (formData.pin) {
+        const existingUserWithPin = users.find((u) => u.pin === formData.pin);
+        if (existingUserWithPin) {
+          toast.error(
+            `PIN already in use by ${existingUserWithPin.name}. Please choose a different PIN.`
+          );
+          return;
+        }
+      }
+
       await registerUser(formData.email, formData.password, {
         name: formData.name,
         role: formData.role,
@@ -139,6 +150,19 @@ export default function AdminUsers() {
       ) {
         toast.error("PIN must be at least 4 digits");
         return;
+      }
+
+      // Check if PIN is already in use by another user (excluding current user)
+      if (editFormData.pin) {
+        const existingUserWithPin = users.find(
+          (u) => u.pin === editFormData.pin && u.id !== editingUser.id
+        );
+        if (existingUserWithPin) {
+          toast.error(
+            `PIN already in use by ${existingUserWithPin.name}. Please choose a different PIN.`
+          );
+          return;
+        }
       }
 
       // Validate new password if provided

@@ -551,7 +551,7 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
 }
 
 // Main Customers Section
-export default function CustomersSection() {
+export default function CustomersSection({ cashier }) {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -562,8 +562,22 @@ export default function CustomersSection() {
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] =
     useState(null);
 
+  // Load customers when component mounts or cashier changes
   useEffect(() => {
     loadCustomers();
+  }, [cashier?.id]); // Reload when cashier changes
+
+  // Listen for cashier-update events
+  useEffect(() => {
+    const handleCashierUpdate = () => {
+      console.log("Cashier updated - reloading customers");
+      loadCustomers();
+    };
+
+    window.addEventListener("cashier-update", handleCashierUpdate);
+    return () => {
+      window.removeEventListener("cashier-update", handleCashierUpdate);
+    };
   }, []);
 
   useEffect(() => {
@@ -585,11 +599,26 @@ export default function CustomersSection() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
+      // Clear previous customers when switching users
+      setCustomers([]);
+      setFilteredCustomers([]);
+
       const data = await customersService.getAll({
         orderBy: { field: "name", direction: "asc" },
       });
-      setCustomers(data);
-      setFilteredCustomers(data);
+
+      // Filter customers by cashier if cashier is provided
+      const cashierCustomers = cashier
+        ? data.filter((c) => c.createdBy === cashier.id)
+        : data;
+
+      console.log(
+        `Loaded ${cashierCustomers.length} customers for ${
+          cashier?.name || "all"
+        }`
+      );
+      setCustomers(cashierCustomers);
+      setFilteredCustomers(cashierCustomers);
     } catch (error) {
       console.error("Error loading customers:", error);
       toast.error("Failed to load customers");
@@ -615,8 +644,13 @@ export default function CustomersSection() {
         await customersService.update(editingCustomer.id, formData);
         toast.success("Customer updated successfully");
       } else {
-        // Create new customer
-        await customersService.create(formData);
+        // Create new customer with cashier info
+        const customerData = {
+          ...formData,
+          createdBy: cashier?.id || null,
+          createdByName: cashier?.name || null,
+        };
+        await customersService.create(customerData);
         toast.success("Customer created successfully");
       }
       loadCustomers();

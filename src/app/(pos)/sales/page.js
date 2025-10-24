@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Lock, DollarSign } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useCartStore } from "@/store/useCartStore";
 import { dbService } from "@/lib/db/dbService";
 import { getDocuments } from "@/lib/firebase/firestore";
 import { shiftsService } from "@/lib/firebase/shiftsService";
@@ -144,25 +145,27 @@ function CashierLogin({ onLogin }) {
   };
 
   const handleStartShift = async () => {
-    if (!startingCash || parseFloat(startingCash) < 0) {
-      toast.error("Please enter a valid starting cash amount");
-      return;
-    }
-
     try {
       setLoading(true);
 
-      // Create new shift
-      const shift = await shiftsService.createShift(
-        { startingCash: parseFloat(startingCash) },
-        pendingCashier.id,
-        pendingCashier.name
-      );
+      if (startingCash && parseFloat(startingCash) >= 0) {
+        // Create new shift with starting cash
+        const shift = await shiftsService.createShift(
+          { startingCash: parseFloat(startingCash) },
+          pendingCashier.id,
+          pendingCashier.name
+        );
 
-      // Login cashier with shift
-      onLogin(pendingCashier, shift);
-      setShowStartingCashModal(false);
-      toast.success(`Shift started! Welcome, ${pendingCashier.name}!`);
+        // Login cashier with shift
+        onLogin(pendingCashier, shift);
+        setShowStartingCashModal(false);
+        toast.success(`Shift started! Welcome, ${pendingCashier.name}!`);
+      } else {
+        // Skip shift creation - login without shift (view-only mode)
+        onLogin(pendingCashier, null);
+        setShowStartingCashModal(false);
+        toast.info(`Welcome, ${pendingCashier.name}! View-only mode - Start a shift to make transactions.`);
+      }
     } catch (error) {
       console.error("Error starting shift:", error);
       toast.error("Failed to start shift. Please try again.");
@@ -205,9 +208,14 @@ function CashierLogin({ onLogin }) {
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
-            <p className="text-sm text-gray-500 text-center mt-4">
-              Works offline with synced users
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-gray-500 text-center">
+                Works offline with synced users
+              </p>
+              <p className="text-xs text-blue-600 text-center">
+                💡 Enter any employee's PIN to switch users
+              </p>
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -227,7 +235,7 @@ function CashierLogin({ onLogin }) {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                Starting Cash Amount
+                Starting Cash Amount (Optional)
               </label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -243,8 +251,8 @@ function CashierLogin({ onLogin }) {
                 />
               </div>
               <p className="text-xs text-gray-500">
-                This is the cash you have in the register at the start of your
-                shift
+                Enter starting cash to start a shift and make transactions. Skip
+                to access view-only mode (history, reports, etc.)
               </p>
             </div>
             <div className="flex gap-2">
@@ -259,6 +267,15 @@ function CashierLogin({ onLogin }) {
                 className="flex-1"
               >
                 Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleStartShift}
+                disabled={loading}
+                className="flex-1"
+              >
+                {loading ? "Loading..." : "Skip (View Only)"}
               </Button>
               <Button
                 onClick={handleStartShift}
@@ -285,22 +302,23 @@ export default function SalesPage() {
   useEffect(() => {
     const loadCashier = () => {
       const savedCashier = localStorage.getItem("pos_cashier");
+      console.log(
+        "📥 Sales page loadCashier:",
+        savedCashier ? JSON.parse(savedCashier).name : "null"
+      );
+
       if (savedCashier) {
         try {
           const parsedCashier = JSON.parse(savedCashier);
-          // Only update if different to prevent infinite loop
-          setCashier((prev) => {
-            if (JSON.stringify(prev) !== JSON.stringify(parsedCashier)) {
-              return parsedCashier;
-            }
-            return prev;
-          });
+          setCashier(parsedCashier);
         } catch (error) {
           console.error("Error loading cashier session:", error);
+          setCashier(null);
         }
       } else {
         // If no cashier in localStorage, clear state to show login
-        setCashier((prev) => (prev === null ? prev : null));
+        console.log("🔓 Sales page: Clearing cashier state");
+        setCashier(null);
       }
     };
 
@@ -318,9 +336,53 @@ export default function SalesPage() {
   }, []);
 
   const handleCashierLogin = (user, shift = null) => {
+    // Check if switching employees
+    const currentCashier = localStorage.getItem("pos_cashier");
+    if (currentCashier) {
+      try {
+        const parsedCurrentCashier = JSON.parse(currentCashier);
+        if (parsedCurrentCashier.id !== user.id) {
+          // Different employee - clear all previous data
+          console.log(
+            `🔄 Switching from ${parsedCurrentCashier.name} to ${user.name}`
+          );
+          toast.info(`Switching to ${user.name}...`);
+
+          // IMMEDIATELY clear state first
+          setCashier(null);
+          setActiveShift(null);
+
+          // Clear all localStorage data related to previous cashier
+          localStorage.removeItem("pos_cashier");
+          localStorage.removeItem("active_shift");
+
+          // Trigger update to clear layout
+          window.dispatchEvent(new Event("cashier-update"));
+
+          // Force a brief delay to ensure clean state, then set new employee
+          setTimeout(() => {
+            console.log(`✅ Setting new employee: ${user.name}`);
+            setCashier(user);
+            setActiveShift(shift);
+            localStorage.setItem("pos_cashier", JSON.stringify(user));
+            if (shift) {
+              localStorage.setItem("active_shift", JSON.stringify(shift));
+            }
+            // Trigger layout update again with new data
+            window.dispatchEvent(new Event("cashier-update"));
+            setActiveTab("sales");
+            toast.success(`Welcome, ${user.name}!`);
+          }, 200);
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking current cashier:", error);
+      }
+    }
+
+    // Same employee or first login - proceed normally
     setCashier(user);
     setActiveShift(shift);
-    const sessionData = { user, shift };
     localStorage.setItem("pos_cashier", JSON.stringify(user));
     if (shift) {
       localStorage.setItem("active_shift", JSON.stringify(shift));
@@ -330,12 +392,37 @@ export default function SalesPage() {
     setActiveTab("sales");
   };
 
-  const handleCashierLogout = () => {
-    setCashier(null);
-    setActiveShift(null);
-    localStorage.removeItem("pos_cashier");
-    localStorage.removeItem("active_shift");
-    toast.success("Logged out successfully");
+  const handleCashierLogout = async () => {
+    try {
+      console.log("🧹 Starting complete logout cleanup...");
+      
+      // Clear React state
+      setCashier(null);
+      setActiveShift(null);
+      
+      // Clear ALL localStorage data
+      console.log("🗑️ Clearing all localStorage...");
+      localStorage.clear();
+      
+      // Clear ALL IndexedDB data (offline data)
+      console.log("🗑️ Clearing all offline data from IndexedDB...");
+      await dbService.clearAllData();
+      
+      // Clear cart store
+      console.log("🗑️ Clearing cart...");
+      const { clearCart } = useCartStore.getState();
+      clearCart();
+      
+      // Trigger update events
+      window.dispatchEvent(new Event("cashier-update"));
+      window.dispatchEvent(new Event("storage"));
+      
+      console.log("✅ Complete cleanup finished!");
+      toast.success("Logged out successfully - All data cleared");
+    } catch (error) {
+      console.error("❌ Error during logout cleanup:", error);
+      toast.error("Logout successful, but some data may remain cached");
+    }
   };
 
   // Show login screen if no cashier is logged in
@@ -349,7 +436,7 @@ export default function SalesPage() {
       {activeTab === "tickets" && (
         <TicketsSection onSwitchToSales={() => setActiveTab("sales")} />
       )}
-      {activeTab === "customers" && <CustomersSection />}
+      {activeTab === "customers" && <CustomersSection cashier={cashier} />}
       {activeTab === "history" && <HistorySection cashier={cashier} />}
       {activeTab === "shifts" && <ShiftsSection cashier={cashier} />}
       {activeTab === "products" && <ProductsSection />}

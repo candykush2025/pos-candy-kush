@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useCartStore } from "@/store/useCartStore";
 import { useSyncStore } from "@/store/useSyncStore";
 import useOnlineStatus from "@/hooks/useOnlineStatus";
 import { useIdleTimeout } from "@/hooks/useIdleTimeout";
 import { syncEngine } from "@/lib/sync/syncEngine";
+import { dbService } from "@/lib/db/dbService";
 import api from "@/lib/api/client";
 import {
   Wifi,
@@ -59,8 +61,6 @@ export default function POSLayout({ children }) {
   const [showEndShiftModal, setShowEndShiftModal] = useState(false);
   const [endingCash, setEndingCash] = useState("");
   const [isEndingShift, setIsEndingShift] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
-  const [unlockPin, setUnlockPin] = useState("");
   const [idleTimeoutMs, setIdleTimeoutMs] = useState(0);
   const [idleCountdown, setIdleCountdown] = useState(0);
   const { activeTab, setActiveTab } = usePosTabStore();
@@ -87,9 +87,13 @@ export default function POSLayout({ children }) {
 
   // Idle timeout callback
   const handleIdle = () => {
-    setIsLocked(true);
-    setUnlockPin("");
-    toast.warning("Session locked due to inactivity");
+    // Clear cashier to show PIN login screen
+    setCashier(null);
+    setActiveShift(null);
+    localStorage.removeItem("pos_cashier");
+    localStorage.removeItem("active_shift");
+    window.dispatchEvent(new Event("cashier-update"));
+    toast.warning("Session locked due to inactivity. Please enter PIN.");
   };
 
   // Apply idle timeout when cashier is logged in and timeout > 0
@@ -102,28 +106,6 @@ export default function POSLayout({ children }) {
   useEffect(() => {
     setIdleCountdown(remainingTime);
   }, [remainingTime]);
-
-  const handleUnlock = () => {
-    if (!cashier || !unlockPin) {
-      toast.error("Please enter your PIN");
-      return;
-    }
-
-    if (unlockPin === cashier.pin) {
-      setIsLocked(false);
-      setUnlockPin("");
-      toast.success("Session unlocked");
-    } else {
-      toast.error("Incorrect PIN");
-      setUnlockPin("");
-    }
-  };
-
-  const handleUnlockKeyPress = (e) => {
-    if (e.key === "Enter") {
-      handleUnlock();
-    }
-  };
 
   // Force light theme for POS/Cashier layout
   useEffect(() => {
@@ -147,11 +129,16 @@ export default function POSLayout({ children }) {
 
       if (savedCashier) {
         try {
-          setCashier(JSON.parse(savedCashier));
+          const parsed = JSON.parse(savedCashier);
+          console.log(
+            `📋 Layout loading cashier: ${parsed.name} (${parsed.id})`
+          );
+          setCashier(parsed);
         } catch (error) {
           console.error("Error loading cashier:", error);
         }
       } else {
+        console.log("🔓 Layout: No cashier in localStorage, clearing state");
         setCashier(null);
       }
 
@@ -215,16 +202,44 @@ export default function POSLayout({ children }) {
     }
   };
 
-  const performLogout = () => {
-    setCashier(null);
-    setActiveShift(null);
-    localStorage.removeItem("pos_cashier");
-    localStorage.removeItem("active_shift");
-    window.dispatchEvent(new Event("cashier-update"));
-    toast.success("Cashier logged out");
-    // Logout admin user and redirect to login page
-    logout();
-    router.push("/login");
+  const performLogout = async () => {
+    try {
+      console.log("🧹 Performing complete logout - clearing all data");
+      
+      // Clear React state
+      setCashier(null);
+      setActiveShift(null);
+      
+      // Clear ALL localStorage data
+      console.log("🗑️ Clearing all localStorage...");
+      localStorage.clear();
+      
+      // Clear ALL IndexedDB data (offline data)
+      console.log("🗑️ Clearing all offline data from IndexedDB...");
+      await dbService.clearAllData();
+      
+      // Clear cart store
+      console.log("🗑️ Clearing cart...");
+      const { clearCart } = useCartStore.getState();
+      clearCart();
+      
+      // Trigger update events
+      window.dispatchEvent(new Event("cashier-update"));
+      window.dispatchEvent(new Event("storage"));
+      
+      console.log("✅ Complete cleanup finished!");
+      toast.success("Logged out - All data cleared");
+      
+      // Logout admin user and redirect to login page
+      logout();
+      router.push("/login");
+    } catch (error) {
+      console.error("❌ Error during logout cleanup:", error);
+      toast.error("Logout successful, but some data may remain cached");
+      // Still proceed with logout even if cleanup fails
+      logout();
+      router.push("/login");
+    }
   };
 
   const handleEndShift = async () => {
@@ -294,7 +309,10 @@ export default function POSLayout({ children }) {
   }
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col light overflow-hidden">
+    <div
+      key={cashier?.id || "no-cashier"}
+      className="h-screen bg-gray-50 flex flex-col light overflow-hidden"
+    >
       {/* ONE SINGLE UNIFIED HEADER ROW */}
       <header className="bg-white border-b shadow-sm flex-shrink-0 z-50">
         <div className="flex items-center justify-between gap-3 px-4 py-2">
@@ -443,39 +461,49 @@ export default function POSLayout({ children }) {
                 size="sm"
                 onClick={handleCashierLogout}
                 className="gap-1.5 h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                title={`Logged in as: ${cashier.name}`}
               >
+                <User className="h-3.5 w-3.5" />
+                <span className="text-xs">{cashier.name}</span>
                 <LogOut className="h-3.5 w-3.5" />
-                <span className="text-xs">Logout</span>
               </Button>
             )}
 
-            {/* Admin Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1.5 h-7 px-2">
-                  <User className="h-3.5 w-3.5" />
-                  <span className="text-xs hidden sm:inline">{user?.name}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuLabel>
-                  <div>
-                    <p className="text-xs font-semibold">{user?.name}</p>
-                    <p className="text-xs text-gray-500 capitalize">
-                      {user?.role}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="text-red-600 text-xs"
-                >
-                  <LogOut className="mr-2 h-3.5 w-3.5" />
-                  Admin Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Admin Menu - Only show when NOT on sales page or no cashier logged in */}
+            {pathname !== "/sales" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 h-7 px-2"
+                  >
+                    <User className="h-3.5 w-3.5" />
+                    <span className="text-xs hidden sm:inline">
+                      {user?.name}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuLabel>
+                    <div>
+                      <p className="text-xs font-semibold">{user?.name}</p>
+                      <p className="text-xs text-gray-500 capitalize">
+                        {user?.role}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="text-red-600 text-xs"
+                  >
+                    <LogOut className="mr-2 h-3.5 w-3.5" />
+                    Admin Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       </header>
@@ -614,69 +642,6 @@ export default function POSLayout({ children }) {
                   : "Logout Without Clocking Out"}
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Locked Screen Modal */}
-      <Dialog open={isLocked} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <AlertTriangle className="h-5 w-5" />
-              Session Locked
-            </DialogTitle>
-            <DialogDescription>
-              Your session has been locked due to inactivity. Please enter your
-              PIN to continue.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 pt-4">
-            {/* Cashier Info */}
-            {cashier && (
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                  <User className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">{cashier.name}</p>
-                  <p className="text-sm text-gray-500">Cashier</p>
-                </div>
-              </div>
-            )}
-
-            {/* PIN Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Enter PIN</label>
-              <Input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="Enter your 4-digit PIN"
-                value={unlockPin}
-                onChange={(e) => setUnlockPin(e.target.value)}
-                onKeyPress={handleUnlockKeyPress}
-                maxLength={4}
-                className="text-lg text-center tracking-widest"
-                autoFocus
-              />
-            </div>
-
-            {/* Unlock Button */}
-            <Button onClick={handleUnlock} className="w-full" size="lg">
-              Unlock Session
-            </Button>
-
-            {/* Logout Option */}
-            <Button
-              variant="outline"
-              onClick={handleCashierLogout}
-              className="w-full"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout Instead
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
