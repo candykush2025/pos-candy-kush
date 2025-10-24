@@ -4,21 +4,33 @@ import { useState, useEffect } from "react";
 import { productsService, categoriesService } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
+  DialogTrigger,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { dbService } from "@/lib/db/dbService";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2, Package, FolderTree, Tag, Percent } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Package,
+  FolderTree,
+  Tag,
+  Percent,
+} from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-export default function AdminProducts() {
+function ItemListTab() {
   const [activeMenu, setActiveMenu] = useState("products");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -26,7 +38,7 @@ export default function AdminProducts() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -52,7 +64,7 @@ export default function AdminProducts() {
         categoriesService.getAll(),
       ]);
       setProducts(productsData);
-      setCategories(categoriesData.filter(cat => !cat.deletedAt));
+      setCategories(categoriesData.filter((cat) => !cat.deletedAt));
       // TODO: Load discounts from your discount service when ready
       setDiscounts([]);
     } catch (error) {
@@ -87,7 +99,8 @@ export default function AdminProducts() {
 
       setIsModalOpen(false);
       resetForm();
-      loadProducts();
+      // reload products
+      await loadData();
     } catch (error) {
       console.error("Error saving product:", error);
       toast.error("Failed to save product");
@@ -98,8 +111,8 @@ export default function AdminProducts() {
     setEditingProduct(product);
     setFormData({
       name: product.name,
-      price: product.price.toString(),
-      stock: product.stock.toString(),
+      price: product.price?.toString() || "",
+      stock: product.stock?.toString() || "",
       barcode: product.barcode || "",
       sku: product.sku || "",
       category: product.category || "",
@@ -695,4 +708,3 @@ export default function AdminProducts() {
     </div>
   );
 }
-
