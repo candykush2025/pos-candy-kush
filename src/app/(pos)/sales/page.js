@@ -38,6 +38,22 @@ function CashierLogin({ onLogin }) {
   const [startingCash, setStartingCash] = useState("");
   const [pendingCashier, setPendingCashier] = useState(null);
 
+  const handleCashKeypadPress = (value) => {
+    if (value === "backspace") {
+      setStartingCash((prev) => prev.slice(0, -1));
+    } else if (value === "clear") {
+      setStartingCash("");
+    } else if (value === ".") {
+      // Only add decimal if not already present
+      if (!startingCash.includes(".")) {
+        setStartingCash((prev) => prev + ".");
+      }
+    } else {
+      // Add digit
+      setStartingCash((prev) => prev + value);
+    }
+  };
+
   const handleLogin = async (e, pinToCheck = null) => {
     e.preventDefault();
 
@@ -309,17 +325,70 @@ function CashierLogin({ onLogin }) {
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  readOnly
                   placeholder="0.00"
                   value={startingCash}
-                  onChange={(e) => setStartingCash(e.target.value)}
-                  className="pl-10 text-lg"
-                  autoFocus
+                  className="pl-10 text-lg text-center pointer-events-none"
+                  inputMode="none"
+                  autoComplete="off"
+                  onFocus={(e) => e.target.blur()}
                 />
               </div>
-              <p className="text-xs text-gray-500">
+              
+              {/* Numeric Keypad for Cash Amount */}
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <Button
+                    key={num}
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    onClick={() => handleCashKeypadPress(num.toString())}
+                    className="h-14 text-xl font-semibold"
+                  >
+                    {num}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypadPress("clear")}
+                  className="h-14 text-sm font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypadPress("0")}
+                  className="h-14 text-xl font-semibold"
+                >
+                  0
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypadPress(".")}
+                  className="h-14 text-xl font-semibold"
+                >
+                  .
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypadPress("backspace")}
+                  className="col-span-2 h-14 text-sm font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950"
+                >
+                  ⌫ Backspace
+                </Button>
+              </div>
+
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 Enter starting cash to start a shift and make transactions. Skip
                 to access view-only mode (history, reports, etc.)
               </p>
