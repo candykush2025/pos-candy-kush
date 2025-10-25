@@ -78,14 +78,14 @@ export default function TicketsSection({ onSwitchToSales }) {
   });
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-auto">
+    <div className="h-full flex flex-col p-6 overflow-auto bg-gray-50 dark:bg-gray-950">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <Ticket className="h-8 w-8 text-primary" />
           Saved Tickets
         </h1>
-        <p className="text-gray-500 mt-2">
+        <p className="text-gray-500 dark:text-gray-400 mt-2">
           Resume or manage your saved tickets
         </p>
       </div>

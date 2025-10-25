@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/useAuthStore";
 import { useThemeStore } from "@/store/useThemeStore";
+import { useCartStore } from "@/store/useCartStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -13,12 +16,21 @@ import {
   Monitor,
   Clock,
   Lock,
+  LogOut,
+  User,
+  Mail,
+  KeyRound,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { dbService } from "@/lib/db/dbService";
 
 export default function SettingsSection() {
-  const { theme, setTheme } = useThemeStore();
+  const router = useRouter();
+  const { logout } = useAuthStore();
+  const { mode, setMode } = useThemeStore();
   const [idleTimeout, setIdleTimeout] = useState("300000"); // Default 5 minutes
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Load idle timeout setting on mount
   useEffect(() => {
@@ -95,15 +107,58 @@ export default function SettingsSection() {
     },
   ];
 
+  // Complete logout handler
+  const handleCompleteLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+
+    try {
+      console.log(
+        "🧹 Performing complete logout from Settings - clearing all data"
+      );
+
+      // Clear ALL localStorage data
+      console.log("🗑️ Clearing all localStorage...");
+      localStorage.clear();
+
+      // Clear ALL IndexedDB data (offline data)
+      console.log("🗑️ Clearing all offline data from IndexedDB...");
+      await dbService.clearAllData();
+
+      // Clear cart store
+      console.log("🗑️ Clearing cart...");
+      const { clearCart } = useCartStore.getState();
+      clearCart();
+
+      console.log("✅ Complete cleanup finished!");
+      toast.success("Logged out - All data cleared");
+
+      // Logout admin user and redirect to login page
+      logout();
+      router.push("/login");
+    } catch (error) {
+      console.error("❌ Error during logout cleanup:", error);
+      toast.error("Logout successful, but some data may remain cached");
+      // Still proceed with logout even if cleanup fails
+      logout();
+      router.push("/login");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col p-6 overflow-auto">
+    <div className="h-full flex flex-col p-6 overflow-auto bg-gray-50 dark:bg-gray-950">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <Settings className="h-8 w-8 text-primary" />
           POS Settings
         </h1>
-        <p className="text-gray-500 mt-2">Customize your POS experience</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-2">
+          Customize your POS experience
+        </p>
       </div>
 
       {/* Theme Settings */}
@@ -125,10 +180,10 @@ export default function SettingsSection() {
                     <Button
                       key={themeOption.value}
                       variant={
-                        theme === themeOption.value ? "default" : "outline"
+                        mode === themeOption.value ? "default" : "outline"
                       }
                       className="h-24 flex flex-col gap-2"
-                      onClick={() => setTheme(themeOption.value)}
+                      onClick={() => setMode(themeOption.value)}
                     >
                       <Icon className="h-6 w-6" />
                       <span>{themeOption.label}</span>
@@ -205,12 +260,81 @@ export default function SettingsSection() {
       </Card>
 
       {/* POS Preferences */}
-      <Card>
+      <Card className="mb-6">
         <CardHeader>
           <CardTitle>POS Preferences</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-gray-500">Additional preferences coming soon</p>
+        </CardContent>
+      </Card>
+
+      {/* Account Settings */}
+      <Card className="mb-6 border-red-200 dark:border-red-900">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <User className="h-5 w-5" />
+            Account Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {/* Account Actions Section */}
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Email & Password
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Update your account credentials (Coming soon)
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" disabled>
+                    <Mail className="h-4 w-4 mr-2" />
+                    Change Email
+                  </Button>
+                  <Button variant="outline" disabled>
+                    <KeyRound className="h-4 w-4 mr-2" />
+                    Change Password
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Complete Logout */}
+              <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-lg p-4">
+                <div className="flex items-start gap-3 mb-4">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-red-900 dark:text-red-100 mb-1">
+                      Complete Logout
+                    </h3>
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      This will end your admin session and clear all offline
+                      data including:
+                    </p>
+                    <ul className="text-xs text-red-600 dark:text-red-400 mt-2 space-y-1 ml-4 list-disc">
+                      <li>Cached products, orders, and receipts</li>
+                      <li>Active shifts and cashier sessions</li>
+                      <li>Custom categories and tabs</li>
+                      <li>All settings and preferences</li>
+                    </ul>
+                  </div>
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={handleCompleteLogout}
+                  disabled={isLoggingOut}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  {isLoggingOut ? "Logging out..." : "Complete Logout"}
+                </Button>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -278,6 +278,47 @@ export const customTabsService = {
     }
   },
 
+  // Get ALL custom tabs from all users (merged)
+  getAllCustomTabs: async () => {
+    try {
+      const querySnapshot = await getDocs(
+        collection(db, COLLECTIONS.CUSTOM_TABS)
+      );
+
+      // Merge all categories and products from all documents
+      const allCategories = [];
+      const allCategoryProducts = {};
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.categories && Array.isArray(data.categories)) {
+          // Add categories that don't already exist
+          data.categories.forEach((cat) => {
+            if (!allCategories.includes(cat)) {
+              allCategories.push(cat);
+            }
+          });
+        }
+        if (data.categoryProducts) {
+          // Merge category products
+          Object.keys(data.categoryProducts).forEach((catName) => {
+            if (!allCategoryProducts[catName]) {
+              allCategoryProducts[catName] = data.categoryProducts[catName];
+            }
+          });
+        }
+      });
+
+      return {
+        categories: allCategories,
+        categoryProducts: allCategoryProducts,
+      };
+    } catch (error) {
+      console.error("Error getting all custom tabs:", error);
+      throw error;
+    }
+  },
+
   // Delete user's custom tabs
   deleteUserTabs: async (userId) => {
     try {

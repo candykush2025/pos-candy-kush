@@ -38,10 +38,13 @@ function CashierLogin({ onLogin }) {
   const [startingCash, setStartingCash] = useState("");
   const [pendingCashier, setPendingCashier] = useState(null);
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e, pinToCheck = null) => {
     e.preventDefault();
 
-    if (!pin || pin.length < 4) {
+    // Use provided pin or current state pin
+    const currentPin = pinToCheck || pin;
+
+    if (!currentPin || currentPin.length < 4) {
       toast.error("Please enter a valid PIN");
       return;
     }
@@ -94,7 +97,7 @@ function CashierLogin({ onLogin }) {
       }
 
       console.log("Available users:", users);
-      console.log("Entered PIN:", pin);
+      console.log("Entered PIN:", currentPin);
       console.log(
         "Users with PINs:",
         users
@@ -108,7 +111,8 @@ function CashierLogin({ onLogin }) {
 
       // Find user with matching PIN and cashier role
       const cashier = users.find(
-        (u) => u.pin === pin && (u.role === "cashier" || u.role === "admin")
+        (u) =>
+          u.pin === currentPin && (u.role === "cashier" || u.role === "admin")
       );
 
       if (cashier) {
@@ -164,7 +168,9 @@ function CashierLogin({ onLogin }) {
         // Skip shift creation - login without shift (view-only mode)
         onLogin(pendingCashier, null);
         setShowStartingCashModal(false);
-        toast.info(`Welcome, ${pendingCashier.name}! View-only mode - Start a shift to make transactions.`);
+        toast.info(
+          `Welcome, ${pendingCashier.name}! View-only mode - Start a shift to make transactions.`
+        );
       }
     } catch (error) {
       console.error("Error starting shift:", error);
@@ -174,9 +180,28 @@ function CashierLogin({ onLogin }) {
     }
   };
 
+  const handleKeypadPress = async (value) => {
+    if (value === "backspace") {
+      setPin((prev) => prev.slice(0, -1));
+    } else if (value === "clear") {
+      setPin("");
+    } else if (pin.length < 6) {
+      const newPin = pin + value;
+      setPin(newPin);
+
+      // Auto-submit when PIN reaches 4 digits (minimum valid length)
+      if (newPin.length >= 4 && !loading) {
+        // Small delay to show the last digit before submitting
+        setTimeout(() => {
+          handleLogin({ preventDefault: () => {} }, newPin);
+        }, 200);
+      }
+    }
+  };
+
   return (
-    <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <Card className="w-full max-w-md mx-4">
+    <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+      <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
             <Lock className="h-8 w-8 text-primary" />
@@ -185,29 +210,70 @@ function CashierLogin({ onLogin }) {
           <p className="text-gray-500 mt-2">Enter your PIN to access POS</p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-6">
+            {/* PIN Display (Read-only to prevent keyboard popup) */}
             <div>
               <Input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="Enter 4-digit PIN"
-                value={pin}
-                onChange={(e) =>
-                  setPin(e.target.value.replace(/\D/g, "").slice(0, 6))
-                }
-                className="text-center text-2xl tracking-widest"
-                maxLength={6}
-                autoFocus
+                type="text"
+                readOnly
+                placeholder="Enter PIN"
+                value={pin.replace(/./g, "●")}
+                className="text-center text-3xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800"
               />
             </div>
+
+            {/* On-Screen Numeric Keypad */}
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <Button
+                  key={num}
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleKeypadPress(num.toString())}
+                  className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground"
+                >
+                  {num}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => handleKeypadPress("clear")}
+                className="h-16 text-sm font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+              >
+                Clear
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => handleKeypadPress("0")}
+                className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground"
+              >
+                0
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => handleKeypadPress("backspace")}
+                className="h-16 text-sm font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950"
+              >
+                ⌫
+              </Button>
+            </div>
+
+            {/* Login Button */}
             <Button
               type="submit"
-              className="w-full"
+              className="w-full h-12 text-lg"
               disabled={loading || pin.length < 4}
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
+
             <div className="space-y-1">
               <p className="text-sm text-gray-500 text-center">
                 Works offline with synced users
@@ -395,28 +461,28 @@ export default function SalesPage() {
   const handleCashierLogout = async () => {
     try {
       console.log("🧹 Starting complete logout cleanup...");
-      
+
       // Clear React state
       setCashier(null);
       setActiveShift(null);
-      
+
       // Clear ALL localStorage data
       console.log("🗑️ Clearing all localStorage...");
       localStorage.clear();
-      
+
       // Clear ALL IndexedDB data (offline data)
       console.log("🗑️ Clearing all offline data from IndexedDB...");
       await dbService.clearAllData();
-      
+
       // Clear cart store
       console.log("🗑️ Clearing cart...");
       const { clearCart } = useCartStore.getState();
       clearCart();
-      
+
       // Trigger update events
       window.dispatchEvent(new Event("cashier-update"));
       window.dispatchEvent(new Event("storage"));
-      
+
       console.log("✅ Complete cleanup finished!");
       toast.success("Logged out successfully - All data cleared");
     } catch (error) {

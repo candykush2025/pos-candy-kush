@@ -16,6 +16,7 @@ import {
   RefreshCw,
   User,
   LogOut,
+  Lock,
   ShoppingCart,
   Ticket,
   Users,
@@ -107,19 +108,36 @@ export default function POSLayout({ children }) {
     setIdleCountdown(remainingTime);
   }, [remainingTime]);
 
-  // Force light theme for POS/Cashier layout
+  // Screen lock detection - Lock POS when device screen is locked (PWA)
   useEffect(() => {
-    // Remove dark class from html element
-    document.documentElement.classList.remove("dark");
+    if (!cashier) return; // Only if cashier is logged in
 
-    // Add light mode enforcement class
-    document.documentElement.classList.add("pos-light-mode");
+    const handleVisibilityChange = () => {
+      // When page becomes hidden (screen lock, minimize, etc.)
+      if (document.hidden) {
+        console.log("🔒 Screen locked/hidden - Locking POS");
+
+        // Clear cashier to show PIN login screen
+        setCashier(null);
+        localStorage.removeItem("pos_cashier");
+        window.dispatchEvent(new Event("cashier-update"));
+
+        // Show toast when they return
+        setTimeout(() => {
+          if (!document.hidden) {
+            toast.warning("Screen was locked. Please enter PIN to continue.");
+          }
+        }, 100);
+      }
+    };
+
+    // Listen for page visibility changes
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      // Clean up when component unmounts
-      document.documentElement.classList.remove("pos-light-mode");
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [cashier]);
 
   // Get cashier and active shift from localStorage and listen for updates
   useEffect(() => {
@@ -191,6 +209,22 @@ export default function POSLayout({ children }) {
     router.push("/login");
   };
 
+  // Lock screen - clear cashier session but keep data and shift active
+  const handleLockScreen = () => {
+    console.log("🔒 Locking screen - cashier session cleared");
+
+    // Clear cashier state to show PIN login
+    setCashier(null);
+
+    // Clear only cashier from localStorage (keep shift, settings, device_id, etc.)
+    localStorage.removeItem("pos_cashier");
+
+    // Trigger update event
+    window.dispatchEvent(new Event("cashier-update"));
+
+    toast.info("Screen locked. Enter PIN to continue.");
+  };
+
   const handleCashierLogout = async () => {
     // Check if there's an active shift
     if (activeShift && activeShift.status === "active") {
@@ -205,31 +239,31 @@ export default function POSLayout({ children }) {
   const performLogout = async () => {
     try {
       console.log("🧹 Performing complete logout - clearing all data");
-      
+
       // Clear React state
       setCashier(null);
       setActiveShift(null);
-      
+
       // Clear ALL localStorage data
       console.log("🗑️ Clearing all localStorage...");
       localStorage.clear();
-      
+
       // Clear ALL IndexedDB data (offline data)
       console.log("🗑️ Clearing all offline data from IndexedDB...");
       await dbService.clearAllData();
-      
+
       // Clear cart store
       console.log("🗑️ Clearing cart...");
       const { clearCart } = useCartStore.getState();
       clearCart();
-      
+
       // Trigger update events
       window.dispatchEvent(new Event("cashier-update"));
       window.dispatchEvent(new Event("storage"));
-      
+
       console.log("✅ Complete cleanup finished!");
       toast.success("Logged out - All data cleared");
-      
+
       // Logout admin user and redirect to login page
       logout();
       router.push("/login");
@@ -314,13 +348,13 @@ export default function POSLayout({ children }) {
       className="h-screen bg-gray-50 flex flex-col light overflow-hidden"
     >
       {/* ONE SINGLE UNIFIED HEADER ROW */}
-      <header className="bg-white border-b shadow-sm flex-shrink-0 z-50">
+      <header className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 shadow-sm flex-shrink-0 z-50">
         <div className="flex items-center justify-between gap-3 px-4 py-2">
           {/* Left: Logo & Cashier Info */}
           <div className="flex items-center gap-3">
             <Link
               href="/sales"
-              className="text-base font-bold text-green-700 whitespace-nowrap"
+              className="text-base font-bold text-green-700 dark:text-green-500 whitespace-nowrap"
             >
               Candy Kush POS
             </Link>
@@ -328,8 +362,8 @@ export default function POSLayout({ children }) {
             {/* Idle Countdown */}
             {cashier && idleTimeoutMs > 0 && idleCountdown > 0 && (
               <div className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-gray-400" />
-                <span className="text-xs text-gray-500 tabular-nums">
+                <Clock className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+                <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
                   {Math.floor(idleCountdown / 60)}:
                   {String(idleCountdown % 60).padStart(2, "0")}
                 </span>
@@ -346,7 +380,7 @@ export default function POSLayout({ children }) {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     activeTab === "sales"
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
@@ -357,7 +391,7 @@ export default function POSLayout({ children }) {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     activeTab === "tickets"
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <Ticket className="h-3.5 w-3.5" />
@@ -368,7 +402,7 @@ export default function POSLayout({ children }) {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     activeTab === "customers"
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <Users className="h-3.5 w-3.5" />
@@ -379,7 +413,7 @@ export default function POSLayout({ children }) {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     activeTab === "history"
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <History className="h-3.5 w-3.5" />
@@ -390,7 +424,7 @@ export default function POSLayout({ children }) {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     activeTab === "shifts"
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <Clock className="h-3.5 w-3.5" />
@@ -401,7 +435,7 @@ export default function POSLayout({ children }) {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     activeTab === "products"
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <Package className="h-3.5 w-3.5" />
@@ -412,7 +446,7 @@ export default function POSLayout({ children }) {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     activeTab === "settings"
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <SettingsIcon className="h-3.5 w-3.5" />
@@ -454,18 +488,18 @@ export default function POSLayout({ children }) {
               />
             </Button>
 
-            {/* Cashier Logout */}
+            {/* Cashier Lock Button (shows PIN to lock) */}
             {cashier && pathname === "/sales" && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleCashierLogout}
-                className="gap-1.5 h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                title={`Logged in as: ${cashier.name}`}
+                onClick={handleLockScreen}
+                className="gap-1.5 h-7 px-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+                title={`Lock screen - Logged in as: ${cashier.name}`}
               >
                 <User className="h-3.5 w-3.5" />
                 <span className="text-xs">{cashier.name}</span>
-                <LogOut className="h-3.5 w-3.5" />
+                <Lock className="h-3.5 w-3.5" />
               </Button>
             )}
 
@@ -510,7 +544,7 @@ export default function POSLayout({ children }) {
 
       {/* Offline Banner */}
       {!isOnline && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-1 text-center text-xs text-yellow-800">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 px-4 py-1 text-center text-xs text-yellow-800 dark:text-yellow-200">
           ⚠️ Offline - Data will sync when connected
         </div>
       )}

@@ -270,7 +270,7 @@ const getSyncStatusBadge = (receipt) => {
         icon: AlertCircle,
         text: "Unknown",
         className:
-          "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700",
+          "bg-gray-100 text-gray-600 dark:text-gray-300 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700",
       };
   }
 };
@@ -546,13 +546,15 @@ export default function HistorySection({ cashier: _cashier }) {
   };
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-auto">
+    <div className="h-full flex flex-col p-6 overflow-auto bg-gray-50 dark:bg-gray-950">
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <History className="h-8 w-8 text-primary" />
           Order History
         </h1>
-        <p className="text-gray-500 mt-2">View all completed transactions</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-2">
+          View all completed transactions
+        </p>
       </div>
 
       <div className="mb-6">
@@ -569,13 +571,17 @@ export default function HistorySection({ cashier: _cashier }) {
 
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500">Loading receipts...</p>
+          <p className="text-gray-500 dark:text-gray-400">
+            Loading receipts...
+          </p>
         </div>
       ) : filteredReceipts.length === 0 ? (
         <Card className="py-12">
           <CardContent className="text-center">
             <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No receipts found</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              No receipts found
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -588,7 +594,7 @@ export default function HistorySection({ cashier: _cashier }) {
               <CardHeader className="gap-1 px-5 pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <CardTitle className="text-lg font-semibold text-gray-900">
+                    <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                       #{receipt.receiptNumber || receipt.id?.slice(0, 8)}
                     </CardTitle>
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -596,7 +602,7 @@ export default function HistorySection({ cashier: _cashier }) {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       {getTimestampLabel(receipt)}
                     </p>
                     <p className="text-xl font-semibold text-emerald-600">
@@ -641,12 +647,12 @@ export default function HistorySection({ cashier: _cashier }) {
                 </div>
               </CardHeader>
               <CardContent className="px-5 pb-3 pt-2">
-                <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-3 text-sm text-gray-600 dark:text-gray-300 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="space-y-1">
                     <span className="text-xs uppercase text-gray-400">
                       Customer
                     </span>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
                       {getCustomerLabel(receipt)}
                     </p>
                   </div>
@@ -672,7 +678,7 @@ export default function HistorySection({ cashier: _cashier }) {
                     <span className="text-xs uppercase text-gray-400">
                       Cashier
                     </span>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
                       {getCashierLabel(receipt)}
                     </p>
                   </div>
@@ -708,7 +714,7 @@ export default function HistorySection({ cashier: _cashier }) {
 
           {filteredReceipts.length > PAGE_SIZE && (
             <div className="flex flex-col gap-4 border-t pt-4 md:flex-row md:items-center md:justify-between">
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
                 Showing {showingFrom}-{showingTo} of {filteredReceipts.length}
               </span>
               <div className="flex items-center gap-2">
@@ -722,7 +728,7 @@ export default function HistorySection({ cashier: _cashier }) {
                 >
                   <ChevronLeft className="mr-1 h-4 w-4" /> Previous
                 </Button>
-                <span className="text-sm font-medium text-gray-600">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
                   Page {safePage} of {totalPages}
                 </span>
                 <Button
@@ -791,7 +797,7 @@ export default function HistorySection({ cashier: _cashier }) {
                   </div>
                 )}
                 {selectedReceipt.syncedAt && (
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     Synced: {formatDate(new Date(selectedReceipt.syncedAt))}
                   </p>
                 )}
@@ -819,22 +825,22 @@ export default function HistorySection({ cashier: _cashier }) {
                             key={`${
                               item._lineId || item.id || item.sku || idx
                             }-${idx}`}
-                            className="flex items-start justify-between gap-4 rounded-md bg-gray-50 px-3 py-2 text-sm"
+                            className="flex items-start justify-between gap-4 rounded-md bg-gray-100 dark:bg-gray-800 px-3 py-2 text-sm"
                           >
                             <div className="flex-1 space-y-1">
-                              <p className="font-medium text-gray-800">
+                              <p className="font-medium text-gray-900 dark:text-gray-100">
                                 {name}
                               </p>
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-gray-600 dark:text-gray-300">
                                 {quantity} x {formatCurrency(unitPrice)}
                               </p>
                               {sku && (
-                                <p className="text-xs text-gray-400">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
                                   SKU: {sku}
                                 </p>
                               )}
                             </div>
-                            <span className="font-semibold text-gray-900">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
                               {formatCurrency(total)}
                             </span>
                           </div>
@@ -847,7 +853,9 @@ export default function HistorySection({ cashier: _cashier }) {
               <div className="space-y-2 border-t pt-4">
                 {typeof selectedReceipt.subtotal === "number" && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal</span>
+                    <span className="text-gray-600 dark:text-gray-300">
+                      Subtotal
+                    </span>
                     <span className="font-medium">
                       {formatCurrency(selectedReceipt.subtotal)}
                     </span>
@@ -862,7 +870,9 @@ export default function HistorySection({ cashier: _cashier }) {
                   )}
                 {typeof selectedReceipt.tax === "number" && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Tax</span>
+                    <span className="text-gray-600 dark:text-gray-300">
+                      Tax
+                    </span>
                     <span className="font-medium">
                       {formatCurrency(selectedReceipt.tax)}
                     </span>
@@ -885,7 +895,9 @@ export default function HistorySection({ cashier: _cashier }) {
                   <h3 className="font-semibold">Payments</h3>
                   <div className="space-y-2 text-sm">
                     {selectedReceipt.payments.length === 0 && (
-                      <p className="text-gray-500">Unknown</p>
+                      <p className="text-gray-500 dark:text-gray-400">
+                        Unknown
+                      </p>
                     )}
                     {selectedReceipt.payments.map((payment, idx) => (
                       <div

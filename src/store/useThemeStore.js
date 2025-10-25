@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 
 const defaultTheme = {
   primaryColor: "#16a34a", // Green
-  secondaryColor: "#0ea5e9", // Blue
+  secondaryColor: "#16a34a", // Green (matching primary for consistent branding)
   mode: "system", // system, light, or dark
   isLoaded: false,
 };
@@ -205,6 +205,24 @@ export const useThemeStore = create(
     }),
     {
       name: "theme-storage",
+      version: 1, // Increment to trigger migration
+      migrate: (persistedState, version) => {
+        // Migrate old data to ensure proper defaults
+        if (version === 0) {
+          return {
+            ...defaultTheme,
+            ...persistedState,
+            // Force green secondary if it was blue
+            secondaryColor:
+              persistedState.secondaryColor === "#0ea5e9"
+                ? "#16a34a"
+                : persistedState.secondaryColor || defaultTheme.secondaryColor,
+            // Ensure mode defaults to system if not set
+            mode: persistedState.mode || "system",
+          };
+        }
+        return persistedState;
+      },
     }
   )
 );

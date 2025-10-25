@@ -73,22 +73,26 @@ export default function ShiftsSection({ cashier }) {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
+      <div className="h-full flex items-center justify-center bg-gray-950 dark:bg-gray-950">
         <div className="text-center">
-          <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-pulse" />
-          <p className="text-gray-500">Loading your shifts...</p>
+          <Clock className="h-12 w-12 text-gray-500 dark:text-gray-500 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-400 dark:text-gray-400">
+            Loading your shifts...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-auto bg-gray-50">
+    <div className="h-full overflow-auto bg-gray-50 dark:bg-gray-950">
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Shifts</h1>
-          <p className="text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            My Shifts
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
             View your shift history and cash handling records
           </p>
         </div>
@@ -241,8 +245,8 @@ export default function ShiftsSection({ cashier }) {
                         <Badge
                           className={
                             isActive
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-700"
+                              ? "bg-green-900/30 text-green-400"
+                              : "bg-gray-800 text-gray-400"
                           }
                         >
                           {isActive ? (
@@ -260,7 +264,7 @@ export default function ShiftsSection({ cashier }) {
                       </div>
 
                       {/* Time Info */}
-                      <div className="flex items-center gap-6 text-sm text-gray-600">
+                      <div className="flex items-center gap-6 text-sm text-gray-400 dark:text-gray-400">
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-4 w-4" />
                           <span>
@@ -275,7 +279,7 @@ export default function ShiftsSection({ cashier }) {
                           </div>
                         )}
                         {isActive && (
-                          <div className="flex items-center gap-1.5 text-green-600 font-medium">
+                          <div className="flex items-center gap-1.5 text-green-400 dark:text-green-400 font-medium">
                             <DollarSign className="h-4 w-4" />
                             <span>
                               Holding:{" "}
@@ -288,12 +292,12 @@ export default function ShiftsSection({ cashier }) {
                       </div>
 
                       {/* Cash Handling Details */}
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-white rounded-lg border">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700">
                         <div>
-                          <p className="text-xs text-gray-500 mb-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-1">
                             Starting Cash
                           </p>
-                          <p className="font-semibold text-lg">
+                          <p className="font-semibold text-lg text-gray-100 dark:text-gray-100">
                             {formatCurrency(shift.startingCash || 0)}
                           </p>
                         </div>
@@ -361,19 +365,19 @@ export default function ShiftsSection({ cashier }) {
                       {/* Sales Summary */}
                       <div className="flex flex-wrap items-center gap-6 text-sm">
                         <div className="flex items-center gap-2">
-                          <Receipt className="h-4 w-4 text-gray-400" />
-                          <span className="text-gray-600">
-                            <span className="font-semibold text-gray-900">
+                          <Receipt className="h-4 w-4 text-gray-500 dark:text-gray-500" />
+                          <span className="text-gray-400 dark:text-gray-400">
+                            <span className="font-semibold text-gray-100 dark:text-gray-100">
                               {shift.transactionCount || 0}
                             </span>{" "}
                             Transactions
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-gray-400" />
-                          <span className="text-gray-600">
+                          <DollarSign className="h-4 w-4 text-gray-500 dark:text-gray-500" />
+                          <span className="text-gray-400 dark:text-gray-400">
                             Total Sales:{" "}
-                            <span className="font-semibold text-gray-900">
+                            <span className="font-semibold text-gray-100 dark:text-gray-100">
                               {formatCurrency(shift.totalSales || 0)}
                             </span>
                           </span>

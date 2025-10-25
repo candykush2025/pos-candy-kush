@@ -141,8 +141,8 @@ function CustomerCard({
         </div>
 
         {customer.note && (
-          <div className="mt-3 p-2 bg-gray-50 rounded text-sm">
-            <p className="text-gray-600">{customer.note}</p>
+          <div className="mt-3 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm">
+            <p className="text-gray-300 dark:text-gray-300">{customer.note}</p>
           </div>
         )}
       </CardContent>
@@ -355,7 +355,7 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
             <div className="col-span-2">
               <label className="text-sm font-medium">Note</label>
               <textarea
-                className="w-full min-h-[80px] px-3 py-2 border rounded-md"
+                className="w-full min-h-[80px] px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                 value={formData.note}
                 onChange={(e) => handleChange("note", e.target.value)}
                 placeholder="Additional notes about this customer..."
@@ -449,15 +449,19 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
         ) : (
           <div className="space-y-4">
             {/* Summary */}
-            <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-3 gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
               <div className="text-center">
-                <p className="text-sm text-gray-600">Total Orders</p>
+                <p className="text-sm text-gray-400 dark:text-gray-400">
+                  Total Orders
+                </p>
                 <p className="text-2xl font-bold text-primary">
                   {orders.length}
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-sm text-gray-600">Total Spent</p>
+                <p className="text-sm text-gray-400 dark:text-gray-400">
+                  Total Spent
+                </p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(getTotalSpent())}
                 </p>
@@ -496,8 +500,8 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
                       <Badge
                         className={
                           order.status === "completed"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
+                            ? "bg-green-900/30 text-green-400"
+                            : "bg-gray-800 text-gray-400"
                         }
                       >
                         {order.status}
@@ -722,7 +726,7 @@ export default function CustomersSection({ cashier }) {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto bg-gray-50 dark:bg-gray-950 min-h-full">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -731,7 +735,9 @@ export default function CustomersSection({ cashier }) {
               <Users className="h-8 w-8 text-primary" />
               Customers
             </h1>
-            <p className="text-gray-500 mt-1">Manage your customer database</p>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">
+              Manage your customer database
+            </p>
           </div>
           <Button onClick={handleAddCustomer}>
             <Plus className="h-4 w-4 mr-2" />

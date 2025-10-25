@@ -119,10 +119,10 @@ function SortableTab({
         onTouchStart={!isDragMode ? onLongPressStart : undefined}
         onTouchEnd={!isDragMode ? onLongPressEnd : undefined}
         className={cn(
-          "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors w-full",
+          "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors w-full",
           isSelected
-            ? "bg-white text-gray-900 border-t-2 border-t-green-600"
-            : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+            ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2 border-t-green-600"
+            : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800",
           isDragMode && "ring-2 ring-blue-400 cursor-move"
         )}
       >
@@ -282,7 +282,7 @@ export default function SalesSection({ cashier }) {
 
       // Reload products and categories
       loadProducts();
-      
+
       // Check for active shift
       checkActiveShift();
     }
@@ -314,9 +314,10 @@ export default function SalesSection({ cashier }) {
     if (!userId || products.length === 0) return;
 
     try {
-      const firebaseTabs = await customTabsService.getUserTabs(userId);
+      // Load ALL custom tabs from all users in Firebase
+      const firebaseTabs = await customTabsService.getAllCustomTabs();
 
-      if (firebaseTabs) {
+      if (firebaseTabs && firebaseTabs.categories) {
         setCustomCategories(firebaseTabs.categories || []);
 
         // Convert slot IDs back to full objects
@@ -349,14 +350,17 @@ export default function SalesSection({ cashier }) {
         );
         localStorage.setItem(
           "custom_category_products",
-          JSON.stringify(resolvedProducts)
+          JSON.stringify(resolvedSlots)
         );
 
-        toast.success("Custom tabs loaded from cloud");
+        console.log(
+          `📂 Loaded ${
+            firebaseTabs.categories?.length || 0
+          } custom tabs from ALL users`
+        );
       }
     } catch (error) {
       console.error("Error loading custom tabs from Firebase:", error);
-      toast.error("Failed to load custom tabs from cloud");
     }
   };
 
@@ -415,28 +419,60 @@ export default function SalesSection({ cashier }) {
       setProducts(productsData);
       setFilteredProducts(productsData);
 
-      // Filter categories for current user and filter out deleted ones
-      const userCategories = userId
-        ? categoriesData.filter(
-            (cat) => cat.userId === userId && cat.name && !cat.deletedAt
-          )
-        : categoriesData.filter((cat) => cat.name && !cat.deletedAt);
+      // Get ALL categories from Firebase (not filtered by user)
+      const allCategories = categoriesData.filter(
+        (cat) => cat.name && !cat.deletedAt
+      );
 
       console.log(
-        `📂 Loaded ${userCategories.length} categories for user: ${userId}`
+        `📂 Loaded ${allCategories.length} total categories from Firebase`
       );
-      setCategoriesData(userCategories);
+
+      // If still no categories, extract from products as fallback
+      let finalCategories = allCategories;
+      if (finalCategories.length === 0 && productsData.length > 0) {
+        console.log(
+          "📂 No categories in Firebase, extracting from products..."
+        );
+        const categorySet = new Set();
+        productsData.forEach((product) => {
+          const categoryName =
+            product.categoryName ||
+            product.category ||
+            product.categoryLabel ||
+            product.category_name ||
+            "Uncategorized";
+          if (categoryName && categoryName.trim()) {
+            categorySet.add(categoryName.trim());
+          }
+        });
+
+        // Create category objects from extracted names
+        finalCategories = Array.from(categorySet).map((name, index) => ({
+          id: `extracted-${index}`,
+          name: name,
+          description: `Products in ${name}`,
+          userId: userId || null,
+        }));
+
+        console.log(
+          `📂 Extracted ${finalCategories.length} categories from products`
+        );
+      }
+
+      setCategoriesData(finalCategories);
 
       // Set category names for modal selection
-      const categoryNames = userCategories.map((cat) => cat.name).sort();
+      const categoryNames = finalCategories.map((cat) => cat.name).sort();
       setCategories(categoryNames);
 
       // Load custom tabs from Firebase if user is logged in
       if (userId) {
         try {
-          const firebaseTabs = await customTabsService.getUserTabs(userId);
+          // Load ALL custom tabs from all users in Firebase
+          const firebaseTabs = await customTabsService.getAllCustomTabs();
 
-          if (firebaseTabs) {
+          if (firebaseTabs && firebaseTabs.categories) {
             setCustomCategories(firebaseTabs.categories || []);
             // Convert slot IDs back to full objects
             const productMap = {};
@@ -743,12 +779,13 @@ export default function SalesSection({ cashier }) {
         });
       });
 
+      // Save to this user's document - will be merged with others when loading
       await customTabsService.saveUserTabs(userId, {
         categories,
         categoryProducts: slotIds,
       });
 
-      toast.success("Custom tabs synced to cloud");
+      toast.success("Custom tabs synced to cloud (shared with all users)");
 
       // Also save to localStorage as backup
       localStorage.setItem("custom_categories", JSON.stringify(categories));
@@ -1143,19 +1180,25 @@ export default function SalesSection({ cashier }) {
     // Check if cashier has an active shift
     const savedShift = localStorage.getItem("active_shift");
     if (!savedShift) {
-      toast.error("No active shift! Please start a shift to make transactions.");
+      toast.error(
+        "No active shift! Please start a shift to make transactions."
+      );
       return;
     }
 
     try {
       const activeShift = JSON.parse(savedShift);
       if (!activeShift || activeShift.status !== "active") {
-        toast.error("No active shift! Please start a shift to make transactions.");
+        toast.error(
+          "No active shift! Please start a shift to make transactions."
+        );
         return;
       }
     } catch (error) {
       console.error("Error parsing active shift:", error);
-      toast.error("No active shift! Please start a shift to make transactions.");
+      toast.error(
+        "No active shift! Please start a shift to make transactions."
+      );
       return;
     }
 
@@ -1843,12 +1886,12 @@ export default function SalesSection({ cashier }) {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden min-h-0 main-content-debug">
+      <div className="flex-1 flex overflow-hidden min-h-0 main-content-debug bg-gray-950 dark:bg-gray-950">
         {/* Products Section */}
-        <div className="flex-1 flex flex-col overflow-hidden min-h-0 products-section-debug">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 products-section-debug bg-gray-950 dark:bg-gray-950">
           {/* Back Button - Show when viewing category */}
           {viewingCategoryId && (
-            <div className="flex items-center gap-4 p-4 pb-2 flex-shrink-0 bg-blue-50 border-b">
+            <div className="flex items-center gap-4 p-4 pb-2 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-300 dark:border-gray-700">
               <Button
                 variant="ghost"
                 size="sm"
@@ -1865,7 +1908,9 @@ export default function SalesSection({ cashier }) {
                 <ArrowLeft className="h-4 w-4" />
                 Back to {previousCustomCategory || "Custom Page"}
               </Button>
-              <h2 className="text-xl font-semibold">{viewingCategoryName}</h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {viewingCategoryName}
+              </h2>
             </div>
           )}
 
@@ -1920,7 +1965,7 @@ export default function SalesSection({ cashier }) {
                       <Card
                         key={product.id || product.sku}
                         className={cn(
-                          "p-0 group overflow-hidden border bg-white transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
+                          "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
                           !canSell && "cursor-not-allowed opacity-70"
                         )}
                         onClick={handleCardClick}
@@ -2000,7 +2045,7 @@ export default function SalesSection({ cashier }) {
                 ).map((slot, index) => (
                   <Card
                     key={index}
-                    className="p-0 group overflow-hidden border bg-white transition-all cursor-pointer hover:border-primary/50 hover:shadow-md"
+                    className="p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md"
                     onClick={
                       slot
                         ? () => {
@@ -2106,8 +2151,8 @@ export default function SalesSection({ cashier }) {
                           </>
                         ) : (
                           /* Empty slot with + icon */
-                          <div className="w-full h-full flex items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors">
-                            <Plus className="h-12 w-12 text-gray-400" />
+                          <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-700 dark:hover:bg-gray-700 transition-colors">
+                            <Plus className="h-12 w-12 text-gray-500 dark:text-gray-500" />
                           </div>
                         )}
                       </div>
@@ -2144,7 +2189,7 @@ export default function SalesSection({ cashier }) {
                     <Card
                       key={product.id || product.sku}
                       className={cn(
-                        "p-0 group overflow-hidden border bg-white transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
+                        "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
                         !canSell && "cursor-not-allowed opacity-70"
                       )}
                       onClick={handleCardClick}
@@ -2218,17 +2263,17 @@ export default function SalesSection({ cashier }) {
           </div>
 
           {/* Excel-Style Category Tabs (Bottom) */}
-          <div className="flex-shrink-0 bg-gray-100 border-t">
+          <div className="flex-shrink-0 bg-white dark:bg-gray-900 border-t border-gray-300 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div className="flex items-center overflow-x-auto scrollbar-hide flex-1">
                 {/* All Tab */}
                 <button
                   onClick={() => setSelectedCategory("all")}
                   className={cn(
-                    "px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap transition-colors",
+                    "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors",
                     selectedCategory === "all"
-                      ? "bg-white text-gray-900 border-t-2 border-t-green-600"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2 border-t-green-600"
+                      : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800"
                   )}
                 >
                   All
@@ -2263,7 +2308,7 @@ export default function SalesSection({ cashier }) {
                   </SortableContext>
                   <DragOverlay>
                     {activeId ? (
-                      <button className="px-8 py-4 text-xl font-medium border-r border-gray-300 whitespace-nowrap bg-white text-gray-900 border-t-2 border-t-green-600 shadow-lg">
+                      <button className="px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2 border-t-green-600 shadow-lg">
                         {activeId}
                       </button>
                     ) : null}
@@ -2273,7 +2318,7 @@ export default function SalesSection({ cashier }) {
                 {/* Add Button */}
                 <button
                   onClick={() => setShowAddCategoryModal(true)}
-                  className="px-6 py-4 text-xl font-medium border-r border-gray-300 bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                  className="px-6 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800 transition-colors flex items-center gap-1"
                   title="Add new category"
                 >
                   <Plus className="h-6 w-6" />
@@ -2295,15 +2340,20 @@ export default function SalesSection({ cashier }) {
         </div>
 
         {/* Cart Section */}
-        <div className="w-96 bg-white border-l flex flex-col min-h-0 cart-section-debug">
+        <div className="w-96 bg-white dark:bg-gray-900 border-l border-gray-300 dark:border-gray-700 flex flex-col min-h-0 cart-section-debug">
           {/* Cart Header */}
-          <div className="p-4 border-b space-y-3 flex-shrink-0">
+          <div className="p-4 border-b border-gray-300 dark:border-gray-700 space-y-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <ShoppingCart className="h-6 w-6" />
-                <h2 className="text-xl font-bold">Cart</h2>
+                <ShoppingCart className="h-6 w-6 text-gray-700 dark:text-gray-300" />
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Cart
+                </h2>
               </div>
-              <Badge variant="secondary" className="text-lg px-3 py-1">
+              <Badge
+                variant="secondary"
+                className="text-lg px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+              >
                 {getItemCount()} items
               </Badge>
             </div>
@@ -2475,7 +2525,7 @@ export default function SalesSection({ cashier }) {
                   </div>
                 </div>
               )}
-              
+
               {/* Discount button row */}
               <div className="flex gap-2">
                 <Button
@@ -2526,7 +2576,7 @@ export default function SalesSection({ cashier }) {
                 <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
                   Total Amount
                 </div>
-                <div className="text-3xl font-bold">
+                <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                   {formatCurrency(getTotal())}
                 </div>
               </div>
@@ -2633,8 +2683,8 @@ export default function SalesSection({ cashier }) {
 
               {/* Card Payment Note */}
               {paymentMethod === "card" && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-lg">
-                  <div className="text-sm text-blue-700 dark:text-blue-400">
+                <div className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 p-4 rounded-lg">
+                  <div className="text-sm text-gray-700 dark:text-gray-300">
                     Process card payment using your card terminal
                   </div>
                 </div>
@@ -2770,8 +2820,8 @@ export default function SalesSection({ cashier }) {
                 </div>
 
                 {/* Order Items Summary */}
-                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg max-h-48 overflow-y-auto">
-                  <div className="text-sm font-semibold mb-2">
+                <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg max-h-48 overflow-y-auto">
+                  <div className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">
                     Order Items ({completedOrder.line_items?.length || 0})
                   </div>
                   <div className="space-y-1">
@@ -2848,8 +2898,8 @@ export default function SalesSection({ cashier }) {
                       key={customer.id}
                       className={`p-4 border rounded-lg cursor-pointer transition-colors ${
                         cartCustomer?.id === customer.id
-                          ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-                          : "border-gray-200 hover:border-green-300 hover:bg-gray-50"
+                          ? "border-green-500 bg-green-900/30 dark:bg-green-900/30"
+                          : "border-gray-300 dark:border-gray-700 hover:border-green-300 hover:bg-gray-800 dark:hover:bg-gray-800"
                       }`}
                       onClick={() => setCartCustomer(customer)}
                     >
@@ -2941,7 +2991,7 @@ export default function SalesSection({ cashier }) {
                   .map((customer) => (
                     <div
                       key={customer.id}
-                      className="p-4 border rounded-lg cursor-pointer transition-colors hover:border-green-300 hover:bg-gray-50"
+                      className="p-4 border border-gray-300 dark:border-gray-700 rounded-lg cursor-pointer transition-colors hover:border-green-300 hover:bg-gray-800 dark:hover:bg-gray-800"
                       onClick={() => {
                         setCartCustomer(customer);
                         setShowCustomerSelectModal(false);
@@ -3042,10 +3092,10 @@ export default function SalesSection({ cashier }) {
                       let statusText = "Active";
 
                       if (validFrom && now < validFrom) {
-                        statusColor = "bg-blue-100 text-blue-700";
+                        statusColor = "bg-blue-900/30 text-blue-400";
                         statusText = "Upcoming";
                       } else if (validTo && now > validTo) {
-                        statusColor = "bg-gray-100 text-gray-700";
+                        statusColor = "bg-gray-800 text-gray-400";
                         statusText = "Expired";
                       }
 
@@ -3056,8 +3106,8 @@ export default function SalesSection({ cashier }) {
                           key={discount.id}
                           className={`p-4 border rounded-lg transition-colors ${
                             isDisabled
-                              ? "opacity-50 cursor-not-allowed bg-gray-50"
-                              : "cursor-pointer hover:border-green-300 hover:bg-green-50"
+                              ? "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
+                              : "cursor-pointer hover:border-green-300 hover:bg-green-900/30 dark:hover:bg-green-900/30 border-gray-300 dark:border-gray-700"
                           }`}
                           onClick={() =>
                             !isDisabled && handleApplyDiscount(discount)
@@ -3249,10 +3299,10 @@ export default function SalesSection({ cashier }) {
                             <button
                               key={product.id || product.sku}
                               onClick={() => handleItemSelect(product)}
-                              className="flex items-center gap-3 p-3 hover:bg-gray-100 rounded-lg transition-colors text-left w-full"
+                              className="flex items-center gap-3 p-3 hover:bg-gray-800 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full"
                             >
                               {/* Product Image/Color Preview */}
-                              <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border">
+                              <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border border-gray-300 dark:border-gray-700">
                                 {imageUrl ? (
                                   <img
                                     src={imageUrl}
@@ -3275,15 +3325,15 @@ export default function SalesSection({ cashier }) {
 
                               {/* Product Info */}
                               <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold text-gray-900 truncate">
+                                <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
                                   {product.name}
                                 </h3>
-                                <p className="text-sm text-gray-500">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
                                   {product.sku && `SKU: ${product.sku}`}
                                   {product.barcode &&
                                     ` | Barcode: ${product.barcode}`}
                                 </p>
-                                <p className="text-sm font-medium text-gray-700">
+                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                   {formatCurrency(product.price || 0)}
                                 </p>
                               </div>
@@ -3298,27 +3348,28 @@ export default function SalesSection({ cashier }) {
                 <div className="max-h-96 overflow-y-auto border rounded-lg">
                   <div className="grid gap-2 p-2">
                     {isLoading ? (
-                      <div className="text-center py-8 text-gray-500">
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                         <RefreshCw className="w-12 h-12 mx-auto mb-2 text-gray-300 animate-spin" />
                         <p>Loading categories...</p>
                       </div>
-                    ) : categories.length > 0 ? (
-                      categories.map((category) => (
+                    ) : categoriesData.length > 0 ? (
+                      categoriesData.map((categoryObj) => (
                         <button
-                          key={category}
-                          onClick={() => handleItemSelect(category)}
-                          className="p-4 hover:bg-blue-50 rounded-lg transition-colors text-left w-full border"
+                          key={categoryObj.id || categoryObj.name}
+                          onClick={() => handleItemSelect(categoryObj.name)}
+                          className="p-4 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
                         >
-                          <h3 className="font-semibold text-gray-900">
-                            {category}
+                          <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                            {categoryObj.name}
                           </h3>
-                          <p className="text-sm text-gray-500">
-                            Click to browse products from this category
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {categoryObj.description ||
+                              "Click to browse products from this category"}
                           </p>
                         </button>
                       ))
                     ) : (
-                      <div className="text-center py-8 text-gray-500">
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                         <p className="font-medium mb-1">
                           No categories available
                         </p>
@@ -3348,6 +3399,43 @@ export default function SalesSection({ cashier }) {
               >
                 Cancel
               </Button>
+              {/* Show delete button if slot already has content */}
+              {selectedSlotIndex !== null &&
+                customCategoryProducts[selectedCategory]?.[
+                  selectedSlotIndex
+                ] && (
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={async () => {
+                      const currentSlots =
+                        customCategoryProducts[selectedCategory] ||
+                        Array(20).fill(null);
+                      const updatedSlots = [...currentSlots];
+                      updatedSlots[selectedSlotIndex] = null;
+
+                      const updatedCategories = {
+                        ...customCategoryProducts,
+                        [selectedCategory]: updatedSlots,
+                      };
+
+                      setCustomCategoryProducts(updatedCategories);
+                      await saveCustomTabsToFirebase(
+                        customCategories,
+                        updatedCategories
+                      );
+
+                      toast.success(
+                        `Removed from slot ${selectedSlotIndex + 1}`
+                      );
+                      setShowProductSelectModal(false);
+                      setSelectedSlotIndex(null);
+                      setProductSearchQuery("");
+                    }}
+                  >
+                    Delete from Slot
+                  </Button>
+                )}
             </div>
           </DialogContent>
         </Dialog>
@@ -3360,7 +3448,7 @@ export default function SalesSection({ cashier }) {
               onClick={() => setShowTabMenu(false)}
             />
             <div
-              className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-lg py-2 min-w-[150px]"
+              className="fixed z-50 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg py-2 min-w-[150px]"
               style={{
                 left: `${menuPosition.x}px`,
                 top: `${menuPosition.y}px`,
@@ -3368,19 +3456,19 @@ export default function SalesSection({ cashier }) {
             >
               <button
                 onClick={handleEditCategory}
-                className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
+                className="w-full px-4 py-2 text-left hover:bg-gray-800 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-700 dark:text-gray-300"
               >
                 <span>Edit</span>
               </button>
               <button
                 onClick={handleEnterDragMode}
-                className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
+                className="w-full px-4 py-2 text-left hover:bg-gray-800 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-700 dark:text-gray-300"
               >
                 <span>Reorder</span>
               </button>
               <button
                 onClick={handleDeleteCategoryFromMenu}
-                className="w-full px-4 py-2 text-left hover:bg-gray-100 text-red-600 flex items-center gap-2"
+                className="w-full px-4 py-2 text-left hover:bg-gray-800 dark:hover:bg-gray-800 text-red-400 flex items-center gap-2"
               >
                 <span>Delete</span>
               </button>

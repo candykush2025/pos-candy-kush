@@ -9,6 +9,19 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
+  /* True Neutral Grays (no blue tint) - Override Tailwind's default grays */
+  --color-gray-50: #fafafa;
+  --color-gray-100: #f5f5f5;
+  --color-gray-200: #e5e5e5;
+  --color-gray-300: #d4d4d4;
+  --color-gray-400: #a3a3a3;
+  --color-gray-500: #737373;
+  --color-gray-600: #525252;
+  --color-gray-700: #404040;
+  --color-gray-800: #262626;
+  --color-gray-900: #171717;
+  --color-gray-950: #0a0a0a;
+
   /* True Neutral Grays (no blue tint) */
   --color-neutral-50: #fafafa;
   --color-neutral-100: #f5f5f5;
@@ -66,8 +79,8 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.88 0.08 145);
+  --secondary-foreground: oklch(0.25 0.15 145);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
@@ -108,9 +121,9 @@
   --primary: oklch(0.65 0.19 145); /* Green accent color */
   --primary-foreground: oklch(0.98 0 0);
 
-  /* Secondary */
-  --secondary: oklch(0.2 0 0); /* Darker secondary */
-  --secondary-foreground: oklch(0.98 0 0);
+  /* Secondary - light green instead of gray */
+  --secondary: oklch(0.35 0.12 145); /* Dark green secondary */
+  --secondary-foreground: oklch(0.88 0.08 145); /* Light green text */
 
   /* Muted */
   --muted: oklch(0.18 0 0); /* Dark muted */
@@ -153,61 +166,6 @@
   body {
     @apply bg-background text-foreground;
   }
-}
-
-/* Force Light Mode for POS/Cashier Layout */
-html.pos-light-mode,
-html.pos-light-mode * {
-  color-scheme: light !important;
-}
-
-/* Override all dark mode styles for POS */
-html.pos-light-mode {
-  /* Light mode color scheme */
-  --background: oklch(1 0 0) !important;
-  --foreground: oklch(0.1 0 0) !important;
-
-  --card: oklch(1 0 0) !important;
-  --card-foreground: oklch(0.1 0 0) !important;
-
-  --popover: oklch(1 0 0) !important;
-  --popover-foreground: oklch(0.1 0 0) !important;
-
-  --primary: oklch(0.5 0.19 145) !important;
-  --primary-foreground: oklch(0.98 0 0) !important;
-
-  --secondary: oklch(0.96 0 0) !important;
-  --secondary-foreground: oklch(0.1 0 0) !important;
-
-  --muted: oklch(0.96 0 0) !important;
-  --muted-foreground: oklch(0.45 0 0) !important;
-
-  --accent: oklch(0.96 0 0) !important;
-  --accent-foreground: oklch(0.1 0 0) !important;
-
-  --destructive: oklch(0.55 0.25 25) !important;
-
-  --border: oklch(0.9 0 0) !important;
-  --input: oklch(0.9 0 0) !important;
-  --ring: oklch(0.5 0.19 145) !important;
-}
-
-/* Ensure all elements respect light mode */
-html.pos-light-mode .dark\:bg-neutral-900,
-html.pos-light-mode .dark\:bg-neutral-950,
-html.pos-light-mode .dark\:bg-neutral-800 {
-  background-color: white !important;
-}
-
-html.pos-light-mode .dark\:text-neutral-100,
-html.pos-light-mode .dark\:text-neutral-200,
-html.pos-light-mode .dark\:text-neutral-300 {
-  color: #171717 !important;
-}
-
-html.pos-light-mode .dark\:border-neutral-700,
-html.pos-light-mode .dark\:border-neutral-800 {
-  border-color: #e5e5e5 !important;
 }
 
 /* Hide scrollbar for category tabs */
