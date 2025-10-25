@@ -335,7 +335,7 @@ function CashierLogin({ onLogin }) {
                   onFocus={(e) => e.target.blur()}
                 />
               </div>
-              
+
               {/* Numeric Keypad for Cash Amount */}
               <div className="grid grid-cols-3 gap-2 mt-4">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
@@ -376,15 +376,6 @@ function CashierLogin({ onLogin }) {
                   className="h-14 text-xl font-semibold"
                 >
                   .
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  onClick={() => handleCashKeypadPress("backspace")}
-                  className="col-span-2 h-14 text-sm font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950"
-                >
-                  ⌫ Backspace
                 </Button>
               </div>
 

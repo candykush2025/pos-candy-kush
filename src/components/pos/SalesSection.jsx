@@ -1886,9 +1886,9 @@ export default function SalesSection({ cashier }) {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden min-h-0 main-content-debug bg-gray-950 dark:bg-gray-950">
+      <div className="flex-1 flex overflow-hidden min-h-0 main-content-debug bg-white dark:bg-gray-950">
         {/* Products Section */}
-        <div className="flex-1 flex flex-col overflow-hidden min-h-0 products-section-debug bg-gray-950 dark:bg-gray-950">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 products-section-debug bg-white dark:bg-gray-950">
           {/* Back Button - Show when viewing category */}
           {viewingCategoryId && (
             <div className="flex items-center gap-4 p-4 pb-2 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-300 dark:border-gray-700">
@@ -3299,7 +3299,7 @@ export default function SalesSection({ cashier }) {
                             <button
                               key={product.id || product.sku}
                               onClick={() => handleItemSelect(product)}
-                              className="flex items-center gap-3 p-3 hover:bg-gray-800 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full"
+                              className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full"
                             >
                               {/* Product Image/Color Preview */}
                               <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border border-gray-300 dark:border-gray-700">
