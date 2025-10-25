@@ -219,6 +219,9 @@ function CashierLogin({ onLogin }) {
                 placeholder="Enter PIN"
                 value={pin.replace(/./g, "●")}
                 className="text-center text-3xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800"
+                inputMode="none"
+                autoComplete="off"
+                onFocus={(e) => e.target.blur()}
               />
             </div>
 
