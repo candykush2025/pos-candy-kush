@@ -480,7 +480,7 @@ export default function SalesSection({ cashier }) {
 
             // Create category map for resolving category slots
             const categoryMap = {};
-            userCategories.forEach((cat) => (categoryMap[cat.id] = cat));
+            finalCategories.forEach((cat) => (categoryMap[cat.id] = cat));
 
             const resolvedSlots = {};
             Object.keys(firebaseTabs.categoryProducts || {}).forEach(
