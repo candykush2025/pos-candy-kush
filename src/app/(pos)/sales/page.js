@@ -216,17 +216,24 @@ function CashierLogin({ onLogin }) {
   };
 
   return (
-    <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-            <Lock className="h-8 w-8 text-primary" />
+    <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 landscape:p-2">
+      <Card className="w-full max-w-md landscape:max-w-sm landscape:max-h-[95vh] landscape:overflow-y-auto">
+        <CardHeader className="text-center landscape:py-2 landscape:pb-1 landscape:space-y-1">
+          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 landscape:h-8 landscape:w-8 landscape:mb-1">
+            <Lock className="h-8 w-8 text-primary landscape:h-4 landscape:w-4" />
           </div>
-          <CardTitle className="text-2xl">Cashier Login</CardTitle>
-          <p className="text-gray-500 mt-2">Enter your PIN to access POS</p>
+          <CardTitle className="text-2xl landscape:text-base landscape:!mb-0">
+            Cashier Login
+          </CardTitle>
+          <p className="text-gray-500 mt-2 landscape:mt-0.5 landscape:text-[10px]">
+            Enter your PIN to access POS
+          </p>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-6">
+        <CardContent className="landscape:py-2 landscape:pt-1">
+          <form
+            onSubmit={handleLogin}
+            className="space-y-6 landscape:space-y-3"
+          >
             {/* PIN Display (Read-only to prevent keyboard popup) */}
             <div>
               <Input
@@ -234,7 +241,7 @@ function CashierLogin({ onLogin }) {
                 readOnly
                 placeholder="Enter PIN"
                 value={pin.replace(/./g, "●")}
-                className="text-center text-3xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800"
+                className="text-center text-3xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800 landscape:text-xl landscape:h-10"
                 inputMode="none"
                 autoComplete="off"
                 onFocus={(e) => e.target.blur()}
@@ -242,7 +249,7 @@ function CashierLogin({ onLogin }) {
             </div>
 
             {/* On-Screen Numeric Keypad */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2 landscape:gap-1">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <Button
                   key={num}
@@ -250,7 +257,7 @@ function CashierLogin({ onLogin }) {
                   variant="outline"
                   size="lg"
                   onClick={() => handleKeypadPress(num.toString())}
-                  className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground"
+                  className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground landscape:h-10 landscape:text-lg"
                 >
                   {num}
                 </Button>
@@ -260,7 +267,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("clear")}
-                className="h-16 text-sm font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+                className="h-16 text-sm font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 landscape:h-10 landscape:text-xs"
               >
                 Clear
               </Button>
@@ -269,7 +276,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("0")}
-                className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground"
+                className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground landscape:h-10 landscape:text-lg"
               >
                 0
               </Button>
@@ -278,7 +285,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("backspace")}
-                className="h-16 text-sm font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950"
+                className="h-16 text-sm font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950 landscape:h-10 landscape:text-xs"
               >
                 ⌫
               </Button>
@@ -287,17 +294,17 @@ function CashierLogin({ onLogin }) {
             {/* Login Button */}
             <Button
               type="submit"
-              className="w-full h-12 text-lg"
+              className="w-full h-12 text-lg landscape:h-9 landscape:text-sm"
               disabled={loading || pin.length < 4}
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
 
-            <div className="space-y-1">
-              <p className="text-sm text-gray-500 text-center">
+            <div className="space-y-1 landscape:space-y-0">
+              <p className="text-sm text-gray-500 text-center landscape:text-xs">
                 Works offline with synced users
               </p>
-              <p className="text-xs text-blue-600 text-center">
+              <p className="text-xs text-blue-600 text-center landscape:text-[10px]">
                 💡 Enter any employee's PIN to switch users
               </p>
             </div>

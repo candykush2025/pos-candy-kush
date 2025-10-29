@@ -163,8 +163,92 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  /* Fluid typography and spacing for mobile responsiveness */
+  html {
+    font-size: clamp(
+      10px,
+      2.5vw,
+      16px
+    ); /* Scales from 10px on small screens to 16px on large */
+  }
+
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Make all headings fluid and responsive */
+  h1 {
+    font-size: clamp(1.5rem, 5vw, 2.5rem);
+  }
+
+  h2 {
+    font-size: clamp(1.25rem, 4vw, 2rem);
+  }
+
+  h3 {
+    font-size: clamp(1.1rem, 3vw, 1.75rem);
+  }
+
+  h4 {
+    font-size: clamp(1rem, 2.5vw, 1.5rem);
+  }
+
+  /* Responsive padding and spacing */
+  @media (max-width: 768px) {
+    body {
+      font-size: 0.875rem; /* 14px */
+    }
+  }
+
+  @media (max-width: 640px) {
+    body {
+      font-size: 0.75rem; /* 12px */
+    }
+  }
+
+  /* Landscape mobile devices - extra small font for PIN and UI */
+  @media (max-height: 500px) and (orientation: landscape) {
+    html {
+      font-size: 8px; /* Very small base - aggressive scaling */
+    }
+
+    body {
+      font-size: 0.5rem; /* 8px based on new html font-size */
+    }
+
+    h1 {
+      font-size: 1rem;
+    }
+
+    h2 {
+      font-size: 0.875rem;
+    }
+
+    h3 {
+      font-size: 0.75rem;
+    }
+
+    h4 {
+      font-size: 0.625rem;
+    }
+
+    /* Scale down all spacing */
+    * {
+      padding-top: calc(var(--spacing, 1rem) * 0.5);
+      padding-bottom: calc(var(--spacing, 1rem) * 0.5);
+    }
+  }
+
+  /* Extra landscape scaling for very short screens */
+  @media (max-height: 400px) and (orientation: landscape) {
+    html {
+      font-size: 6px; /* Even more aggressive */
+    }
+
+    body {
+      font-size: 0.5rem;
+    }
   }
 }
 
@@ -176,4 +260,20 @@
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none; /* Chrome, Safari and Opera */
+}
+
+/* Disable text selection on long press for touch devices */
+button,
+.btn,
+[role="button"],
+.card,
+.product-card,
+.category-card,
+.menu-item {
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE10+/Edge */
+  user-select: none; /* Standard */
+  -webkit-touch-callout: none; /* iOS Safari */
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
 }
