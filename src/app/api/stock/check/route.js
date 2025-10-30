@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 
+// CORS headers
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS(request) {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 /**
  * GET /api/stock/check?itemId={id}
  * Check current stock for a product
@@ -19,7 +31,7 @@ export async function GET(request) {
           error: "itemId is required",
           message: "Please provide an itemId parameter",
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -34,7 +46,7 @@ export async function GET(request) {
           error: "Product not found",
           message: `No product found with itemId: ${itemId}`,
         },
-        { status: 404 }
+        { status: 404, headers: corsHeaders }
       );
     }
 
@@ -63,7 +75,7 @@ export async function GET(request) {
           categoryId: product.categoryId || null,
         },
       },
-      { status: 200 }
+      { status: 200, headers: corsHeaders }
     );
   } catch (error) {
     console.error("Error checking stock:", error);
@@ -73,7 +85,7 @@ export async function GET(request) {
         error: "Internal server error",
         message: error.message,
       },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

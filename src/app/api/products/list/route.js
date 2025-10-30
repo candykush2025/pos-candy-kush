@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase/config";
 import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 
+// CORS headers
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS(request) {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 /**
  * GET /api/products/list
  * Get list of all products with optional filters
@@ -37,7 +49,7 @@ export async function GET(request) {
           count: 0,
           message: "No products found",
         },
-        { status: 200 }
+        { status: 200, headers: corsHeaders }
       );
     }
 
@@ -85,7 +97,7 @@ export async function GET(request) {
           inStockOnly,
         },
       },
-      { status: 200 }
+      { status: 200, headers: corsHeaders }
     );
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -95,7 +107,7 @@ export async function GET(request) {
         error: "Internal server error",
         message: error.message,
       },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
