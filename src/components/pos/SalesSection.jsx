@@ -2590,15 +2590,17 @@ export default function SalesSection({ cashier }) {
                   Checkout
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                className="w-full h-12"
-                onClick={handleSaveTicket}
-                disabled={items.length === 0}
-              >
-                <Save className="mr-2 h-5 w-5" />
-                Save Ticket
-              </Button>
+              {cartCustomer && (
+                <Button
+                  variant="outline"
+                  className="w-full h-12"
+                  onClick={handleSaveTicket}
+                  disabled={items.length === 0}
+                >
+                  <Save className="mr-2 h-5 w-5" />
+                  Save Ticket
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -3280,28 +3282,28 @@ export default function SalesSection({ cashier }) {
           open={showProductSelectModal}
           onOpenChange={setShowProductSelectModal}
         >
-          <DialogContent className="max-w-4xl max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle>
+          <DialogContent className="max-w-4xl max-h-[90vh] w-[95vw] sm:w-full overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0">
+              <DialogTitle className="text-base sm:text-lg">
                 Select for Slot{" "}
                 {selectedSlotIndex !== null ? selectedSlotIndex + 1 : ""}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4 flex-1 overflow-hidden flex flex-col">
               {/* Type Toggle */}
-              <div className="flex gap-2 border-b pb-2">
+              <div className="flex gap-2 border-b pb-2 flex-shrink-0">
                 <Button
                   variant={selectionType === "product" ? "default" : "outline"}
                   onClick={() => setSelectionType("product")}
-                  className="flex-1"
+                  className="flex-1 text-sm sm:text-base"
                 >
                   Product
                 </Button>
                 <Button
                   variant={selectionType === "category" ? "default" : "outline"}
                   onClick={() => setSelectionType("category")}
-                  className="flex-1"
+                  className="flex-1 text-sm sm:text-base"
                 >
                   Category
                 </Button>
@@ -3310,20 +3312,20 @@ export default function SalesSection({ cashier }) {
               {selectionType === "product" ? (
                 <>
                   {/* Search */}
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <div className="relative flex-shrink-0">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                     <Input
-                      placeholder="Search products by name, barcode, or SKU..."
+                      placeholder="Search products..."
                       value={productSearchQuery}
                       onChange={(e) => setProductSearchQuery(e.target.value)}
-                      className="pl-10"
+                      className="pl-9 sm:pl-10 text-sm sm:text-base h-9 sm:h-10"
                       autoFocus
                     />
                   </div>
 
                   {/* Products List */}
-                  <div className="max-h-96 overflow-y-auto border rounded-lg">
-                    <div className="grid gap-2 p-2">
+                  <div className="flex-1 overflow-y-auto border rounded-lg min-h-0">
+                    <div className="grid gap-1.5 sm:gap-2 p-1.5 sm:p-2">
                       {products
                         .filter((product) => {
                           const query = productSearchQuery.toLowerCase();
@@ -3342,10 +3344,10 @@ export default function SalesSection({ cashier }) {
                             <button
                               key={product.id || product.sku}
                               onClick={() => handleItemSelect(product)}
-                              className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full"
+                              className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full"
                             >
                               {/* Product Image/Color Preview */}
-                              <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border border-gray-300 dark:border-gray-700">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 flex-shrink-0 rounded overflow-hidden border border-gray-300 dark:border-gray-700">
                                 {imageUrl ? (
                                   <img
                                     src={imageUrl}
@@ -3358,7 +3360,7 @@ export default function SalesSection({ cashier }) {
                                   ></div>
                                 ) : (
                                   <div className="w-full h-full bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 flex items-center justify-center">
-                                    <span className="text-2xl font-semibold text-white">
+                                    <span className="text-lg sm:text-2xl font-semibold text-white">
                                       {product.name?.charAt(0).toUpperCase() ||
                                         "?"}
                                     </span>
@@ -3368,15 +3370,14 @@ export default function SalesSection({ cashier }) {
 
                               {/* Product Info */}
                               <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                                <h3 className="font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100 truncate">
                                   {product.name}
                                 </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
                                   {product.sku && `SKU: ${product.sku}`}
-                                  {product.barcode &&
-                                    ` | Barcode: ${product.barcode}`}
+                                  {product.barcode && ` | ${product.barcode}`}
                                 </p>
-                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                <p className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
                                   {formatCurrency(product.price || 0)}
                                 </p>
                               </div>
@@ -3388,24 +3389,26 @@ export default function SalesSection({ cashier }) {
                 </>
               ) : (
                 /* Category Selection */
-                <div className="max-h-96 overflow-y-auto border rounded-lg">
-                  <div className="grid gap-2 p-2">
+                <div className="flex-1 overflow-y-auto border rounded-lg min-h-0">
+                  <div className="grid gap-1.5 sm:gap-2 p-1.5 sm:p-2">
                     {isLoading ? (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <RefreshCw className="w-12 h-12 mx-auto mb-2 text-gray-300 animate-spin" />
-                        <p>Loading categories...</p>
+                        <RefreshCw className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-2 text-gray-300 animate-spin" />
+                        <p className="text-sm sm:text-base">
+                          Loading categories...
+                        </p>
                       </div>
                     ) : categoriesData.length > 0 ? (
                       categoriesData.map((categoryObj) => (
                         <button
                           key={categoryObj.id || categoryObj.name}
                           onClick={() => handleItemSelect(categoryObj.name)}
-                          className="p-4 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                          className="p-3 sm:p-4 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-left w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
                         >
-                          <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                          <h3 className="font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100 truncate">
                             {categoryObj.name}
                           </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                             {categoryObj.description ||
                               "Click to browse products from this category"}
                           </p>
@@ -3413,10 +3416,10 @@ export default function SalesSection({ cashier }) {
                       ))
                     ) : (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <p className="font-medium mb-1">
+                        <p className="font-medium mb-1 text-sm sm:text-base">
                           No categories available
                         </p>
-                        <p className="text-sm">
+                        <p className="text-xs sm:text-sm">
                           Categories are automatically extracted from your
                           products.
                         </p>
