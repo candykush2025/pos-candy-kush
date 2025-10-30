@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { productsService, categoriesService } from "@/lib/firebase/firestore";
+import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
 import { loyverseService } from "@/lib/api/loyverse";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuthStore } from "@/store/useAuthStore";
 import {
   Dialog,
   DialogContent,
@@ -28,11 +30,27 @@ import {
   Layers,
   Filter,
   RefreshCw,
+  X,
+  Palette,
+  Upload,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+const PRODUCT_COLORS = [
+  { value: "GREY", label: "Grey", hex: "#9CA3AF" },
+  { value: "RED", label: "Red", hex: "#EF4444" },
+  { value: "PINK", label: "Pink", hex: "#EC4899" },
+  { value: "ORANGE", label: "Orange", hex: "#F97316" },
+  { value: "YELLOW", label: "Yellow", hex: "#EAB308" },
+  { value: "GREEN", label: "Green", hex: "#22C55E" },
+  { value: "BLUE", label: "Blue", hex: "#3B82F6" },
+  { value: "PURPLE", label: "Purple", hex: "#A855F7" },
+];
 
 export default function ItemListPage() {
+  const { user } = useAuthStore();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -46,6 +64,10 @@ export default function ItemListPage() {
   const [loading, setLoading] = useState(true);
   const [expandedProductId, setExpandedProductId] = useState(null);
   const [syncingInventory, setSyncingInventory] = useState(false);
+  const [showQuickAddCategory, setShowQuickAddCategory] = useState(false);
+  const [quickCategoryName, setQuickCategoryName] = useState("");
+  const [isQuickAddingCategory, setIsQuickAddingCategory] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState([]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -62,8 +84,11 @@ export default function ItemListPage() {
     soldByWeight: false,
     availableForSale: true,
     form: "",
-    color: "",
+    color: "GREY",
     imageUrl: "",
+    representationType: "color",
+    image: null,
+    imagePreview: null,
   });
 
   useEffect(() => {
@@ -227,6 +252,9 @@ export default function ItemListPage() {
     e.preventDefault();
 
     try {
+      // Generate SKU if empty
+      const finalSKU = formData.sku || generateNextSKU();
+
       // Match Loyverse data structure
       const productData = {
         // Basic info
@@ -240,7 +268,7 @@ export default function ItemListPage() {
         categoryId: formData.categoryId || null,
 
         // Variant data (primary)
-        sku: formData.sku || "",
+        sku: finalSKU,
         barcode: formData.barcode || "",
         price: parseFloat(formData.price) || 0,
         cost: parseFloat(formData.cost) || 0,
@@ -249,6 +277,7 @@ export default function ItemListPage() {
 
         // Stock
         stock: parseInt(formData.stock) || 0,
+        lowStock: formData.trackStock ? parseInt(formData.lowStock) || 0 : null,
         trackStock: formData.trackStock,
         soldByWeight: formData.soldByWeight,
         availableForSale: formData.availableForSale,
@@ -283,10 +312,79 @@ export default function ItemListPage() {
       };
 
       if (editingProduct) {
+        // Check if stock changed when editing
+        const oldStock = editingProduct.stock || 0;
+        const newStock = productData.stock;
+        const stockChanged = oldStock !== newStock;
+
         await productsService.update(editingProduct.id, productData);
+
+        // Log stock change in history if trackStock is enabled and stock changed
+        if (productData.trackStock && stockChanged) {
+          const stockDifference = newStock - oldStock;
+          try {
+            await stockHistoryService.logStockMovement({
+              productId: editingProduct.id,
+              productName: productData.name,
+              productSku: finalSKU,
+              type: "adjustment",
+              quantity: stockDifference,
+              previousStock: oldStock,
+              newStock: newStock,
+              reason:
+                stockDifference > 0
+                  ? `Stock increased by ${stockDifference} via product edit`
+                  : `Stock decreased by ${Math.abs(
+                      stockDifference
+                    )} via product edit`,
+              userId: user?.uid || "",
+              userName: user?.displayName || user?.email || "",
+            });
+            console.log("Stock change logged in history");
+          } catch (stockError) {
+            console.error("Error logging stock change:", stockError);
+          }
+        }
+
         toast.success("Product updated successfully");
       } else {
-        await productsService.create(productData);
+        const newProduct = await productsService.create(productData);
+        console.log("New product created:", newProduct);
+
+        // Log initial stock in history if trackStock is enabled
+        if (
+          newProduct &&
+          newProduct.id &&
+          productData.trackStock &&
+          productData.stock > 0
+        ) {
+          console.log("Logging stock history for new product...");
+          try {
+            await stockHistoryService.logStockMovement({
+              productId: newProduct.id,
+              productName: productData.name,
+              productSku: finalSKU,
+              type: "initial",
+              quantity: productData.stock,
+              previousStock: 0,
+              newStock: productData.stock,
+              reason: "Initial stock on product creation",
+              userId: user?.uid || "",
+              userName: user?.displayName || user?.email || "",
+            });
+            console.log("Stock history logged successfully");
+          } catch (stockError) {
+            console.error("Error logging stock history:", stockError);
+          }
+        } else {
+          console.log("Stock history not logged:", {
+            hasProduct: !!newProduct,
+            hasId: !!newProduct?.id,
+            trackStock: productData.trackStock,
+            stock: productData.stock,
+          });
+        }
+
         toast.success("Product created successfully");
       }
 
@@ -312,6 +410,7 @@ export default function ItemListPage() {
       price: product.price?.toString() || "",
       cost: product.cost?.toString() || "",
       stock: product.stock?.toString() || "",
+      lowStock: product.lowStock?.toString() || "",
       trackStock: product.trackStock || false,
       soldByWeight: product.soldByWeight || false,
       availableForSale: product.availableForSale !== false,
@@ -335,14 +434,152 @@ export default function ItemListPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedProducts.length === 0) {
+      toast.error("No products selected");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Are you sure you want to delete ${selectedProducts.length} product(s)?`
+      )
+    )
+      return;
+
+    try {
+      await Promise.all(
+        selectedProducts.map((id) => productsService.delete(id))
+      );
+      toast.success(
+        `${selectedProducts.length} product(s) deleted successfully`
+      );
+      setSelectedProducts([]);
+      loadProducts();
+    } catch (error) {
+      console.error("Error deleting products:", error);
+      toast.error("Failed to delete products");
+    }
+  };
+
+  const toggleProductSelection = (productId) => {
+    setSelectedProducts((prev) =>
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedProducts.length === filteredProducts.length) {
+      setSelectedProducts([]);
+    } else {
+      setSelectedProducts(filteredProducts.map((p) => p.id));
+    }
+  };
+
+  // Quick add category from product modal
+  const handleQuickAddCategory = async () => {
+    if (!quickCategoryName.trim()) {
+      toast.error("Please enter category name");
+      return;
+    }
+
+    if (isQuickAddingCategory) return; // Prevent double submission
+
+    setIsQuickAddingCategory(true);
+    try {
+      const categoryData = {
+        name: quickCategoryName.trim(),
+      };
+
+      const newCategory = await categoriesService.create(categoryData);
+      toast.success(`Category "${quickCategoryName}" created`);
+
+      // Reload categories
+      await loadCategories();
+
+      // Set the new category as selected
+      setFormData({
+        ...formData,
+        categoryId: newCategory.id,
+      });
+
+      // Reset and hide quick add
+      setQuickCategoryName("");
+      setShowQuickAddCategory(false);
+    } catch (error) {
+      console.error("Error creating category:", error);
+      toast.error("Failed to create category");
+    } finally {
+      setIsQuickAddingCategory(false);
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size must be less than 5MB");
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData({
+        ...formData,
+        image: file,
+        imagePreview: reader.result,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setFormData({
+      ...formData,
+      image: null,
+      imagePreview: null,
+    });
+  };
+
+  const generateNextSKU = () => {
+    // Get all numeric SKUs from products
+    const numericSKUs = products
+      .map((p) => p.sku)
+      .filter((sku) => sku && /^\d+$/.test(sku)) // Only numeric SKUs
+      .map((sku) => parseInt(sku, 10))
+      .filter((num) => !isNaN(num));
+
+    if (numericSKUs.length === 0) {
+      // No numeric SKUs exist, start with 10001
+      return "10001";
+    }
+
+    // Find the highest SKU and add 1
+    const maxSKU = Math.max(...numericSKUs);
+    return String(maxSKU + 1);
+  };
+
   const resetForm = () => {
+    const nextSKU = generateNextSKU();
+
     setFormData({
       name: "",
       handle: "",
       description: "",
       referenceId: "",
       categoryId: "",
-      sku: "",
+      sku: nextSKU,
       barcode: "",
       price: "",
       cost: "",
@@ -351,10 +588,15 @@ export default function ItemListPage() {
       soldByWeight: false,
       availableForSale: true,
       form: "",
-      color: "",
+      color: "GREY",
       imageUrl: "",
+      representationType: "color",
+      image: null,
+      imagePreview: null,
     });
     setEditingProduct(null);
+    setShowQuickAddCategory(false);
+    setQuickCategoryName("");
   };
 
   const filteredProducts = products.filter((p) => {
@@ -421,7 +663,7 @@ export default function ItemListPage() {
             <div className="space-y-6">
               {/* Image & Basic Info */}
               <div className="flex gap-6">
-                <div className="w-48 h-48 bg-neutral-100 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
+                <div className="w-48 h-48 bg-neutral-100 dark:bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
                   {selectedProduct.imageUrl ? (
                     <img
                       src={selectedProduct.imageUrl}
@@ -437,7 +679,7 @@ export default function ItemListPage() {
                     {selectedProduct.name}
                   </h2>
                   {selectedProduct.description && (
-                    <p className="text-neutral-600 mb-3">
+                    <p className="text-neutral-600 dark:text-neutral-400 mb-3">
                       {selectedProduct.description}
                     </p>
                   )}
@@ -514,6 +756,12 @@ export default function ItemListPage() {
                     Stock
                   </label>
                   <p className="text-sm">{selectedProduct.stock}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-neutral-500">
+                    Low Stock Alert
+                  </label>
+                  <p className="text-sm">{selectedProduct.lowStock || "N/A"}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-neutral-500">
@@ -681,27 +929,12 @@ export default function ItemListPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl lg:text-3xl font-bold">Product Items</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold">Product Management</h1>
           <p className="text-neutral-500 mt-1 lg:mt-2 text-sm lg:text-base hidden sm:block">
-            Manage your product inventory
+            Manage your product inventory and information
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Button
-            variant="outline"
-            onClick={syncInventoryFromLoyverse}
-            disabled={syncingInventory || loading}
-            className="flex-shrink-0"
-          >
-            <RefreshCw
-              className={`h-4 w-4 lg:mr-2 ${
-                syncingInventory ? "animate-spin" : ""
-              }`}
-            />
-            <span className="hidden lg:inline">
-              {syncingInventory ? "Syncing..." : "Sync Stock"}
-            </span>
-          </Button>
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
             <DialogTrigger asChild>
               <Button onClick={resetForm} className="flex-shrink-0">
@@ -709,7 +942,7 @@ export default function ItemListPage() {
                 <span className="hidden lg:inline">Add Product</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingProduct ? "Edit Product" : "Add New Product"}
@@ -717,281 +950,425 @@ export default function ItemListPage() {
                 <DialogDescription>
                   {editingProduct
                     ? "Update product information"
-                    : "Create a new product"}
+                    : "Create a new product for your POS"}
                 </DialogDescription>
               </DialogHeader>
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-4 max-h-[70vh] overflow-y-auto pr-2"
-              >
-                {/* Basic Information */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Item Name*</label>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Product Name */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Product Name *
+                  </label>
                   <Input
+                    placeholder="e.g., Coffee, T-Shirt, Laptop"
                     value={formData.name}
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    placeholder="e.g., Hybrid King"
                     required
                   />
                 </div>
 
+                {/* Category and Sold By */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Handle</label>
-                    <Input
-                      value={formData.handle}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Category *
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md mb-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                      value={formData.categoryId}
                       onChange={(e) =>
-                        setFormData({ ...formData, handle: e.target.value })
+                        setFormData({ ...formData, categoryId: e.target.value })
                       }
-                      placeholder="e.g., hybrid-king"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Reference ID</label>
-                    <Input
-                      value={formData.referenceId}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          referenceId: e.target.value,
-                        })
-                      }
-                      placeholder="Optional reference"
-                    />
-                  </div>
-                </div>
+                      required
+                    >
+                      <option value="">Select category</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Description</label>
-                  <textarea
-                    className="w-full px-3 py-2 border rounded-md"
-                    rows={2}
-                    value={formData.description}
-                    onChange={(e) =>
-                      setFormData({ ...formData, description: e.target.value })
-                    }
-                    placeholder="Product description..."
-                  />
-                </div>
-
-                {/* Category */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Category</label>
-                  <select
-                    className="w-full px-3 py-2 border rounded-md"
-                    value={formData.categoryId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, categoryId: e.target.value })
-                    }
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Variant Info */}
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-semibold mb-3">
-                    Variant Details
-                  </h4>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">SKU</label>
-                      <Input
-                        value={formData.sku}
-                        onChange={(e) =>
-                          setFormData({ ...formData, sku: e.target.value })
-                        }
-                        placeholder="e.g., 10018"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Barcode</label>
-                      <Input
-                        value={formData.barcode}
-                        onChange={(e) =>
-                          setFormData({ ...formData, barcode: e.target.value })
-                        }
-                        placeholder="Product barcode"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4 mt-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Price*</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.price}
-                        onChange={(e) =>
-                          setFormData({ ...formData, price: e.target.value })
-                        }
-                        placeholder="0.00"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Cost</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.cost}
-                        onChange={(e) =>
-                          setFormData({ ...formData, cost: e.target.value })
-                        }
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Stock</label>
-                      <Input
-                        type="number"
-                        value={formData.stock}
-                        onChange={(e) =>
-                          setFormData({ ...formData, stock: e.target.value })
-                        }
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Visual & Properties */}
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-semibold mb-3">
-                    Visual & Properties
-                  </h4>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Form</label>
-                      <select
-                        className="w-full px-3 py-2 border rounded-md"
-                        value={formData.form}
-                        onChange={(e) =>
-                          setFormData({ ...formData, form: e.target.value })
-                        }
+                    {/* Quick Add Category */}
+                    {!showQuickAddCategory ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickAddCategory(true)}
+                        className="text-sm text-primary hover:underline flex items-center gap-1"
                       >
-                        <option value="">Select form</option>
-                        <option value="SQUARE">Square</option>
-                        <option value="CIRCLE">Circle</option>
-                        <option value="RECTANGLE">Rectangle</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Color</label>
-                      <select
-                        className="w-full px-3 py-2 border rounded-md"
-                        value={formData.color}
-                        onChange={(e) =>
-                          setFormData({ ...formData, color: e.target.value })
-                        }
-                      >
-                        <option value="">Select color</option>
-                        <option value="RED">Red</option>
-                        <option value="BLUE">Blue</option>
-                        <option value="GREEN">Green</option>
-                        <option value="YELLOW">Yellow</option>
-                        <option value="PURPLE">Purple</option>
-                        <option value="ORANGE">Orange</option>
-                        <option value="GREY">Grey</option>
-                        <option value="BLACK">Black</option>
-                      </select>
-                    </div>
+                        <Plus className="h-3 w-3" />
+                        Add new category
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Category name"
+                          value={quickCategoryName}
+                          onChange={(e) => setQuickCategoryName(e.target.value)}
+                          className="flex-1"
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleQuickAddCategory();
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleQuickAddCategory}
+                          disabled={
+                            !quickCategoryName.trim() || isQuickAddingCategory
+                          }
+                        >
+                          {isQuickAddingCategory ? "Adding..." : "Add"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setShowQuickAddCategory(false);
+                            setQuickCategoryName("");
+                          }}
+                          disabled={isQuickAddingCategory}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Sold By *
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                      value={formData.soldByWeight ? "weight" : "each"}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          soldByWeight: e.target.value === "weight",
+                        })
+                      }
+                      required
+                    >
+                      <option value="each">Each</option>
+                      <option value="weight">Weight (kg)</option>
+                    </select>
+                  </div>
+                </div>
 
-                  <div className="space-y-2 mt-4">
-                    <label className="text-sm font-medium">Image URL</label>
+                {/* Price and Cost */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Price (฿) *
+                    </label>
                     <Input
-                      value={formData.imageUrl}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={formData.price}
                       onChange={(e) =>
-                        setFormData({ ...formData, imageUrl: e.target.value })
+                        setFormData({ ...formData, price: e.target.value })
                       }
-                      placeholder="https://..."
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Cost / Buy Price (฿)
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={formData.cost}
+                      onChange={(e) =>
+                        setFormData({ ...formData, cost: e.target.value })
+                      }
+                      disabled={formData.trackStock}
+                    />
+                    <p className="text-xs text-neutral-500 mt-1">
+                      {formData.trackStock
+                        ? "Enter cost in Track Stock section below"
+                        : "Your purchase cost per product"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* SKU and Barcode */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      SKU
+                    </label>
+                    <Input
+                      placeholder="Auto-generated"
+                      value={formData.sku}
+                      onChange={(e) =>
+                        setFormData({ ...formData, sku: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-neutral-500 mt-1">
+                      Auto-generated if left empty
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Barcode
+                    </label>
+                    <Input
+                      placeholder="Scan or enter barcode"
+                      value={formData.barcode}
+                      onChange={(e) =>
+                        setFormData({ ...formData, barcode: e.target.value })
+                      }
                     />
                   </div>
                 </div>
 
-                {/* Flags */}
-                <div className="border-t pt-4 space-y-3">
-                  <h4 className="text-sm font-semibold">Options</h4>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="trackStock"
-                      checked={formData.trackStock}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          trackStock: e.target.checked,
-                        })
-                      }
-                      className="rounded"
-                    />
-                    <label htmlFor="trackStock" className="text-sm">
-                      Track Stock
+                {/* Track Stock Toggle */}
+                <div className="border rounded-lg p-4 bg-neutral-50 dark:bg-neutral-900">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="font-semibold">Track Stock</h3>
+                      <p className="text-sm text-neutral-500">
+                        Enable inventory tracking for this product
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.trackStock}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            trackStock: e.target.checked,
+                          })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-700 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-gray-700 dark:peer-checked:after:border-gray-700 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 dark:after:bg-gray-300 after:border-gray-600 dark:after:border-gray-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="soldByWeight"
-                      checked={formData.soldByWeight}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          soldByWeight: e.target.checked,
-                        })
-                      }
-                      className="rounded"
-                    />
-                    <label htmlFor="soldByWeight" className="text-sm">
-                      Sold by Weight
-                    </label>
-                  </div>
+                  {/* Stock Fields - Show only when Track Stock is ON */}
+                  {formData.trackStock && (
+                    <div className="space-y-4 mt-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">
+                            In Stock *
+                          </label>
+                          <Input
+                            type="number"
+                            step="1"
+                            min="0"
+                            placeholder="0"
+                            value={formData.stock}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                stock: e.target.value,
+                              })
+                            }
+                            required={formData.trackStock}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">
+                            Low Stock Alert *
+                          </label>
+                          <Input
+                            type="number"
+                            step="1"
+                            min="0"
+                            placeholder="5"
+                            value={formData.lowStock || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                lowStock: e.target.value,
+                              })
+                            }
+                            required={formData.trackStock}
+                          />
+                          <p className="text-xs text-neutral-500 mt-1">
+                            Alert when stock falls below this number
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="availableForSale"
-                      checked={formData.availableForSale}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          availableForSale: e.target.checked,
-                        })
-                      }
-                      className="rounded"
-                    />
-                    <label htmlFor="availableForSale" className="text-sm">
-                      Available for Sale
-                    </label>
+                      {/* Cost per product when tracking stock */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Purchase Cost per Unit (฿) *
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={formData.cost}
+                          onChange={(e) =>
+                            setFormData({ ...formData, cost: e.target.value })
+                          }
+                          required={formData.trackStock}
+                        />
+                        <p className="text-xs text-neutral-500 mt-1">
+                          Enter the buy price for this stock batch
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Representation Type - Color or Image */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-3">Product Display</h3>
+                  <div className="space-y-4">
+                    {/* Color or Image Selection */}
+                    <div className="flex gap-4">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            representationType: "color",
+                          })
+                        }
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 p-3 border-2 rounded-lg transition-all",
+                          formData.representationType === "color"
+                            ? "border-primary bg-primary/5"
+                            : "border-neutral-200 hover:border-neutral-300"
+                        )}
+                      >
+                        <Palette className="h-5 w-5" />
+                        <span className="font-medium">Color</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            representationType: "image",
+                          })
+                        }
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 p-3 border-2 rounded-lg transition-all",
+                          formData.representationType === "image"
+                            ? "border-primary bg-primary/5"
+                            : "border-neutral-200 hover:border-neutral-300"
+                        )}
+                      >
+                        <ImageIcon className="h-5 w-5" />
+                        <span className="font-medium">Image</span>
+                      </button>
+                    </div>
+
+                    {/* Color Picker */}
+                    {formData.representationType === "color" && (
+                      <div className="grid grid-cols-4 gap-3">
+                        {PRODUCT_COLORS.map((colorOption) => (
+                          <button
+                            key={colorOption.value}
+                            type="button"
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                color: colorOption.value,
+                              })
+                            }
+                            className={cn(
+                              "flex flex-col items-center gap-2 p-3 border-2 rounded-lg transition-all hover:scale-105",
+                              formData.color === colorOption.value
+                                ? "border-primary"
+                                : "border-neutral-200"
+                            )}
+                          >
+                            <div
+                              className="w-12 h-12 rounded-full"
+                              style={{ backgroundColor: colorOption.hex }}
+                            />
+                            <span className="text-xs font-medium">
+                              {colorOption.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Image Upload */}
+                    {formData.representationType === "image" && (
+                      <div>
+                        {formData.imagePreview ? (
+                          <div className="relative">
+                            <img
+                              src={formData.imagePreview}
+                              alt="Product preview"
+                              className="w-full h-48 object-cover rounded-lg"
+                            />
+                            <div className="absolute top-2 right-2 flex gap-2">
+                              <label className="cursor-pointer bg-gray-100 dark:bg-gray-800 p-2 rounded-full shadow-lg hover:bg-gray-200 dark:hover:bg-gray-700">
+                                <Edit className="h-4 w-4 text-gray-300 dark:text-gray-300" />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleImageUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={handleRemoveImage}
+                                className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full shadow-lg hover:bg-red-100 dark:hover:bg-red-900 text-red-400"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg cursor-pointer hover:border-primary hover:bg-gray-800 dark:hover:bg-gray-800 transition-all">
+                            <Upload className="h-12 w-12 text-gray-500 dark:text-gray-500 mb-2" />
+                            <span className="text-sm text-gray-400 dark:text-gray-400">
+                              Click to upload product image
+                            </span>
+                            <span className="text-xs text-neutral-400 mt-1">
+                              Max 5MB (JPG, PNG, GIF)
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImageUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex justify-end space-x-2 pt-4 border-t dark:border-neutral-700 sticky bottom-0 bg-white dark:bg-neutral-900">
+                {/* Submit Buttons */}
+                <div className="flex gap-2 pt-4">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      resetForm();
-                    }}
+                    onClick={() => setIsModalOpen(false)}
+                    className="flex-1"
                   >
                     Cancel
                   </Button>
-                  <Button type="submit">
-                    {editingProduct ? "Update Item" : "Create Item"}
+                  <Button type="submit" className="flex-1">
+                    {editingProduct ? "Update Product" : "Create Product"}
                   </Button>
                 </div>
               </form>
@@ -1184,212 +1561,224 @@ export default function ItemListPage() {
         </Card>
       ) : (
         <>
-          {/* Desktop View - Hidden on Mobile */}
-          <div className="hidden lg:grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {filteredProducts.map((product) => (
-              <Card
-                key={product.id}
-                className="overflow-hidden hover:shadow-md transition-shadow"
-              >
-                <CardContent className="p-0">
-                  <div className="flex">
-                    {/* Product Image */}
-                    <div className="w-40 h-40 bg-neutral-50 dark:bg-neutral-800 flex-shrink-0 flex items-center justify-center border-r dark:border-neutral-700 overflow-hidden">
-                      {product.imageUrl ? (
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          className="w-full h-full object-contain p-2"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = "";
-                            e.target.style.display = "none";
-                            const fallback =
-                              e.target.parentElement.querySelector(
-                                ".fallback-icon"
-                              );
-                            if (fallback) fallback.style.display = "flex";
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className={`fallback-icon ${
-                          product.imageUrl ? "hidden" : "flex"
-                        } items-center justify-center w-full h-full bg-gradient-to-br from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-900`}
-                      >
-                        <ImageIcon className="h-16 w-16 text-neutral-300 dark:text-neutral-600" />
-                      </div>
-                    </div>
+          {/* Desktop View - Table */}
+          <div className="hidden lg:block">
+            {/* Bulk Actions */}
+            {selectedProducts.length > 0 && (
+              <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {selectedProducts.length} product(s) selected
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Selected
+                </Button>
+              </div>
+            )}
 
-                    {/* Product Details */}
-                    <div className="flex-1 p-5 flex flex-col">
-                      {/* Header */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-lg leading-tight truncate pr-2">
-                            {product.name}
-                          </h3>
-                          {product.handle && (
-                            <p className="text-xs text-neutral-500 mt-1 truncate">
-                              @{product.handle}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex space-x-1 ml-3 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-blue-50 hover:text-blue-600"
-                            onClick={() => setSelectedProduct(product)}
-                            title="View Details"
-                          >
-                            <Package className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-amber-50 hover:text-amber-600"
-                            onClick={() => handleEdit(product)}
-                            title="Edit Product"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-red-50 text-red-600 hover:text-red-700"
-                            onClick={() => handleDelete(product.id)}
-                            title="Delete Product"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-neutral-50 dark:bg-neutral-800 border-b dark:border-neutral-700">
+                      <tr>
+                        <th className="text-left p-4 font-semibold text-sm w-12">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded border-neutral-300 cursor-pointer"
+                            checked={
+                              selectedProducts.length ===
+                                filteredProducts.length &&
+                              filteredProducts.length > 0
+                            }
+                            onChange={toggleSelectAll}
+                          />
+                        </th>
+                        <th className="text-left p-4 font-semibold text-sm">
+                          Item Name
+                        </th>
+                        <th className="text-left p-4 font-semibold text-sm">
+                          Category
+                        </th>
+                        <th className="text-right p-4 font-semibold text-sm">
+                          Price
+                        </th>
+                        <th className="text-right p-4 font-semibold text-sm">
+                          Cost
+                        </th>
+                        <th className="text-right p-4 font-semibold text-sm">
+                          Margin
+                        </th>
+                        <th className="text-center p-4 font-semibold text-sm">
+                          In Stock
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y dark:divide-neutral-700">
+                      {filteredProducts.map((product) => {
+                        const margin =
+                          product.cost > 0
+                            ? (
+                                ((product.price - product.cost) /
+                                  product.price) *
+                                100
+                              ).toFixed(1)
+                            : "0";
 
-                      {/* Badges */}
-                      <div className="flex flex-wrap gap-1.5 mb-3">
-                        {product.categoryId && (
-                          <Badge
-                            variant="secondary"
-                            className="text-xs font-medium"
-                            style={{
-                              backgroundColor: product.color
-                                ? `${product.color}20`
-                                : undefined,
-                              color: product.color || undefined,
-                            }}
+                        return (
+                          <tr
+                            key={product.id}
+                            className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
                           >
-                            {getCategoryName(product.categoryId)}
-                          </Badge>
-                        )}
-                        <Badge
-                          variant={
-                            product.availableForSale ? "default" : "secondary"
-                          }
-                          className="text-xs font-medium"
-                        >
-                          {product.availableForSale ? (
-                            <>
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Available
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="h-3 w-3 mr-1" />
-                              Unavailable
-                            </>
-                          )}
-                        </Badge>
-                        {product.source && (
-                          <Badge
-                            variant="outline"
-                            className="text-xs font-medium capitalize"
-                          >
-                            {product.source}
-                          </Badge>
-                        )}
-                        {product.isComposite && (
-                          <Badge
-                            variant="outline"
-                            className="text-xs font-medium"
-                          >
-                            <Layers className="h-3 w-3 mr-1" />
-                            Composite
-                          </Badge>
-                        )}
-                        {product.form && (
-                          <Badge
-                            variant="outline"
-                            className="text-xs font-medium"
-                          >
-                            {product.form}
-                          </Badge>
-                        )}
-                      </div>
+                            {/* Checkbox */}
+                            <td className="p-4">
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-neutral-300 cursor-pointer"
+                                checked={selectedProducts.includes(product.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleProductSelection(product.id);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </td>
 
-                      {/* Info Grid */}
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm mb-3">
-                        <div className="flex items-center text-neutral-600 min-w-0">
-                          <Tag className="h-3.5 w-3.5 mr-2 flex-shrink-0 text-neutral-400" />
-                          <span className="text-xs text-neutral-500 flex-shrink-0">
-                            SKU:
-                          </span>
-                          <span className="ml-1.5 font-medium text-neutral-900 dark:text-neutral-100 truncate">
-                            {product.sku || "N/A"}
-                          </span>
-                        </div>
-                        <div className="flex items-center text-neutral-600 min-w-0">
-                          <span className="text-xs text-neutral-500 flex-shrink-0">
-                            Barcode:
-                          </span>
-                          <span className="ml-1.5 font-medium text-neutral-900 dark:text-neutral-100 truncate">
-                            {product.barcode || "N/A"}
-                          </span>
-                        </div>
-                        <div className="flex items-center text-neutral-600">
-                          <span className="text-xs text-neutral-500">
-                            Stock:
-                          </span>
-                          <span className="ml-1.5 font-medium text-neutral-900 dark:text-neutral-100">
-                            {product.stock}
-                          </span>
-                        </div>
-                        <div className="flex items-center text-neutral-600">
-                          <span className="text-xs text-neutral-500">
-                            Variants:
-                          </span>
-                          <span className="ml-1.5 font-medium text-neutral-900 dark:text-neutral-100">
-                            {product.variants?.length || 1}
-                          </span>
-                        </div>
-                      </div>
+                            {/* Item Name */}
+                            <td
+                              className="p-4 cursor-pointer"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-12 h-12 rounded flex items-center justify-center flex-shrink-0 overflow-hidden"
+                                  style={{
+                                    backgroundColor: product.imageUrl
+                                      ? "transparent"
+                                      : product.color || "#e5e7eb",
+                                  }}
+                                >
+                                  {product.imageUrl ? (
+                                    <img
+                                      src={product.imageUrl}
+                                      alt={product.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div
+                                      className="w-full h-full flex items-center justify-center text-white font-bold text-lg"
+                                      style={{
+                                        backgroundColor:
+                                          product.color || "#9ca3af",
+                                      }}
+                                    >
+                                      {product.name.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                                    {product.name}
+                                  </div>
+                                  {product.sku && (
+                                    <div className="text-xs text-neutral-500 truncate">
+                                      SKU: {product.sku}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
 
-                      {/* Price - Push to bottom */}
-                      <div className="mt-auto pt-3 border-t flex items-center justify-between">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-2xl font-bold text-green-600">
-                            {formatCurrency(product.price)}
-                          </span>
-                          {product.cost > 0 && (
-                            <span className="text-xs text-neutral-500">
-                              Cost: {formatCurrency(product.cost)}
-                            </span>
-                          )}
-                        </div>
-                        {product.pricingType && (
-                          <Badge
-                            variant="outline"
-                            className="text-xs font-medium"
-                          >
-                            {product.pricingType}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                            {/* Category */}
+                            <td
+                              className="p-4 cursor-pointer"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <Badge
+                                variant="secondary"
+                                className="text-xs"
+                                style={{
+                                  backgroundColor: product.color
+                                    ? `${product.color}20`
+                                    : undefined,
+                                  color: product.color || undefined,
+                                }}
+                              >
+                                {getCategoryName(product.categoryId)}
+                              </Badge>
+                            </td>
+
+                            {/* Price */}
+                            <td
+                              className="p-4 text-right cursor-pointer"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <div className="font-bold text-green-600">
+                                {formatCurrency(product.price)}
+                              </div>
+                            </td>
+
+                            {/* Cost */}
+                            <td
+                              className="p-4 text-right cursor-pointer"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <div className="font-medium text-neutral-700 dark:text-neutral-300">
+                                {formatCurrency(product.cost || 0)}
+                              </div>
+                            </td>
+
+                            {/* Margin */}
+                            <td
+                              className="p-4 text-right cursor-pointer"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <div
+                                className={`font-semibold ${
+                                  parseFloat(margin) > 50
+                                    ? "text-green-600"
+                                    : parseFloat(margin) > 30
+                                    ? "text-blue-600"
+                                    : "text-neutral-600"
+                                }`}
+                              >
+                                {margin}%
+                              </div>
+                            </td>
+
+                            {/* In Stock */}
+                            <td
+                              className="p-4 text-center cursor-pointer"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <div className="flex items-center justify-center gap-2">
+                                <span className="font-semibold text-neutral-900 dark:text-neutral-100">
+                                  {product.stock || 0}
+                                </span>
+                                {product.trackStock &&
+                                  product.lowStock &&
+                                  product.stock <= product.lowStock && (
+                                    <Badge
+                                      variant="destructive"
+                                      className="text-xs"
+                                    >
+                                      Low
+                                    </Badge>
+                                  )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Mobile View - Compact Expandable Cards */}

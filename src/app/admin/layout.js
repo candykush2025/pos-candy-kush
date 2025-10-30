@@ -24,6 +24,7 @@ import {
   Menu,
   X,
   Clock,
+  ClipboardList,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -62,6 +63,9 @@ export default function AdminLayout({ children }) {
   useEffect(() => {
     if (pathname.startsWith("/admin/products/")) {
       setExpandedMenus((prev) => ({ ...prev, Products: true }));
+    }
+    if (pathname.startsWith("/admin/stock")) {
+      setExpandedMenus((prev) => ({ ...prev, Stock: true }));
     }
   }, [pathname]);
 
@@ -127,7 +131,24 @@ export default function AdminLayout({ children }) {
         },
       ],
     },
-    { name: "Stock", href: "/admin/stock", icon: Database },
+    {
+      name: "Stock",
+      icon: Database,
+      subItems: [
+        { name: "Stock Management", href: "/admin/stock", icon: Database },
+        {
+          name: "Purchase Orders",
+          href: "/admin/stock/purchase-orders",
+          icon: ShoppingCart,
+        },
+        {
+          name: "Stock Adjustment",
+          href: "/admin/stock/adjustments",
+          icon: ClipboardList,
+        },
+        { name: "Stock History", href: "/admin/stock/history", icon: Clock },
+      ],
+    },
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Customers", href: "/admin/customers", icon: UserCircle },
     { name: "Users", href: "/admin/users", icon: Users },

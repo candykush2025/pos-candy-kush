@@ -752,7 +752,6 @@ export default function SalesSection({ cashier }) {
     }
 
     addItem(product, 1);
-    toast.success(`Added ${product.name} to cart`);
   };
 
   // Helper function to save custom tabs to Firebase
@@ -1420,6 +1419,50 @@ export default function SalesSection({ cashier }) {
 
       // Save to Firebase
       await receiptsService.create(receiptData);
+
+      // Update stock levels and log history for items that track stock
+      try {
+        const { stockHistoryService } = await import(
+          "@/lib/firebase/stockHistoryService"
+        );
+
+        for (const item of items) {
+          // Fetch full product details to check if it tracks stock
+          const product = await productsService.get(
+            item.productId || item.itemId
+          );
+
+          if (product && product.trackStock) {
+            const currentStock = product.stock || 0;
+            const newStock = Math.max(0, currentStock - item.quantity);
+
+            // Update product stock
+            await productsService.update(product.id, {
+              stock: newStock,
+            });
+
+            // Log stock history
+            await stockHistoryService.logStockMovement({
+              productId: product.id,
+              productName: product.name,
+              sku: product.sku || null,
+              type: "sale",
+              quantity: -item.quantity, // Negative for sale
+              previousStock: currentStock,
+              newStock: newStock,
+              referenceId: orderNumber,
+              referenceType: "receipt",
+              userId: cashier?.id || null,
+              userName: cashier?.name || "Unknown",
+              notes: `Sale: ${item.quantity}x ${product.name}`,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error updating stock:", error);
+        // Don't fail the checkout if stock update fails
+        toast.warning("Sale completed but stock update failed");
+      }
 
       // Update customer stats if customer is selected
       if (cartCustomer) {
