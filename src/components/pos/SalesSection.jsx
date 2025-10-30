@@ -119,13 +119,15 @@ function SortableTab({
         onMouseLeave={!isDragMode ? onLongPressEnd : undefined}
         onTouchStart={!isDragMode ? onLongPressStart : undefined}
         onTouchEnd={!isDragMode ? onLongPressEnd : undefined}
+        onContextMenu={(e) => e.preventDefault()}
         className={cn(
-          "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors w-full select-none",
+          "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors w-full select-none touch-manipulation",
           isSelected
             ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2 border-t-green-600"
             : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800",
           isDragMode && "ring-2 ring-blue-400 cursor-move"
         )}
+        style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
       >
         {category}
       </button>
@@ -2009,10 +2011,15 @@ export default function SalesSection({ cashier }) {
                       <Card
                         key={product.id || product.sku}
                         className={cn(
-                          "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none",
+                          "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none touch-manipulation",
                           !canSell && "cursor-not-allowed opacity-70"
                         )}
+                        style={{
+                          WebkitTouchCallout: "none",
+                          WebkitUserSelect: "none",
+                        }}
                         onClick={handleCardClick}
+                        onContextMenu={(e) => e.preventDefault()}
                       >
                         {/* 1:1 Ratio Container */}
                         <div className="relative w-full pt-[100%] overflow-hidden">
@@ -2026,6 +2033,12 @@ export default function SalesSection({ cashier }) {
                                   alt={product.name || "Product image"}
                                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                   loading="lazy"
+                                  onContextMenu={(e) => e.preventDefault()}
+                                  draggable="false"
+                                  style={{
+                                    WebkitTouchCallout: "none",
+                                    WebkitUserSelect: "none",
+                                  }}
                                 />
                                 {/* Title overlay at bottom */}
                                 <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1.5">
@@ -2089,7 +2102,11 @@ export default function SalesSection({ cashier }) {
                 ).map((slot, index) => (
                   <Card
                     key={index}
-                    className="p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none"
+                    className="p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none touch-manipulation"
+                    style={{
+                      WebkitTouchCallout: "none",
+                      WebkitUserSelect: "none",
+                    }}
                     onClick={
                       slot
                         ? () => {
@@ -2115,6 +2132,7 @@ export default function SalesSection({ cashier }) {
                     onMouseLeave={handleSlotLongPressEnd}
                     onTouchStart={() => handleSlotLongPressStart(index)}
                     onTouchEnd={handleSlotLongPressEnd}
+                    onContextMenu={(e) => e.preventDefault()}
                   >
                     <div className="relative w-full pt-[100%] overflow-hidden">
                       <div className="absolute inset-0">
@@ -2147,6 +2165,14 @@ export default function SalesSection({ cashier }) {
                                         alt={product.name || "Product image"}
                                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                         loading="lazy"
+                                        onContextMenu={(e) =>
+                                          e.preventDefault()
+                                        }
+                                        draggable="false"
+                                        style={{
+                                          WebkitTouchCallout: "none",
+                                          WebkitUserSelect: "none",
+                                        }}
                                       />
                                       <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1.5">
                                         <h3 className="text-xs font-semibold text-white text-center line-clamp-2">
@@ -2233,10 +2259,15 @@ export default function SalesSection({ cashier }) {
                     <Card
                       key={product.id || product.sku}
                       className={cn(
-                        "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none",
+                        "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none touch-manipulation",
                         !canSell && "cursor-not-allowed opacity-70"
                       )}
+                      style={{
+                        WebkitTouchCallout: "none",
+                        WebkitUserSelect: "none",
+                      }}
                       onClick={handleCardClick}
+                      onContextMenu={(e) => e.preventDefault()}
                     >
                       {/* 1:1 Ratio Container */}
                       <div className="relative w-full pt-[100%] overflow-hidden">
@@ -2250,6 +2281,12 @@ export default function SalesSection({ cashier }) {
                                 alt={product.name || "Product image"}
                                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                 loading="lazy"
+                                onContextMenu={(e) => e.preventDefault()}
+                                draggable="false"
+                                style={{
+                                  WebkitTouchCallout: "none",
+                                  WebkitUserSelect: "none",
+                                }}
                               />
                               {/* Title overlay at bottom */}
                               <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1.5">
