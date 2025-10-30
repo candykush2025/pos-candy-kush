@@ -112,6 +112,7 @@ function SortableTab({
       {...(isDragMode ? { ...attributes, ...listeners } : {})}
     >
       <button
+        type="button"
         onClick={!isDragMode ? onClick : undefined}
         onMouseDown={!isDragMode ? onLongPressStart : undefined}
         onMouseUp={!isDragMode ? onLongPressEnd : undefined}
@@ -119,7 +120,7 @@ function SortableTab({
         onTouchStart={!isDragMode ? onLongPressStart : undefined}
         onTouchEnd={!isDragMode ? onLongPressEnd : undefined}
         className={cn(
-          "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors w-full",
+          "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors w-full select-none",
           isSelected
             ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2 border-t-green-600"
             : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800",
@@ -1946,7 +1947,7 @@ export default function SalesSection({ cashier }) {
                     setPreviousCustomCategory(null);
                   }
                 }}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 select-none"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to {previousCustomCategory || "Custom Page"}
@@ -2008,7 +2009,7 @@ export default function SalesSection({ cashier }) {
                       <Card
                         key={product.id || product.sku}
                         className={cn(
-                          "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
+                          "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none",
                           !canSell && "cursor-not-allowed opacity-70"
                         )}
                         onClick={handleCardClick}
@@ -2088,7 +2089,7 @@ export default function SalesSection({ cashier }) {
                 ).map((slot, index) => (
                   <Card
                     key={index}
-                    className="p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md"
+                    className="p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none"
                     onClick={
                       slot
                         ? () => {
@@ -2232,7 +2233,7 @@ export default function SalesSection({ cashier }) {
                     <Card
                       key={product.id || product.sku}
                       className={cn(
-                        "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md",
+                        "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none",
                         !canSell && "cursor-not-allowed opacity-70"
                       )}
                       onClick={handleCardClick}
@@ -2360,8 +2361,9 @@ export default function SalesSection({ cashier }) {
 
                 {/* Add Button */}
                 <button
+                  type="button"
                   onClick={() => setShowAddCategoryModal(true)}
-                  className="px-6 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800 transition-colors flex items-center gap-1"
+                  className="px-6 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800 transition-colors flex items-center gap-1 select-none"
                   title="Add new category"
                 >
                   <Plus className="h-6 w-6" />
@@ -2371,8 +2373,9 @@ export default function SalesSection({ cashier }) {
               {/* Done Button for Drag Mode */}
               {isDragMode && (
                 <button
+                  type="button"
                   onClick={handleExitDragMode}
-                  className="px-6 py-4 text-xl font-medium bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center gap-2 border-l border-gray-300"
+                  className="px-6 py-4 text-xl font-medium bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center gap-2 border-l border-gray-300 select-none"
                 >
                   <CheckCircle className="h-5 w-5" />
                   Done
