@@ -27,7 +27,7 @@ export default function AdminOrders() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(20);
 
   // Filter states
   const [dateRange, setDateRange] = useState("today"); // today, yesterday, this_week, last_week, this_month, last_month, custom, all
@@ -364,11 +364,11 @@ export default function AdminOrders() {
   const getReceiptTypeColor = (type) => {
     switch (type?.toUpperCase()) {
       case "SALE":
-        return "bg-green-100 text-green-800";
+        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
       case "REFUND":
-        return "bg-red-100 text-red-800";
+        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
       default:
-        return "bg-neutral-100 text-neutral-800";
+        return "bg-neutral-100 dark:bg-gray-800 text-neutral-800 dark:text-neutral-300";
     }
   };
 
@@ -385,7 +385,7 @@ export default function AdminOrders() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Orders & Receipts</h1>
-        <p className="text-neutral-500 mt-2">
+        <p className="text-neutral-500 dark:text-neutral-400 mt-2">
           View all sales and receipts from Loyverse
         </p>
       </div>
@@ -396,7 +396,9 @@ export default function AdminOrders() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-neutral-500">Total Receipts</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Total Receipts
+                </p>
                 <p className="text-2xl font-bold">{filteredReceipts.length}</p>
               </div>
               <Receipt className="h-8 w-8 text-blue-600" />
@@ -408,7 +410,9 @@ export default function AdminOrders() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-neutral-500">Total Sales</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Total Sales
+                </p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(totalSales)}
                 </p>
@@ -422,7 +426,9 @@ export default function AdminOrders() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-neutral-500">Total Refunds</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Total Refunds
+                </p>
                 <p className="text-2xl font-bold text-red-600">
                   {formatCurrency(totalRefunds)}
                 </p>
@@ -438,7 +444,7 @@ export default function AdminOrders() {
         <CardContent className="pt-6 space-y-4">
           {/* Quick Date Range Tabs */}
           <div>
-            <label className="text-sm font-medium text-neutral-700 mb-2 block">
+            <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
               Quick Date Range
             </label>
             <Tabs
@@ -461,9 +467,9 @@ export default function AdminOrders() {
 
           {/* Custom Date Range Picker */}
           {dateRange === "custom" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
                   Start Date
                 </label>
                 <Input
@@ -475,7 +481,7 @@ export default function AdminOrders() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
                   End Date
                 </label>
                 <Input
@@ -499,7 +505,7 @@ export default function AdminOrders() {
 
           {/* Date Range Info */}
           {dateRange !== "custom" && dateRange !== "all" && (
-            <div className="text-sm text-neutral-600 bg-neutral-50 p-3 rounded-lg">
+            <div className="text-sm text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-gray-800 p-3 rounded-lg">
               📅 <strong>Showing:</strong>{" "}
               {dateRange === "today"
                 ? "Today's receipts"
@@ -525,7 +531,7 @@ export default function AdminOrders() {
           {/* Search Bar */}
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400 dark:text-neutral-500" />
               <Input
                 placeholder="Search by receipt #, customer, employee, source..."
                 value={searchQuery}
@@ -544,10 +550,10 @@ export default function AdminOrders() {
 
           {/* Advanced Filters */}
           {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-neutral-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-neutral-50 dark:bg-gray-800 rounded-lg">
               {/* Receipt Type Filter */}
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
                   Receipt Type
                 </label>
                 <select
@@ -563,7 +569,7 @@ export default function AdminOrders() {
 
               {/* Source Filter */}
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
                   Source
                 </label>
                 <select
@@ -582,7 +588,7 @@ export default function AdminOrders() {
 
               {/* Min Amount */}
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
                   Min Amount (฿)
                 </label>
                 <Input
@@ -596,7 +602,7 @@ export default function AdminOrders() {
 
               {/* Max Amount */}
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-2 block">
+                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
                   Max Amount (฿)
                 </label>
                 <Input
@@ -633,14 +639,18 @@ export default function AdminOrders() {
       {/* Receipts List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-neutral-500">Loading receipts...</p>
+          <p className="text-neutral-500 dark:text-neutral-400">
+            Loading receipts...
+          </p>
         </div>
       ) : filteredReceipts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <Receipt className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
-            <p className="text-neutral-500">No receipts found</p>
-            <p className="text-sm text-neutral-400 mt-2">
+            <Receipt className="h-12 w-12 text-neutral-400 dark:text-neutral-500 mx-auto mb-4" />
+            <p className="text-neutral-500 dark:text-neutral-400">
+              No receipts found
+            </p>
+            <p className="text-sm text-neutral-400 dark:text-neutral-500 mt-2">
               Sync receipts from Loyverse in the Integration page
             </p>
           </CardContent>
@@ -650,136 +660,167 @@ export default function AdminOrders() {
           <CardHeader>
             <CardTitle>All Receipts ({filteredReceipts.length})</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {paginatedReceipts.map((receipt) => (
-                <div
-                  key={receipt.id}
-                  className="p-4 border rounded-lg hover:bg-neutral-50"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">
-                          Receipt #{receipt.receiptNumber}
-                        </h3>
-                        <Badge
-                          className={getReceiptTypeColor(receipt.receiptType)}
-                        >
-                          {receipt.receiptType || "SALE"}
-                        </Badge>
-                        {receipt.cancelledAt && (
-                          <Badge variant="destructive">Cancelled</Badge>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-neutral-50 dark:bg-gray-800 border-b dark:border-gray-700">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Receipt #
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Date & Time
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Items
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Payment
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Employee
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Total
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-900 divide-y divide-neutral-200 dark:divide-gray-700">
+                  {paginatedReceipts.map((receipt) => (
+                    <tr
+                      key={receipt.id}
+                      className="hover:bg-neutral-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      {/* Receipt Number */}
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-neutral-900 dark:text-white">
+                          #{receipt.receiptNumber}
+                        </div>
+                        {receipt.source && (
+                          <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                            {receipt.source}
+                          </div>
                         )}
-                      </div>
-                      <p className="text-sm text-neutral-500 mt-1">
-                        {receipt.receiptDate
-                          ? new Date(receipt.receiptDate).toLocaleString()
-                          : "N/A"}
-                      </p>
-                      {receipt.source && (
-                        <p className="text-xs text-neutral-400">
-                          Source: {receipt.source}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-bold text-green-600">
-                        {formatCurrency(receipt.totalMoney || 0)}
-                      </p>
-                      {receipt.totalDiscount > 0 && (
-                        <p className="text-sm text-orange-600">
-                          Discount: {formatCurrency(receipt.totalDiscount)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                      </td>
 
-                  {/* Line Items */}
-                  {receipt.lineItems && receipt.lineItems.length > 0 && (
-                    <div className="mt-3 pt-3 border-t">
-                      <p className="text-sm font-medium text-neutral-700 mb-2">
-                        Items ({receipt.lineItems.length}):
-                      </p>
-                      <div className="space-y-2">
-                        {receipt.lineItems.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex justify-between text-sm bg-neutral-50 p-2 rounded"
-                          >
-                            <div className="flex-1">
-                              <span className="text-neutral-900 font-medium">
-                                {item.quantity}x {item.item_name}
-                              </span>
-                              {item.variant_name && (
-                                <span className="text-neutral-500 ml-2">
-                                  ({item.variant_name})
-                                </span>
-                              )}
-                              {item.sku && (
-                                <span className="text-xs text-neutral-400 ml-2">
-                                  SKU: {item.sku}
-                                </span>
+                      {/* Date & Time */}
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-neutral-700 dark:text-neutral-300">
+                          {receipt.receiptDate
+                            ? new Date(receipt.receiptDate).toLocaleDateString()
+                            : receipt.createdAt?.toDate
+                            ? receipt.createdAt.toDate().toLocaleDateString()
+                            : "N/A"}
+                        </div>
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                          {receipt.receiptDate
+                            ? new Date(receipt.receiptDate).toLocaleTimeString()
+                            : receipt.createdAt?.toDate
+                            ? receipt.createdAt.toDate().toLocaleTimeString()
+                            : ""}
+                        </div>
+                      </td>
+
+                      {/* Items */}
+                      <td className="px-4 py-3">
+                        <div className="max-w-xs">
+                          {receipt.lineItems && receipt.lineItems.length > 0 ? (
+                            <div className="space-y-1">
+                              {receipt.lineItems
+                                .slice(0, 2)
+                                .map((item, idx) => (
+                                  <div key={idx} className="text-sm">
+                                    <span className="font-medium text-neutral-900 dark:text-white">
+                                      {item.quantity}x
+                                    </span>{" "}
+                                    <span className="text-neutral-700 dark:text-neutral-300">
+                                      {item.item_name}
+                                    </span>
+                                    {item.sku && (
+                                      <span className="text-xs text-neutral-400 dark:text-neutral-500 ml-1">
+                                        ({item.sku})
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              {receipt.lineItems.length > 2 && (
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                                  +{receipt.lineItems.length - 2} more items
+                                </div>
                               )}
                             </div>
-                            <span className="text-neutral-900 font-medium">
-                              {formatCurrency(item.total_money || 0)}
+                          ) : (
+                            <span className="text-sm text-neutral-500 dark:text-neutral-400">
+                              No items
                             </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                          )}
+                        </div>
+                      </td>
 
-                  {/* Receipt Details */}
-                  <div className="mt-3 pt-3 border-t flex items-center justify-between text-sm text-neutral-600">
-                    <div className="flex gap-4">
-                      {receipt.payments && receipt.payments.length > 0 && (
-                        <span>
-                          Payment:{" "}
-                          {receipt.payments
-                            .map(
-                              (p) => p.name || p.payment_type?.name || "Cash"
-                            )
-                            .join(", ")}
-                        </span>
-                      )}
-                      {receipt.employeeId && (
-                        <span>
-                          Employee:{" "}
-                          {employees[receipt.employeeId]?.name ||
-                            receipt.employeeId.slice(0, 8) + "..."}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex gap-4">
-                      {receipt.storeId && (
-                        <span className="text-xs">
-                          Store: {receipt.storeId}
-                        </span>
-                      )}
-                      {receipt.receiptDate && (
-                        <span>
-                          {new Date(receipt.receiptDate).toLocaleString()}
-                        </span>
-                      )}
-                      {!receipt.receiptDate && receipt.createdAt && (
-                        <span>
-                          {receipt.createdAt?.toDate
-                            ? receipt.createdAt.toDate().toLocaleString()
-                            : new Date(receipt.createdAt).toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      {/* Payment Method */}
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-neutral-700 dark:text-neutral-300">
+                          {receipt.payments && receipt.payments.length > 0
+                            ? receipt.payments
+                                .map(
+                                  (p) =>
+                                    p.name || p.payment_type?.name || "Cash"
+                                )
+                                .join(", ")
+                            : "N/A"}
+                        </div>
+                        {receipt.totalDiscount > 0 && (
+                          <div className="text-xs text-orange-600 dark:text-orange-400">
+                            Discount: {formatCurrency(receipt.totalDiscount)}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Employee */}
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-neutral-700 dark:text-neutral-300">
+                          {receipt.employeeId
+                            ? employees[receipt.employeeId]?.name ||
+                              receipt.employeeId.slice(0, 8) + "..."
+                            : "N/A"}
+                        </div>
+                      </td>
+
+                      {/* Total Amount */}
+                      <td className="px-4 py-3 text-right">
+                        <div className="text-lg font-bold text-green-600 dark:text-green-500">
+                          {formatCurrency(receipt.totalMoney || 0)}
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <Badge
+                            className={getReceiptTypeColor(receipt.receiptType)}
+                          >
+                            {receipt.receiptType || "SALE"}
+                          </Badge>
+                          {receipt.cancelledAt && (
+                            <Badge variant="destructive" className="text-xs">
+                              Cancelled
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             {/* Pagination Controls */}
             {filteredReceipts.length > itemsPerPage && (
-              <div className="mt-6 flex items-center justify-between border-t pt-4">
-                <div className="text-sm text-neutral-600">
+              <div className="mt-6 px-4 pb-4 flex items-center justify-between border-t pt-4">
+                <div className="text-sm text-neutral-600 dark:text-neutral-400">
                   Showing {startIndex + 1} to{" "}
                   {Math.min(endIndex, filteredReceipts.length)} of{" "}
                   {filteredReceipts.length} receipts
@@ -842,4 +883,3 @@ export default function AdminOrders() {
     </div>
   );
 }
-

@@ -317,7 +317,7 @@ export default function SalesSection({ cashier }) {
     if (!userId || products.length === 0) return;
 
     try {
-      // Load ALL custom tabs from all users in Firebase
+      // Load ALL custom tabs from all users in Firebase (shared across all users)
       const firebaseTabs = await customTabsService.getAllCustomTabs();
 
       if (firebaseTabs && firebaseTabs.categories) {
@@ -472,7 +472,7 @@ export default function SalesSection({ cashier }) {
       // Load custom tabs from Firebase if user is logged in
       if (userId) {
         try {
-          // Load ALL custom tabs from all users in Firebase
+          // Load ALL custom tabs from all users in Firebase (shared across all users)
           const firebaseTabs = await customTabsService.getAllCustomTabs();
 
           if (firebaseTabs && firebaseTabs.categories) {
@@ -835,11 +835,31 @@ export default function SalesSection({ cashier }) {
       (c) => c !== categoryName
     );
     setCustomCategories(updatedCategories);
-    await saveCustomTabsToFirebase(updatedCategories, customCategoryProducts);
+
+    // Remove category products
+    const updatedProducts = { ...customCategoryProducts };
+    delete updatedProducts[categoryName];
+    setCustomCategoryProducts(updatedProducts);
+
+    // Delete from ALL users in Firebase (shared tabs)
+    if (userId) {
+      await customTabsService.deleteCategoryFromAllUsers(categoryName);
+    } else {
+      // Fallback to localStorage if not logged in
+      localStorage.setItem(
+        "custom_categories",
+        JSON.stringify(updatedCategories)
+      );
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(updatedProducts)
+      );
+    }
+
     if (selectedCategory === categoryName) {
       setSelectedCategory("all");
     }
-    toast.success(`Category "${categoryName}" deleted`);
+    toast.success(`Category "${categoryName}" deleted for all users`);
   };
 
   // Custom category product slot handlers
@@ -1076,21 +1096,31 @@ export default function SalesSection({ cashier }) {
     setCustomCategories(updatedCategories);
 
     // Remove products for this category
-    let updatedProducts = customCategoryProducts;
-    if (customCategoryProducts[categoryToDelete]) {
-      updatedProducts = { ...customCategoryProducts };
-      delete updatedProducts[categoryToDelete];
-      setCustomCategoryProducts(updatedProducts);
-    }
+    const updatedProducts = { ...customCategoryProducts };
+    delete updatedProducts[categoryToDelete];
+    setCustomCategoryProducts(updatedProducts);
 
-    await saveCustomTabsToFirebase(updatedCategories, updatedProducts);
+    // Delete from ALL users in Firebase (shared tabs)
+    if (userId) {
+      await customTabsService.deleteCategoryFromAllUsers(categoryToDelete);
+    } else {
+      // Fallback to localStorage if not logged in
+      localStorage.setItem(
+        "custom_categories",
+        JSON.stringify(updatedCategories)
+      );
+      localStorage.setItem(
+        "custom_category_products",
+        JSON.stringify(updatedProducts)
+      );
+    }
 
     if (selectedCategory === categoryToDelete) {
       setSelectedCategory("all");
     }
 
     setShowTabMenu(false);
-    toast.success(`Category "${categoryToDelete}" deleted`);
+    toast.success(`Category "${categoryToDelete}" deleted for all users`);
   };
 
   // Load available discounts

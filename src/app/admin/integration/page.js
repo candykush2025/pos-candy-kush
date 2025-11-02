@@ -40,6 +40,7 @@ export default function IntegrationPage() {
     customers: false,
     receipts: false,
     paymentTypes: false,
+    stock: false,
   });
 
   const [syncResults, setSyncResults] = useState({
@@ -48,6 +49,7 @@ export default function IntegrationPage() {
     customers: null,
     receipts: null,
     paymentTypes: null,
+    stock: null,
   });
 
   // Last sync info for each type
@@ -61,6 +63,7 @@ export default function IntegrationPage() {
   const [syncHistory, setSyncHistory] = useState([]);
   const [syncProgress, setSyncProgress] = useState({
     receipts: { current: 0, total: 0, percentage: 0 },
+    stock: { current: 0, total: 0, percentage: 0, status: "" },
   });
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(30);
@@ -280,23 +283,31 @@ export default function IntegrationPage() {
         const existing = await getDocument(collectionName, docId);
 
         if (needsUpdate(existing, doc)) {
-          // For products collection: preserve manually synced stock data
+          // For products collection: preserve stock data
           let docToSave = { ...doc };
           if (collectionName === COLLECTIONS.PRODUCTS && existing) {
-            // Preserve stock fields if they exist and were manually synced
-            if (
-              existing.lastInventorySync &&
-              (existing.stock > 0 ||
-                existing.inStock > 0 ||
-                existing.inventoryLevels)
-            ) {
+            // Preserve existing stock if:
+            // 1. Product was manually synced (has lastInventorySync), OR
+            // 2. Product has existing stock value and new sync doesn't include stock data
+            const hasManualSync = existing.lastInventorySync;
+            const hasExistingStock =
+              existing.stock !== undefined && existing.stock !== null;
+            const newSyncHasNoStock =
+              doc.stock === undefined || doc.stock === null;
+
+            if (hasManualSync || (hasExistingStock && newSyncHasNoStock)) {
               console.log(
-                `📦 Preserving stock data for product: ${doc.name || doc.id}`
+                `📦 Preserving stock data for product: ${
+                  doc.name || doc.id
+                } (current: ${existing.stock})`
               );
               docToSave.stock = existing.stock;
-              docToSave.inStock = existing.inStock;
-              docToSave.inventoryLevels = existing.inventoryLevels;
-              docToSave.lastInventorySync = existing.lastInventorySync;
+              if (existing.inStock !== undefined)
+                docToSave.inStock = existing.inStock;
+              if (existing.inventoryLevels)
+                docToSave.inventoryLevels = existing.inventoryLevels;
+              if (existing.lastInventorySync)
+                docToSave.lastInventorySync = existing.lastInventorySync;
             }
           }
 
@@ -469,8 +480,12 @@ export default function IntegrationPage() {
           purchaseCost: parseFloat(primaryVariant.purchase_cost || 0),
           pricingType: primaryVariant.default_pricing_type || "FIXED",
 
-          // Stock info (from first store if available)
-          stock: primaryVariant.stores?.[0]?.stock_quantity || 0,
+          // Stock info - only set if stock tracking is enabled AND stock data exists
+          // This prevents overwriting existing stock with 0 when Loyverse doesn't have stock data
+          ...(item.track_stock &&
+          primaryVariant.stores?.[0]?.stock_quantity !== undefined
+            ? { stock: primaryVariant.stores[0].stock_quantity }
+            : {}),
           availableForSale:
             primaryVariant.stores?.[0]?.available_for_sale !== false,
 
@@ -652,6 +667,253 @@ export default function IntegrationPage() {
       }
     } finally {
       setSyncing({ ...syncing, customers: false });
+    }
+  };
+
+  // Sync Stock from Loyverse
+  const handleSyncStock = async (isAutoSync = false) => {
+    setSyncing({ ...syncing, stock: true });
+    setSyncProgress({
+      ...syncProgress,
+      stock: { current: 0, total: 0, percentage: 0, status: "Starting..." },
+    });
+
+    try {
+      // Step 1: Fetch inventory from Loyverse (using Inventory API, not Items API)
+      setSyncProgress({
+        ...syncProgress,
+        stock: {
+          current: 0,
+          total: 0,
+          percentage: 10,
+          status: "Fetching inventory from Loyverse...",
+        },
+      });
+
+      const inventoryResponse = await loyverseService.getAllInventory();
+
+      console.log(
+        `📦 Fetched ${inventoryResponse.total} inventory levels from Loyverse`
+      );
+
+      // Step 2: Fetch products from Firebase
+      setSyncProgress({
+        ...syncProgress,
+        stock: {
+          current: 0,
+          total: inventoryResponse.total,
+          percentage: 20,
+          status: "Loading products from Firebase...",
+        },
+      });
+
+      const firebaseProducts = await getDocuments(COLLECTIONS.PRODUCTS);
+
+      // Create a map of products by variant_id for quick lookup
+      const productByVariantId = {};
+      const productByItemId = {};
+
+      firebaseProducts.forEach((prod) => {
+        if (prod.variantId) {
+          productByVariantId[prod.variantId] = prod;
+        }
+        productByItemId[prod.id] = prod;
+      });
+
+      let adjustedCount = 0;
+      let unchangedCount = 0;
+      let notFoundCount = 0;
+      const adjustments = [];
+
+      // Import stockHistoryService
+      const { stockHistoryService } = await import(
+        "@/lib/firebase/stockHistoryService"
+      );
+
+      // Step 3: Process inventory levels
+      setSyncProgress({
+        ...syncProgress,
+        stock: {
+          current: 0,
+          total: inventoryResponse.total,
+          percentage: 30,
+          status: "Comparing stock levels...",
+        },
+      });
+
+      // Group inventory by variant_id and sum stock across all stores
+      const variantStockMap = {};
+      inventoryResponse.inventory_levels.forEach((inv) => {
+        if (!variantStockMap[inv.variant_id]) {
+          variantStockMap[inv.variant_id] = 0;
+        }
+        variantStockMap[inv.variant_id] += inv.in_stock || 0;
+      });
+
+      const variantIds = Object.keys(variantStockMap);
+      const totalVariants = variantIds.length;
+
+      console.log(
+        `📊 Processing ${totalVariants} unique variants (${inventoryResponse.total} total inventory levels)`
+      );
+
+      // Compare stock levels and adjust
+      for (let i = 0; i < variantIds.length; i++) {
+        const variantId = variantIds[i];
+        const loyverseStock = variantStockMap[variantId];
+
+        // Update progress
+        const currentProgress = 30 + (i / totalVariants) * 60;
+        setSyncProgress({
+          ...syncProgress,
+          stock: {
+            current: i + 1,
+            total: totalVariants,
+            percentage: Math.round(currentProgress),
+            status: `Processing ${i + 1}/${totalVariants} variants...`,
+          },
+        });
+
+        // Find the product in Firebase by variant_id
+        const firebaseProduct = productByVariantId[variantId];
+
+        if (!firebaseProduct) {
+          console.warn(
+            `⚠️ Product not found for variant_id: ${variantId} (stock: ${loyverseStock})`
+          );
+          notFoundCount++;
+          continue;
+        }
+
+        const firebaseStock = firebaseProduct.stock || 0;
+
+        // Check if stock differs
+        if (loyverseStock !== firebaseStock) {
+          const difference = loyverseStock - firebaseStock;
+
+          // Update stock in Firebase
+          await updateDocument(COLLECTIONS.PRODUCTS, firebaseProduct.id, {
+            stock: loyverseStock,
+            inStock: loyverseStock,
+            lastInventorySync: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+
+          // Log stock adjustment in history
+          await stockHistoryService.logStockMovement({
+            productId: firebaseProduct.id,
+            productName: firebaseProduct.name || "",
+            productSku: firebaseProduct.sku || "",
+            type: "adjustment",
+            quantity: difference,
+            previousStock: firebaseStock,
+            newStock: loyverseStock,
+            reason: "Stock sync from Loyverse",
+            referenceId: `loyverse-sync-${new Date().getTime()}`,
+            userId: "system",
+            userName: "Auto Sync",
+          });
+
+          adjustments.push({
+            id: firebaseProduct.id,
+            name: firebaseProduct.name,
+            sku: firebaseProduct.sku,
+            oldStock: firebaseStock,
+            newStock: loyverseStock,
+            difference,
+          });
+
+          adjustedCount++;
+        } else {
+          unchangedCount++;
+        }
+      }
+
+      // Step 4: Finalizing
+      setSyncProgress({
+        ...syncProgress,
+        stock: {
+          current: totalVariants,
+          total: totalVariants,
+          percentage: 95,
+          status: "Saving sync history...",
+        },
+      });
+
+      const result = {
+        success: true,
+        total: totalVariants,
+        adjustedCount,
+        unchangedCount,
+        notFoundCount,
+        adjustments,
+        timestamp: new Date().toISOString(),
+      };
+
+      setSyncResults({
+        ...syncResults,
+        stock: result,
+      });
+
+      // Save to history
+      await saveSyncHistory("stock", true, adjustedCount, null, isAutoSync);
+
+      // Step 5: Complete
+      setSyncProgress({
+        ...syncProgress,
+        stock: {
+          current: totalVariants,
+          total: totalVariants,
+          percentage: 100,
+          status: "Complete!",
+        },
+      });
+
+      if (!isAutoSync) {
+        if (adjustedCount > 0) {
+          toast.success(
+            `✅ Stock sync complete: ${adjustedCount} adjusted, ${unchangedCount} unchanged${
+              notFoundCount > 0
+                ? `, ${notFoundCount} not found in Firebase`
+                : ""
+            }`
+          );
+        } else {
+          toast.success(`✅ Stock sync complete: All stock levels match`);
+        }
+      }
+    } catch (error) {
+      console.error("Stock sync failed:", error);
+
+      setSyncProgress({
+        ...syncProgress,
+        stock: {
+          current: 0,
+          total: 0,
+          percentage: 0,
+          status: `Error: ${error.message}`,
+        },
+      });
+
+      const result = {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      };
+
+      setSyncResults({
+        ...syncResults,
+        stock: result,
+      });
+
+      // Save error to history
+      await saveSyncHistory("stock", false, 0, error.message, isAutoSync);
+
+      if (!isAutoSync) {
+        toast.error(`❌ Stock sync failed: ${error.message}`);
+      }
+    } finally {
+      setSyncing({ ...syncing, stock: false });
     }
   };
 
@@ -1520,6 +1782,150 @@ export default function IntegrationPage() {
                 <>
                   <Download className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   Sync Customers
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Stock Sync */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+              <Package className="h-6 w-6 md:h-5 md:w-5 text-orange-600" />
+              Stock Levels
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-3 rounded-lg border bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                ℹ️ Syncs stock levels from Loyverse and logs any differences in
+                Stock History
+              </p>
+            </div>
+
+            {/* Progress Bar */}
+            {syncing.stock && syncProgress.stock && (
+              <div className="space-y-2 p-3 rounded-lg border bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-blue-700 dark:text-blue-300 font-medium">
+                    {syncProgress.stock.status}
+                  </span>
+                  <span className="text-blue-700 dark:text-blue-300 font-medium">
+                    {syncProgress.stock.percentage}%
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 dark:bg-blue-950 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-blue-600 dark:bg-blue-500 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${syncProgress.stock.percentage}%` }}
+                  />
+                </div>
+                {syncProgress.stock.current > 0 &&
+                  syncProgress.stock.total > 0 && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      {syncProgress.stock.current} / {syncProgress.stock.total}{" "}
+                      products processed
+                    </p>
+                  )}
+              </div>
+            )}
+
+            {syncResults.stock && (
+              <div
+                className={`p-3 md:p-4 rounded-lg ${
+                  syncResults.stock.success
+                    ? "bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
+                }`}
+              >
+                <div className="flex items-center gap-2 text-sm md:text-base">
+                  {syncResults.stock.success ? (
+                    <CheckCircle className="h-5 w-5 md:h-4 md:w-4" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 md:h-4 md:w-4" />
+                  )}
+                  <span className="font-medium">
+                    {syncResults.stock.success
+                      ? `${syncResults.stock.total} products checked`
+                      : "Sync failed"}
+                  </span>
+                </div>
+                {syncResults.stock.success && (
+                  <div className="text-xs mt-2 space-y-1">
+                    <div>🔄 {syncResults.stock.adjustedCount} adjusted</div>
+                    <div>✓ {syncResults.stock.unchangedCount} unchanged</div>
+                    {syncResults.stock.notFoundCount > 0 && (
+                      <div className="text-yellow-600 dark:text-yellow-400">
+                        ⚠️ {syncResults.stock.notFoundCount} not found in
+                        Firebase
+                      </div>
+                    )}
+                    {syncResults.stock.adjustments &&
+                      syncResults.stock.adjustments.length > 0 && (
+                        <div className="mt-2 p-2 bg-white dark:bg-gray-800 rounded border border-green-200 dark:border-green-800">
+                          <p className="font-medium mb-1">
+                            Recent adjustments:
+                          </p>
+                          <div className="max-h-32 overflow-y-auto space-y-1">
+                            {syncResults.stock.adjustments
+                              .slice(0, 5)
+                              .map((adj, idx) => (
+                                <div key={idx} className="text-xs">
+                                  <span className="font-medium">
+                                    {adj.name}
+                                  </span>
+                                  {adj.sku && (
+                                    <span className="text-neutral-500">
+                                      {" "}
+                                      ({adj.sku})
+                                    </span>
+                                  )}
+                                  <br />
+                                  <span
+                                    className={
+                                      adj.difference > 0
+                                        ? "text-green-600"
+                                        : "text-red-600"
+                                    }
+                                  >
+                                    {adj.oldStock} → {adj.newStock} (
+                                    {adj.difference > 0 ? "+" : ""}
+                                    {adj.difference})
+                                  </span>
+                                </div>
+                              ))}
+                            {syncResults.stock.adjustments.length > 5 && (
+                              <div className="text-xs text-neutral-500">
+                                ...and{" "}
+                                {syncResults.stock.adjustments.length - 5} more
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                )}
+                <p className="text-xs md:text-sm mt-1">
+                  {new Date(syncResults.stock.timestamp).toLocaleString()}
+                </p>
+              </div>
+            )}
+            <Button
+              onClick={() => handleSyncStock(false)}
+              disabled={syncing.stock}
+              className="w-full h-12 md:h-10 text-base"
+              variant="outline"
+            >
+              {syncing.stock ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 md:h-4 md:w-4 animate-spin" />
+                  Syncing Stock...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-5 w-5 md:h-4 md:w-4" />
+                  Sync Stock Levels
                 </>
               )}
             </Button>

@@ -320,6 +320,30 @@ export const customTabsService = {
     }
   },
 
+  // Get custom tabs for a specific user
+  getUserCustomTabs: async (userId) => {
+    try {
+      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, userId);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+          categories: data.categories || [],
+          categoryProducts: data.categoryProducts || {},
+        };
+      }
+
+      return {
+        categories: [],
+        categoryProducts: {},
+      };
+    } catch (error) {
+      console.error("Error getting user custom tabs:", error);
+      throw error;
+    }
+  },
+
   // Delete user's custom tabs
   deleteUserTabs: async (userId) => {
     try {
@@ -328,6 +352,57 @@ export const customTabsService = {
       return true;
     } catch (error) {
       console.error("Error deleting custom tabs:", error);
+      throw error;
+    }
+  },
+
+  // Delete a specific category from ALL users
+  deleteCategoryFromAllUsers: async (categoryName) => {
+    try {
+      const querySnapshot = await getDocs(
+        collection(db, COLLECTIONS.CUSTOM_TABS)
+      );
+
+      const updatePromises = [];
+
+      querySnapshot.forEach((docSnapshot) => {
+        const data = docSnapshot.data();
+        let needsUpdate = false;
+
+        // Remove category from categories array
+        let updatedCategories = data.categories || [];
+        if (updatedCategories.includes(categoryName)) {
+          updatedCategories = updatedCategories.filter(
+            (cat) => cat !== categoryName
+          );
+          needsUpdate = true;
+        }
+
+        // Remove category products
+        let updatedCategoryProducts = { ...(data.categoryProducts || {}) };
+        if (updatedCategoryProducts[categoryName]) {
+          delete updatedCategoryProducts[categoryName];
+          needsUpdate = true;
+        }
+
+        // Only update if changes were made
+        if (needsUpdate) {
+          const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, docSnapshot.id);
+          // Use updateDoc to preserve other fields like createdAt
+          updatePromises.push(
+            updateDoc(docRef, {
+              categories: updatedCategories,
+              categoryProducts: updatedCategoryProducts,
+              updatedAt: serverTimestamp(),
+            })
+          );
+        }
+      });
+
+      await Promise.all(updatePromises);
+      return true;
+    } catch (error) {
+      console.error("Error deleting category from all users:", error);
       throw error;
     }
   },

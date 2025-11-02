@@ -1,53 +1,210 @@
-# Stock Count Showing Zero - Fixed
+# Stock Sync Using Wrong API - Fixed
 
-## Problem
+## Problem Identified ✅
 
-All products were showing stock count as **0** even though inventory exists in Loyverse.
+Stock sync in the Integration page was setting all products to **0 stock** because it was using the **wrong Loyverse API endpoint**.
+
+### What Was Wrong:
+
+**Items API (`/items`) Response:**
+
+```json
+{
+  "variants": [
+    {
+      "stores": [
+        {
+          "store_id": "...",
+          "pricing_type": "FIXED",
+          "price": 15,
+          "available_for_sale": true,
+          "optimal_stock": null,
+          "low_stock": null
+          // ❌ NO stock_quantity field!
+        }
+      ]
+    }
+  ]
+}
+```
+
+The code was trying to read:
+
+```javascript
+const loyverseStock = primaryVariant.stores?.[0]?.stock_quantity || 0;
+```
+
+Since `stock_quantity` doesn't exist in Items API, it always defaulted to `0`!
+
+---
 
 ## Root Cause
 
-When products are synced from Loyverse using the **Items API**, the stock/inventory data is **NOT included**.
+**Two Separate APIs in Loyverse:**
 
-Loyverse has a separate **Inventory API** (`/v1.0/inventory`) that must be called to get stock levels for each product variant.
+1. **Items API** (`/items`) - Product catalog data (name, price, SKU)
+   - ❌ Does NOT include stock quantities
+2. **Inventory API** (`/inventory`) - Stock levels per variant per store
+   - ✅ Has `in_stock` field with actual quantities
 
-## Why This Happens
+The stock sync was incorrectly using Items API, which resulted in:
 
-- **Items API** returns product information (name, price, SKU, variants)
-- **Inventory API** returns stock levels per store
-- These are separate API endpoints for performance reasons
+- Reading stock as `0` (because field doesn't exist)
+- Adjusting all Firebase products to `0`
+- Creating negative adjustments in stock history
 
-## Solution Implemented
+---
 
-### 1. Added "Sync Stock" Button to Products Page
+## Solution Implemented ✅
 
-**Location**: Products Items page header (next to "Add Product" button)
+### Changed from Items API to Inventory API
 
-**Features**:
+**File**: `/src/app/admin/integration/page.js`
+**Function**: `handleSyncStock()`
 
-- Icon-only on mobile (refresh icon)
-- Full label on desktop ("Sync Stock")
-- Shows loading state with spinning animation
-- Processes products in batches (10 at a time)
-- Updates stock counts in real-time
-
-**Usage**:
-
-1. Go to **Admin → Products → Items**
-2. Click **"Sync Stock"** button (or refresh icon on mobile)
-3. Wait for sync to complete
-4. Stock counts will be updated for all products
-
-### 2. How It Works
+**Before (WRONG):**
 
 ```javascript
-const syncInventoryFromLoyverse = async () => {
-  // For each product:
-  // 1. Get variant_id
-  // 2. Call Loyverse Inventory API with variant_id
-  // 3. Calculate total stock across all stores
-  // 4. Update product in Firebase with stock count
-};
+const response = await loyverseService.getAllItems({ show_deleted: false });
+const loyverseStock = primaryVariant.stores?.[0]?.stock_quantity || 0;
 ```
+
+**After (CORRECT):**
+
+```javascript
+const inventoryResponse = await loyverseService.getAllInventory();
+
+// Group by variant_id and sum stock across all stores
+const variantStockMap = {};
+inventoryResponse.inventory_levels.forEach((inv) => {
+  if (!variantStockMap[inv.variant_id]) {
+    variantStockMap[inv.variant_id] = 0;
+  }
+  variantStockMap[inv.variant_id] += inv.in_stock || 0;
+});
+```
+
+---
+
+## Key Changes
+
+### 1. Use Inventory API
+
+- Fetches `/inventory` endpoint (has stock data)
+- Returns array of inventory levels with `variant_id`, `store_id`, and `in_stock`
+
+### 2. Map by variant_id
+
+- Products are matched by `variant_id` (not `item_id`)
+- Firebase products store `variantId` field for this purpose
+
+### 3. Sum Stock Across Stores
+
+- If you have multiple stores, stock is summed
+- Gives total stock count across all locations
+
+### 4. Track Not Found
+
+- Logs warning when variant_id doesn't match any Firebase product
+- Shows count in sync results
+
+### 5. Set lastInventorySync
+
+- Marks products as having been inventory synced
+- Prevents product sync from overwriting stock data
+
+---
+
+## API Comparison
+
+| Feature     | Items API       | Inventory API |
+| ----------- | --------------- | ------------- |
+| Endpoint    | `/items`        | `/inventory`  |
+| Purpose     | Product catalog | Stock levels  |
+| Has Stock?  | ❌ No           | ✅ Yes        |
+| Stock Field | N/A             | `in_stock`    |
+| Group By    | `item_id`       | `variant_id`  |
+| Per Store?  | No              | Yes           |
+
+---
+
+## Stock History Impact
+
+### Before Fix:
+
+```
+Date: 02 Nov 2025 21:32
+Item: Slim Jim normal (SKU: 10041)
+Adjustment: -13
+Stock After: 0 (was 13)  ❌ WRONG!
+```
+
+### After Fix:
+
+```
+Date: 02 Nov 2025 21:45
+Item: Slim Jim normal (SKU: 10041)
+Adjustment: 0 (no change)
+Stock After: 13 (was 13)  ✅ CORRECT!
+```
+
+---
+
+## How It Works Now
+
+### Stock Sync Process:
+
+1. **Fetch Inventory from Loyverse**
+
+   ```javascript
+   const inventoryResponse = await loyverseService.getAllInventory();
+   // Returns: { inventory_levels: [...], total: 150 }
+   ```
+
+2. **Group by Variant ID**
+
+   ```javascript
+   // Sum stock across all stores for each variant
+   const variantStockMap = {
+     "variant-123": 13, // Total from all stores
+     "variant-456": 16,
+   };
+   ```
+
+3. **Match Products**
+
+   ```javascript
+   // Find Firebase product by variantId
+   const product = productByVariantId[variantId];
+   ```
+
+4. **Compare and Adjust**
+   ```javascript
+   if (loyverseStock !== firebaseStock) {
+     // Update stock
+     await updateDocument(COLLECTIONS.PRODUCTS, product.id, {
+       stock: loyverseStock,
+       inStock: loyverseStock,
+       lastInventorySync: new Date().toISOString(),
+     });
+
+     // Log in history
+     await stockHistoryService.logStockMovement({...});
+   }
+   ```
+
+---
+
+## Benefits
+
+✅ **Accurate Stock Data** - Uses real inventory counts from Loyverse  
+✅ **Multi-Store Support** - Sums stock across all store locations  
+✅ **Correct Mapping** - Matches by variant_id (proper identifier)  
+✅ **No False Adjustments** - Only adjusts when values differ  
+✅ **Better Tracking** - Marks products as inventory synced  
+✅ **Error Reporting** - Shows count of products not found
+
+---
 
 **API Call**:
 
