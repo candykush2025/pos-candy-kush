@@ -1587,6 +1587,28 @@ export default function SalesSection({ cashier }) {
       setCashReceived("");
       setPaymentMethod("cash");
 
+      // Update kiosk order status if this was from kiosk
+      if (cartData.kioskOrderId) {
+        try {
+          const { doc, updateDoc, serverTimestamp } = await import(
+            "firebase/firestore"
+          );
+          const { db } = await import("@/lib/firebase");
+
+          const kioskOrderRef = doc(db, "kioskOrders", cartData.kioskOrderId);
+          await updateDoc(kioskOrderRef, {
+            status: "completed",
+            completedAt: serverTimestamp(),
+            finalReceiptNumber: orderNumber,
+            updatedAt: serverTimestamp(),
+          });
+          console.log("✅ Kiosk order completed:", cartData.kioskOrderId);
+        } catch (error) {
+          console.error("Error updating kiosk order:", error);
+          // Don't fail checkout if kiosk order update fails
+        }
+      }
+
       if (syncStatus === "synced") {
         toast.success("Payment completed and synced to Loyverse!");
       } else {

@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useCartStore } from "@/store/useCartStore";
 import {
   Bell,
   Check,
@@ -20,13 +21,17 @@ import {
   User,
   CreditCard,
   Clock,
+  ShoppingCart,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function KioskOrdersPanel({ currentUser }) {
   const [pendingOrders, setPendingOrders] = useState([]);
+  const [sentOrders, setSentOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [previousCount, setPreviousCount] = useState(0);
+  const [showSentOrders, setShowSentOrders] = useState(false);
 
   useEffect(() => {
     // Listen to pending orders in real-time
@@ -59,37 +64,96 @@ export default function KioskOrdersPanel({ currentUser }) {
     return () => unsubscribe();
   }, [previousCount]);
 
-  const confirmOrder = async (orderId, confirmationData) => {
+  useEffect(() => {
+    // Listen to sent orders in real-time
+    const q = query(
+      collection(db, "kioskOrders"),
+      where("status", "==", "sent_to_cashier"),
+      orderBy("sentToCashierAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders = [];
+      snapshot.forEach((doc) => {
+        orders.push({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate(),
+          orderCompletedAt: doc.data().orderCompletedAt?.toDate(),
+          sentToCashierAt: doc.data().sentToCashierAt?.toDate(),
+        });
+      });
+
+      setSentOrders(orders);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const sendToCart = async (order) => {
     try {
-      const orderRef = doc(db, "kioskOrders", orderId);
+      const { addItem, setCustomer, clearCart, setKioskOrderId } =
+        useCartStore.getState();
 
+      // Clear current cart first
+      clearCart();
+
+      // Store the kiosk order ID for later update after checkout
+      setKioskOrderId(order.id);
+
+      // Add customer if available (check if they have a customerId, not isNoMember flag)
+      if (order.customer && order.customer.customerId) {
+        console.log("Adding customer to cart:", order.customer);
+        setCustomer({
+          id: order.customer.id,
+          customerId: order.customer.customerId,
+          name: order.customer.name,
+          lastName: order.customer.lastName,
+          fullName: order.customer.fullName,
+          email: order.customer.email,
+          phone: order.customer.phone,
+          customPoints:
+            order.customer.currentPoints || order.customer.totalPoints || 0,
+        });
+      } else {
+        console.log(
+          "No customer or guest order - skipping customer assignment"
+        );
+      }
+
+      // Add all items to cart
+      order.items.forEach((item) => {
+        // Create product object for cart
+        const product = {
+          id: item.productId || item.id,
+          name: item.name,
+          price: item.price,
+          barcode: item.barcode || "",
+          sku: item.sku || "",
+          variant_id: item.variantId || null,
+        };
+
+        addItem(product, item.quantity);
+      });
+
+      // Update order status to "sent_to_cashier" (NOT deleted yet)
+      const orderRef = doc(db, "kioskOrders", order.id);
       await updateDoc(orderRef, {
-        status: "confirmed",
-        "payment.confirmedBy":
-          confirmationData.cashierName || currentUser?.name || "Cashier",
-        "payment.confirmedAt": serverTimestamp(),
-        "payment.status": "confirmed",
-
-        // For crypto payments
-        ...(confirmationData.cryptoTransactionHash && {
-          "payment.cryptoDetails.transactionHash":
-            confirmationData.cryptoTransactionHash,
-          "payment.cryptoDetails.verificationStatus": "verified",
-          "payment.cryptoDetails.verifiedAt": serverTimestamp(),
-        }),
-
+        status: "sent_to_cashier",
+        sentToCashierBy: currentUser?.name || "Cashier",
+        sentToCashierAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      console.log("✅ Order confirmed:", orderId);
       setSelectedOrder(null);
       setShowModal(false);
 
-      // Show success notification
-      alert("Order confirmed successfully!");
+      toast.success(
+        `Order #${order.transactionId} sent to cart! ${order.items.length} items added.`
+      );
     } catch (error) {
-      console.error("❌ Error confirming order:", error);
-      alert("Failed to confirm order: " + error.message);
+      console.error("❌ Error sending order to cart:", error);
+      toast.error("Failed to send order to cart: " + error.message);
     }
   };
 
@@ -109,45 +173,56 @@ export default function KioskOrdersPanel({ currentUser }) {
       setSelectedOrder(null);
       setShowModal(false);
 
-      alert("Order rejected");
+      toast.success("Order rejected");
     } catch (error) {
       console.error("❌ Error rejecting order:", error);
-      alert("Failed to reject order: " + error.message);
+      toast.error("Failed to reject order: " + error.message);
     }
   };
 
   return (
     <>
-      {/* Notification Badge */}
-      {pendingOrders.length > 0 && (
-        <div className="fixed top-4 right-4 z-50">
-          <div className="relative">
-            <Bell className="w-8 h-8 text-yellow-500 animate-bounce" />
-            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-              {pendingOrders.length}
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Orders Panel */}
       <div className="kiosk-orders-panel bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Package className="w-6 h-6" />
-            Pending Kiosk Orders ({pendingOrders.length})
+            {showSentOrders ? "Sent Orders" : "Pending Kiosk Orders"} (
+            {showSentOrders ? sentOrders.length : pendingOrders.length})
           </h2>
+          <button
+            onClick={() => setShowSentOrders(!showSentOrders)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-semibold"
+          >
+            {showSentOrders ? (
+              <>
+                <Clock className="w-4 h-4" />
+                Show Pending
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="w-4 h-4" />
+                Show Sent ({sentOrders.length})
+              </>
+            )}
+          </button>
         </div>
 
-        {pendingOrders.length === 0 ? (
+        {!showSentOrders && pendingOrders.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <Package className="w-16 h-16 mx-auto mb-4 opacity-50" />
             <p className="text-lg">No pending orders</p>
             <p className="text-sm">New kiosk orders will appear here</p>
           </div>
+        ) : showSentOrders && sentOrders.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+            <ShoppingCart className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg">No sent orders</p>
+            <p className="text-sm">Orders sent to cashier will appear here</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pendingOrders.map((order) => (
+            {(showSentOrders ? sentOrders : pendingOrders).map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
@@ -155,7 +230,7 @@ export default function KioskOrdersPanel({ currentUser }) {
                   setSelectedOrder(order);
                   setShowModal(true);
                 }}
-                onConfirm={(data) => confirmOrder(order.id, data)}
+                onSendToCart={() => sendToCart(order)}
                 onReject={(reason) => rejectOrder(order.id, reason)}
                 currentUser={currentUser}
               />
@@ -172,7 +247,7 @@ export default function KioskOrdersPanel({ currentUser }) {
             setShowModal(false);
             setSelectedOrder(null);
           }}
-          onConfirm={(data) => confirmOrder(selectedOrder.id, data)}
+          onSendToCart={() => sendToCart(selectedOrder)}
           onReject={(reason) => rejectOrder(selectedOrder.id, reason)}
           currentUser={currentUser}
         />
@@ -181,40 +256,29 @@ export default function KioskOrdersPanel({ currentUser }) {
   );
 }
 
-function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
-  const [cashierName, setCashierName] = useState(currentUser?.name || "");
-  const [cryptoTxHash, setCryptoTxHash] = useState("");
+function OrderCard({ order, onView, onSendToCart, onReject, currentUser }) {
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  const handleConfirm = () => {
-    if (order.payment.method === "crypto" && !cryptoTxHash) {
-      alert("Please enter crypto transaction hash");
-      return;
-    }
-
-    if (!cashierName) {
-      alert("Please enter your name");
-      return;
-    }
-
-    onConfirm({
-      cashierName: cashierName,
-      cryptoTransactionHash: cryptoTxHash || null,
-    });
-  };
-
   const handleReject = () => {
     if (!rejectReason) {
-      alert("Please enter rejection reason");
+      toast.error("Please enter rejection reason");
       return;
     }
     onReject(rejectReason);
     setShowRejectInput(false);
   };
 
+  const isSent = order.status === "sent_to_cashier";
+
   return (
-    <div className="order-card bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-gray-800 dark:to-gray-700 rounded-lg p-4 border-2 border-yellow-400 dark:border-yellow-600 shadow-lg hover:shadow-xl transition-shadow">
+    <div
+      className={`order-card bg-gradient-to-br ${
+        isSent
+          ? "from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 border-2 border-blue-400 dark:border-blue-600"
+          : "from-yellow-50 to-orange-50 dark:from-gray-800 dark:to-gray-700 border-2 border-yellow-400 dark:border-yellow-600"
+      } rounded-lg p-4 shadow-lg hover:shadow-xl transition-shadow`}
+    >
       {/* Order Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
@@ -223,32 +287,44 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
           </h3>
           <p className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1">
             <Clock className="w-3 h-3" />
-            {order.createdAt?.toLocaleTimeString()}
+            {isSent
+              ? `Sent: ${order.sentToCashierAt?.toLocaleTimeString()}`
+              : order.createdAt?.toLocaleTimeString()}
           </p>
         </div>
-        <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">
-          NEW
+        <span
+          className={`px-3 py-1 ${
+            isSent ? "bg-blue-500" : "bg-red-500 animate-pulse"
+          } text-white text-xs font-bold rounded-full`}
+        >
+          {isSent ? "SENT" : "NEW"}
         </span>
       </div>
 
       {/* Customer Info */}
-      <div className="mb-3 p-3 bg-white dark:bg-gray-900 rounded-lg">
+      <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
         <div className="flex items-center gap-2 mb-1">
           <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           <p className="font-semibold text-gray-900 dark:text-white">
             {order.customer.fullName}
           </p>
         </div>
-        {!order.customer.isNoMember && (
+        {order.customer.customerId && (
           <div className="text-xs text-gray-600 dark:text-gray-400">
             <p>ID: {order.customer.customerId}</p>
-            <p>Points: {order.customer.currentPoints}</p>
+            <p>Points: {order.customer.currentPoints || 0}</p>
+          </div>
+        )}
+        {isSent && order.sentToCashierBy && (
+          <div className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
+            <ShoppingCart className="w-3 h-3" />
+            Sent by: {order.sentToCashierBy}
           </div>
         )}
       </div>
 
       {/* Items Summary */}
-      <div className="mb-3 p-3 bg-white dark:bg-gray-900 rounded-lg">
+      <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
         <p className="text-sm font-semibold mb-2 text-gray-900 dark:text-white">
           📦 {order.items.length} Item(s)
         </p>
@@ -299,52 +375,31 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
           </span>
         </div>
 
-        {order.payment.method === "crypto" && (
-          <div className="space-y-2">
-            <div className="text-xs text-gray-700 dark:text-gray-300">
-              <p>
-                <strong>Currency:</strong>{" "}
-                {order.payment.cryptoDetails.currency}
-              </p>
-              <p>
-                <strong>Amount:</strong>{" "}
-                {order.payment.cryptoDetails.amountInCrypto}{" "}
-                {order.payment.cryptoDetails.currency}
-              </p>
-              <p>
-                <strong>Network:</strong> {order.payment.cryptoDetails.network}
-              </p>
-              {order.payment.cryptoDetails.paymentUrl && (
-                <a
-                  href={order.payment.cryptoDetails.paymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 dark:text-blue-400 underline"
-                >
-                  🔗 View Payment
-                </a>
-              )}
-            </div>
-            <input
-              type="text"
-              placeholder="Enter transaction hash"
-              value={cryptoTxHash}
-              onChange={(e) => setCryptoTxHash(e.target.value)}
-              className="w-full px-2 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            />
+        {order.payment.method === "crypto" && order.payment.cryptoDetails && (
+          <div className="text-xs text-gray-700 dark:text-gray-300">
+            <p>
+              <strong>Currency:</strong> {order.payment.cryptoDetails.currency}
+            </p>
+            <p>
+              <strong>Amount:</strong>{" "}
+              {order.payment.cryptoDetails.amountInCrypto}{" "}
+              {order.payment.cryptoDetails.currency}
+            </p>
+            <p>
+              <strong>Network:</strong> {order.payment.cryptoDetails.network}
+            </p>
+            {order.payment.cryptoDetails.paymentUrl && (
+              <a
+                href={order.payment.cryptoDetails.paymentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 underline block mt-1"
+              >
+                🔗 View Payment
+              </a>
+            )}
           </div>
         )}
-      </div>
-
-      {/* Cashier Name */}
-      <div className="mb-3">
-        <input
-          type="text"
-          placeholder="Your name"
-          value={cashierName}
-          onChange={(e) => setCashierName(e.target.value)}
-          className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
       </div>
 
       {/* Reject Input */}
@@ -385,18 +440,24 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
             View
           </button>
           <button
-            onClick={handleConfirm}
-            className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 text-sm font-semibold"
+            onClick={onSendToCart}
+            className={`flex-1 px-3 py-2 ${
+              isSent
+                ? "bg-blue-600 hover:bg-blue-700"
+                : "bg-green-600 hover:bg-green-700"
+            } text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold`}
           >
-            <Check className="w-4 h-4" />
-            Confirm
+            <ShoppingCart className="w-4 h-4" />
+            {isSent ? "Resend to Cart" : "Send to Cart"}
           </button>
-          <button
-            onClick={() => setShowRejectInput(true)}
-            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {!isSent && (
+            <button
+              onClick={() => setShowRejectInput(true)}
+              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -406,42 +467,23 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
 function OrderDetailsModal({
   order,
   onClose,
-  onConfirm,
+  onSendToCart,
   onReject,
   currentUser,
 }) {
-  const [cashierName, setCashierName] = useState(currentUser?.name || "");
-  const [cryptoTxHash, setCryptoTxHash] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
 
-  const handleConfirm = () => {
-    if (order.payment.method === "crypto" && !cryptoTxHash) {
-      alert("Please enter crypto transaction hash");
-      return;
-    }
-
-    if (!cashierName) {
-      alert("Please enter your name");
-      return;
-    }
-
-    onConfirm({
-      cashierName: cashierName,
-      cryptoTransactionHash: cryptoTxHash || null,
-    });
-  };
-
   const handleReject = () => {
     if (!rejectReason) {
-      alert("Please enter rejection reason");
+      toast.error("Please enter rejection reason");
       return;
     }
     onReject(rejectReason);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-6 rounded-t-lg">
@@ -456,7 +498,7 @@ function OrderDetailsModal({
             </div>
             <button
               onClick={onClose}
-              className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2"
+              className="text-white hover:bg-white/20 rounded-full p-2"
             >
               <X className="w-6 h-6" />
             </button>
@@ -517,7 +559,7 @@ function OrderDetailsModal({
               {order.items.map((item, idx) => (
                 <div
                   key={idx}
-                  className="flex justify-between items-center p-3 bg-white dark:bg-gray-900 rounded"
+                  className="flex justify-between items-center p-3 bg-white dark:bg-gray-700 rounded"
                 >
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900 dark:text-white">
@@ -576,6 +618,11 @@ function OrderDetailsModal({
               Payment: {order.payment.method.toUpperCase()}
             </h3>
 
+            <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-xs text-yellow-800 dark:text-yellow-300">
+              ℹ️ Payment method from kiosk is a reference only. You can change
+              the payment method in the cart before checkout.
+            </div>
+
             {order.payment.method === "crypto" &&
               order.payment.cryptoDetails && (
                 <div className="space-y-3">
@@ -620,43 +667,13 @@ function OrderDetailsModal({
                       href={order.payment.cryptoDetails.paymentUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 mt-2"
                     >
                       🔗 View Payment on Provider
                     </a>
                   )}
-
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-900 dark:text-white">
-                      Transaction Hash (Required):
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter blockchain transaction hash for verification"
-                      value={cryptoTxHash}
-                      onChange={(e) => setCryptoTxHash(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    />
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      Verify payment on blockchain and enter transaction hash
-                    </p>
-                  </div>
                 </div>
               )}
-          </div>
-
-          {/* Cashier Name */}
-          <div>
-            <label className="block text-sm font-semibold mb-2 text-gray-900 dark:text-white">
-              Cashier Name:
-            </label>
-            <input
-              type="text"
-              placeholder="Your name"
-              value={cashierName}
-              onChange={(e) => setCashierName(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            />
           </div>
 
           {/* Reject Section */}
@@ -676,15 +693,15 @@ function OrderDetailsModal({
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-4 pt-4 border-t">
+          <div className="flex gap-4 pt-4 border-t dark:border-gray-700">
             {!showRejectInput ? (
               <>
                 <button
-                  onClick={handleConfirm}
+                  onClick={onSendToCart}
                   className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold text-lg flex items-center justify-center gap-2"
                 >
-                  <Check className="w-5 h-5" />
-                  Confirm Order
+                  <ShoppingCart className="w-5 h-5" />
+                  Send to Cart
                 </button>
                 <button
                   onClick={() => setShowRejectInput(true)}

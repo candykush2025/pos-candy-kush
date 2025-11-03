@@ -7,6 +7,7 @@ export const useCartStore = create((set, get) => ({
   tax: { rate: 0, amount: 0 },
   customer: null,
   notes: "",
+  kioskOrderId: null, // Store kiosk order ID for later update
 
   // Add item to cart
   addItem: (product, quantity = 1) => {
@@ -106,6 +107,7 @@ export const useCartStore = create((set, get) => ({
       tax: { rate: 0, amount: 0 },
       customer: null,
       notes: "",
+      kioskOrderId: null,
     });
   },
 
@@ -129,6 +131,11 @@ export const useCartStore = create((set, get) => ({
   // Set notes
   setNotes: (notes) => {
     set({ notes });
+  },
+
+  // Set kiosk order ID
+  setKioskOrderId: (orderId) => {
+    set({ kioskOrderId: orderId });
   },
 
   // Calculate subtotal
@@ -170,6 +177,7 @@ export const useCartStore = create((set, get) => ({
       tax: cartData.tax || { rate: 0, amount: 0 },
       customer: cartData.customer || null,
       notes: cartData.notes || "",
+      kioskOrderId: cartData.kioskOrderId || null,
     });
   },
 
@@ -182,6 +190,7 @@ export const useCartStore = create((set, get) => ({
       tax: state.tax,
       customer: state.customer,
       notes: state.notes,
+      kioskOrderId: state.kioskOrderId,
       subtotal: state.getSubtotal(),
       discountAmount: state.getDiscountAmount(),
       total: state.getTotal(),

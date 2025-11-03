@@ -568,7 +568,7 @@ export default function SalesPage() {
   }
   // Main POS interface - SPA with sections
   return (
-    <div className="h-full overflow-hidden">
+    <div className="h-full overflow-hidden bg-white dark:bg-gray-900">
       {activeTab === "sales" && <SalesSection cashier={cashier} />}
       {activeTab === "tickets" && (
         <TicketsSection onSwitchToSales={() => setActiveTab("sales")} />
