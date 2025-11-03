@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { loyverseService } from "@/lib/api/loyverse";
+import { dbService } from "@/lib/db/dbService";
 import {
   setDocument,
   getDocuments,
@@ -62,6 +63,9 @@ export default function IntegrationPage() {
 
   const [syncHistory, setSyncHistory] = useState([]);
   const [syncProgress, setSyncProgress] = useState({
+    categories: { current: 0, total: 0, percentage: 0, status: "" },
+    items: { current: 0, total: 0, percentage: 0, status: "" },
+    customers: { current: 0, total: 0, percentage: 0, status: "" },
     receipts: { current: 0, total: 0, percentage: 0 },
     stock: { current: 0, total: 0, percentage: 0, status: "" },
   });
@@ -255,74 +259,121 @@ export default function IntegrationPage() {
   const needsUpdate = (existing, newData) => {
     if (!existing) return true; // No existing data, needs insert
 
-    // Check if updatedAt is different
+    // Check if updatedAt is different (Loyverse timestamp)
     if (existing.updatedAt !== newData.updatedAt) return true;
 
-    // Deep comparison for other fields (excluding timestamps)
-    const keysToCompare = Object.keys(newData).filter(
-      (key) => !["createdAt", "updatedAt", "syncedAt"].includes(key)
-    );
+    // For products, also check key fields that might change
+    if (newData.price !== undefined && existing.price !== newData.price)
+      return true;
+    if (newData.name !== undefined && existing.name !== newData.name)
+      return true;
+    if (
+      newData.categoryId !== undefined &&
+      existing.categoryId !== newData.categoryId
+    )
+      return true;
 
-    return keysToCompare.some((key) => {
-      if (typeof newData[key] === "object" && newData[key] !== null) {
-        return JSON.stringify(existing[key]) !== JSON.stringify(newData[key]);
-      }
-      return existing[key] !== newData[key];
-    });
+    return false; // No significant changes detected
   };
 
-  // Smart sync: Only update changed documents
+  // Smart sync: Only update changed documents (OPTIMIZED - Batch reads)
   const smartSync = async (collectionName, documents, idField = "id") => {
     let newCount = 0;
     let updatedCount = 0;
     let skippedCount = 0;
 
-    for (const doc of documents) {
-      try {
-        const docId = doc[idField];
-        const existing = await getDocument(collectionName, docId);
+    try {
+      // OPTIMIZATION: Fetch ALL existing documents at once instead of one-by-one
+      console.log(
+        `📥 Fetching existing ${collectionName} documents for comparison...`
+      );
+      const existingDocs = await getDocuments(collectionName);
 
-        if (needsUpdate(existing, doc)) {
-          // For products collection: preserve stock data
-          let docToSave = { ...doc };
-          if (collectionName === COLLECTIONS.PRODUCTS && existing) {
-            // Preserve existing stock if:
-            // 1. Product was manually synced (has lastInventorySync), OR
-            // 2. Product has existing stock value and new sync doesn't include stock data
-            const hasManualSync = existing.lastInventorySync;
-            const hasExistingStock =
-              existing.stock !== undefined && existing.stock !== null;
-            const newSyncHasNoStock =
-              doc.stock === undefined || doc.stock === null;
+      // Create a hash map for O(1) lookups
+      const existingMap = new Map();
+      existingDocs.forEach((doc) => {
+        existingMap.set(doc[idField], doc);
+      });
 
-            if (hasManualSync || (hasExistingStock && newSyncHasNoStock)) {
-              console.log(
-                `📦 Preserving stock data for product: ${
-                  doc.name || doc.id
-                } (current: ${existing.stock})`
-              );
-              docToSave.stock = existing.stock;
-              if (existing.inStock !== undefined)
-                docToSave.inStock = existing.inStock;
-              if (existing.inventoryLevels)
-                docToSave.inventoryLevels = existing.inventoryLevels;
-              if (existing.lastInventorySync)
-                docToSave.lastInventorySync = existing.lastInventorySync;
+      console.log(
+        `✅ Loaded ${existingDocs.length} existing documents into memory`
+      );
+
+      // Process documents in batches for better performance
+      const batchSize = 50;
+      for (let i = 0; i < documents.length; i += batchSize) {
+        const batch = documents.slice(i, i + batchSize);
+        const promises = batch.map(async (doc) => {
+          try {
+            const docId = doc[idField];
+            const existing = existingMap.get(docId);
+
+            if (needsUpdate(existing, doc)) {
+              // For products collection: preserve stock data
+              let docToSave = { ...doc };
+              if (collectionName === COLLECTIONS.PRODUCTS && existing) {
+                // Preserve existing stock if:
+                // 1. Product was manually synced (has lastInventorySync), OR
+                // 2. Product has existing stock value and new sync doesn't include stock data
+                const hasManualSync = existing.lastInventorySync;
+                const hasExistingStock =
+                  existing.stock !== undefined && existing.stock !== null;
+                const newSyncHasNoStock =
+                  doc.stock === undefined || doc.stock === null;
+
+                if (hasManualSync || (hasExistingStock && newSyncHasNoStock)) {
+                  docToSave.stock = existing.stock;
+                  if (
+                    existing.inStock !== undefined &&
+                    existing.inStock !== null
+                  )
+                    docToSave.inStock = existing.inStock;
+                  if (
+                    existing.inventoryLevels !== undefined &&
+                    existing.inventoryLevels !== null
+                  )
+                    docToSave.inventoryLevels = existing.inventoryLevels;
+                  if (
+                    existing.lastInventorySync !== undefined &&
+                    existing.lastInventorySync !== null
+                  )
+                    docToSave.lastInventorySync = existing.lastInventorySync;
+                }
+              }
+
+              await setDocument(collectionName, docId, docToSave);
+              if (existing) {
+                return { type: "updated" };
+              } else {
+                return { type: "new" };
+              }
+            } else {
+              return { type: "skipped" };
             }
+          } catch (error) {
+            console.error(`Error syncing document ${doc[idField]}:`, error);
+            return { type: "error" };
           }
+        });
 
-          await setDocument(collectionName, docId, docToSave);
-          if (existing) {
-            updatedCount++;
-          } else {
-            newCount++;
-          }
-        } else {
-          skippedCount++;
-        }
-      } catch (error) {
-        console.error(`Error syncing document ${doc[idField]}:`, error);
+        const results = await Promise.all(promises);
+
+        // Count results
+        results.forEach((result) => {
+          if (result.type === "new") newCount++;
+          else if (result.type === "updated") updatedCount++;
+          else if (result.type === "skipped") skippedCount++;
+        });
+
+        console.log(
+          `📦 Processed batch ${Math.floor(i / batchSize) + 1}: ${
+            results.length
+          } documents (New: ${newCount}, Updated: ${updatedCount}, Skipped: ${skippedCount})`
+        );
       }
+    } catch (error) {
+      console.error("Error in smartSync:", error);
+      throw error;
     }
 
     return { newCount, updatedCount, skippedCount, total: documents.length };
@@ -348,13 +399,46 @@ export default function IntegrationPage() {
   // Sync Categories
   const handleSyncCategories = async (isAutoSync = false) => {
     setSyncing({ ...syncing, categories: true });
+    setSyncProgress({
+      ...syncProgress,
+      categories: {
+        current: 0,
+        total: 0,
+        percentage: 0,
+        status: "Starting...",
+      },
+    });
+
     try {
+      // Update progress: Fetching
+      setSyncProgress({
+        ...syncProgress,
+        categories: {
+          current: 0,
+          total: 0,
+          percentage: 10,
+          status: "Fetching from Loyverse...",
+        },
+      });
+
       // Fetch all categories from Loyverse
       const response = await loyverseService.getAllCategories({
         show_deleted: false,
       });
 
       console.log("Loyverse Categories:", response);
+
+      // Update progress: Transforming
+      const totalCategories = response.categories.length;
+      setSyncProgress({
+        ...syncProgress,
+        categories: {
+          current: 0,
+          total: totalCategories,
+          percentage: 30,
+          status: `Transforming ${totalCategories} categories...`,
+        },
+      });
 
       // Transform to our format
       const categories = response.categories.map((cat) => ({
@@ -367,11 +451,34 @@ export default function IntegrationPage() {
         source: "loyverse",
       }));
 
+      // Update progress: Syncing
+      setSyncProgress({
+        ...syncProgress,
+        categories: {
+          current: 0,
+          total: totalCategories,
+          percentage: 50,
+          status: `Syncing ${totalCategories} categories to Firebase...`,
+        },
+      });
+
       // Smart sync: Only update changed documents
       console.log(
         `📤 Smart syncing ${categories.length} categories to Firebase...`
       );
       const syncStats = await smartSync(COLLECTIONS.CATEGORIES, categories);
+
+      // Update progress: Complete
+      setSyncProgress({
+        ...syncProgress,
+        categories: {
+          current: totalCategories,
+          total: totalCategories,
+          percentage: 100,
+          status: "Sync complete!",
+        },
+      });
+
       console.log(
         `✅ Sync complete: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} skipped`
       );
@@ -428,18 +535,53 @@ export default function IntegrationPage() {
       }
     } finally {
       setSyncing({ ...syncing, categories: false });
+      // Reset progress after a delay
+      setTimeout(() => {
+        setSyncProgress((prev) => ({
+          ...prev,
+          categories: { current: 0, total: 0, percentage: 0, status: "" },
+        }));
+      }, 3000);
     }
   };
 
   // Sync Items (Products)
   const handleSyncItems = async (isAutoSync = false) => {
     setSyncing({ ...syncing, items: true });
+    setSyncProgress({
+      ...syncProgress,
+      items: { current: 0, total: 0, percentage: 0, status: "Starting..." },
+    });
+
     try {
+      // Update progress: Fetching
+      setSyncProgress({
+        ...syncProgress,
+        items: {
+          current: 0,
+          total: 0,
+          percentage: 10,
+          status: "Fetching from Loyverse...",
+        },
+      });
+
       const response = await loyverseService.getAllItems({
         show_deleted: false,
       });
 
       console.log("Loyverse Items:", response);
+
+      // Update progress: Transforming
+      const totalItems = response.items.length;
+      setSyncProgress({
+        ...syncProgress,
+        items: {
+          current: 0,
+          total: totalItems,
+          percentage: 30,
+          status: `Transforming ${totalItems} items...`,
+        },
+      });
 
       // Transform to our format (matching Loyverse Items API)
       const items = response.items.map((item) => {
@@ -508,9 +650,32 @@ export default function IntegrationPage() {
         };
       });
 
+      // Update progress: Syncing
+      setSyncProgress({
+        ...syncProgress,
+        items: {
+          current: 0,
+          total: totalItems,
+          percentage: 50,
+          status: `Syncing ${totalItems} items to Firebase...`,
+        },
+      });
+
       // Smart sync: Only update changed documents
       console.log(`📤 Smart syncing ${items.length} items to Firebase...`);
       const syncStats = await smartSync(COLLECTIONS.PRODUCTS, items);
+
+      // Update progress: Complete
+      setSyncProgress({
+        ...syncProgress,
+        items: {
+          current: totalItems,
+          total: totalItems,
+          percentage: 100,
+          status: "Sync complete!",
+        },
+      });
+
       console.log(
         `✅ Sync complete: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} skipped`
       );
@@ -567,16 +732,51 @@ export default function IntegrationPage() {
       }
     } finally {
       setSyncing({ ...syncing, items: false });
+      // Reset progress after a delay
+      setTimeout(() => {
+        setSyncProgress((prev) => ({
+          ...prev,
+          items: { current: 0, total: 0, percentage: 0, status: "" },
+        }));
+      }, 3000);
     }
   };
 
   // Sync Customers
   const handleSyncCustomers = async (isAutoSync = false) => {
     setSyncing({ ...syncing, customers: true });
+    setSyncProgress({
+      ...syncProgress,
+      customers: { current: 0, total: 0, percentage: 0, status: "Starting..." },
+    });
+
     try {
+      // Update progress: Fetching
+      setSyncProgress({
+        ...syncProgress,
+        customers: {
+          current: 0,
+          total: 0,
+          percentage: 10,
+          status: "Fetching from Loyverse...",
+        },
+      });
+
       const response = await loyverseService.getAllCustomers();
 
       console.log("Loyverse Customers:", response);
+
+      // Update progress: Transforming
+      const totalCustomers = response.customers.length;
+      setSyncProgress({
+        ...syncProgress,
+        customers: {
+          current: 0,
+          total: totalCustomers,
+          percentage: 30,
+          status: `Transforming ${totalCustomers} customers...`,
+        },
+      });
 
       // Transform to our format (matching Loyverse API response structure)
       const customers = response.customers.map((cust) => ({
@@ -606,11 +806,38 @@ export default function IntegrationPage() {
         source: "loyverse",
       }));
 
+      // Update progress: Syncing
+      setSyncProgress({
+        ...syncProgress,
+        customers: {
+          current: 0,
+          total: totalCustomers,
+          percentage: 50,
+          status: `Syncing ${totalCustomers} customers to Firebase...`,
+        },
+      });
+
       // Smart sync: Only update changed documents
       console.log(
         `📤 Smart syncing ${customers.length} customers to Firebase...`
       );
       const syncStats = await smartSync(COLLECTIONS.CUSTOMERS, customers);
+
+      // Also save to IndexedDB for offline access
+      console.log(`💾 Saving ${customers.length} customers to IndexedDB...`);
+      await dbService.upsertCustomers(customers);
+
+      // Update progress: Complete
+      setSyncProgress({
+        ...syncProgress,
+        customers: {
+          current: totalCustomers,
+          total: totalCustomers,
+          percentage: 100,
+          status: "Sync complete!",
+        },
+      });
+
       console.log(
         `✅ Sync complete: ${syncStats.newCount} new, ${syncStats.updatedCount} updated, ${syncStats.skippedCount} skipped`
       );
@@ -667,6 +894,13 @@ export default function IntegrationPage() {
       }
     } finally {
       setSyncing({ ...syncing, customers: false });
+      // Reset progress after a delay
+      setTimeout(() => {
+        setSyncProgress((prev) => ({
+          ...prev,
+          customers: { current: 0, total: 0, percentage: 0, status: "" },
+        }));
+      }, 3000);
     }
   };
 
@@ -1546,6 +1780,60 @@ export default function IntegrationPage() {
               </div>
             )}
 
+            {lastSyncInfo.categories && (
+              <div className="p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Last Sync:
+                  </span>
+                  <span
+                    className={
+                      lastSyncInfo.categories.success
+                        ? "text-green-600 dark:text-green-400 font-medium"
+                        : "text-red-600 dark:text-red-400 font-medium"
+                    }
+                  >
+                    {lastSyncInfo.categories.success ? "✓ Success" : "✗ Failed"}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  {new Date(lastSyncInfo.categories.timestamp).toLocaleString()}
+                </p>
+                {lastSyncInfo.categories.success && (
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
+                    {lastSyncInfo.categories.count} categories synced
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Progress Bar */}
+            {syncing.categories && syncProgress.categories && (
+              <div className="space-y-2 p-3 rounded-lg border bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-purple-700 dark:text-purple-300 font-medium">
+                    {syncProgress.categories.status}
+                  </span>
+                  <span className="text-purple-700 dark:text-purple-300 font-medium">
+                    {syncProgress.categories.percentage}%
+                  </span>
+                </div>
+                <div className="w-full bg-purple-200 dark:bg-purple-950 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-purple-600 dark:bg-purple-500 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${syncProgress.categories.percentage}%` }}
+                  />
+                </div>
+                {syncProgress.categories.current > 0 &&
+                  syncProgress.categories.total > 0 && (
+                    <p className="text-xs text-purple-600 dark:text-purple-400">
+                      {syncProgress.categories.current} /{" "}
+                      {syncProgress.categories.total} categories processed
+                    </p>
+                  )}
+              </div>
+            )}
+
             {syncResults.categories && (
               <div
                 className={`p-3 md:p-4 rounded-lg ${
@@ -1584,7 +1872,7 @@ export default function IntegrationPage() {
               </div>
             )}
             <Button
-              onClick={handleSyncCategories}
+              onClick={() => handleSyncCategories(false)}
               disabled={syncing.categories}
               className="w-full h-12 md:h-10 text-base"
               variant="outline"
@@ -1641,6 +1929,60 @@ export default function IntegrationPage() {
               </div>
             )}
 
+            {lastSyncInfo.items && (
+              <div className="p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Last Sync:
+                  </span>
+                  <span
+                    className={
+                      lastSyncInfo.items.success
+                        ? "text-green-600 dark:text-green-400 font-medium"
+                        : "text-red-600 dark:text-red-400 font-medium"
+                    }
+                  >
+                    {lastSyncInfo.items.success ? "✓ Success" : "✗ Failed"}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  {new Date(lastSyncInfo.items.timestamp).toLocaleString()}
+                </p>
+                {lastSyncInfo.items.success && (
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
+                    {lastSyncInfo.items.count} items synced
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Progress Bar */}
+            {syncing.items && syncProgress.items && (
+              <div className="space-y-2 p-3 rounded-lg border bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-blue-700 dark:text-blue-300 font-medium">
+                    {syncProgress.items.status}
+                  </span>
+                  <span className="text-blue-700 dark:text-blue-300 font-medium">
+                    {syncProgress.items.percentage}%
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 dark:bg-blue-950 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-blue-600 dark:bg-blue-500 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${syncProgress.items.percentage}%` }}
+                  />
+                </div>
+                {syncProgress.items.current > 0 &&
+                  syncProgress.items.total > 0 && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      {syncProgress.items.current} / {syncProgress.items.total}{" "}
+                      items processed
+                    </p>
+                  )}
+              </div>
+            )}
+
             {syncResults.items && (
               <div
                 className={`p-3 md:p-4 rounded-lg ${
@@ -1675,7 +2017,7 @@ export default function IntegrationPage() {
               </div>
             )}
             <Button
-              onClick={handleSyncItems}
+              onClick={() => handleSyncItems(false)}
               disabled={syncing.items}
               className="w-full h-12 md:h-10 text-base"
               variant="outline"
@@ -1732,6 +2074,60 @@ export default function IntegrationPage() {
               </div>
             )}
 
+            {lastSyncInfo.customers && (
+              <div className="p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Last Sync:
+                  </span>
+                  <span
+                    className={
+                      lastSyncInfo.customers.success
+                        ? "text-green-600 dark:text-green-400 font-medium"
+                        : "text-red-600 dark:text-red-400 font-medium"
+                    }
+                  >
+                    {lastSyncInfo.customers.success ? "✓ Success" : "✗ Failed"}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  {new Date(lastSyncInfo.customers.timestamp).toLocaleString()}
+                </p>
+                {lastSyncInfo.customers.success && (
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
+                    {lastSyncInfo.customers.count} customers synced
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Progress Bar */}
+            {syncing.customers && syncProgress.customers && (
+              <div className="space-y-2 p-3 rounded-lg border bg-green-50 dark:bg-green-900/20 dark:border-green-800">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-green-700 dark:text-green-300 font-medium">
+                    {syncProgress.customers.status}
+                  </span>
+                  <span className="text-green-700 dark:text-green-300 font-medium">
+                    {syncProgress.customers.percentage}%
+                  </span>
+                </div>
+                <div className="w-full bg-green-200 dark:bg-green-950 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-green-600 dark:bg-green-500 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${syncProgress.customers.percentage}%` }}
+                  />
+                </div>
+                {syncProgress.customers.current > 0 &&
+                  syncProgress.customers.total > 0 && (
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      {syncProgress.customers.current} /{" "}
+                      {syncProgress.customers.total} customers processed
+                    </p>
+                  )}
+              </div>
+            )}
+
             {syncResults.customers && (
               <div
                 className={`p-3 md:p-4 rounded-lg ${
@@ -1768,7 +2164,7 @@ export default function IntegrationPage() {
               </div>
             )}
             <Button
-              onClick={handleSyncCustomers}
+              onClick={() => handleSyncCustomers(false)}
               disabled={syncing.customers}
               className="w-full h-12 md:h-10 text-base"
               variant="outline"

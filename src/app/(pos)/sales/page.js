@@ -218,12 +218,12 @@ function CashierLogin({ onLogin }) {
 
   return (
     <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 landscape:p-2">
-      <Card className="w-full max-w-md landscape:max-w-sm landscape:max-h-[95vh] landscape:overflow-y-auto">
+      <Card className="w-full max-w-lg landscape:max-w-sm landscape:max-h-[95vh] landscape:overflow-y-auto">
         <CardHeader className="text-center landscape:py-2 landscape:pb-1 landscape:space-y-1">
-          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 landscape:h-8 landscape:w-8 landscape:mb-1">
-            <Lock className="h-8 w-8 text-primary landscape:h-4 landscape:w-4" />
+          <div className="mx-auto h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-4 landscape:h-8 landscape:w-8 landscape:mb-1">
+            <Lock className="h-10 w-10 text-primary landscape:h-4 landscape:w-4" />
           </div>
-          <CardTitle className="text-2xl landscape:text-base landscape:!mb-0">
+          <CardTitle className="text-3xl landscape:text-base landscape:!mb-0">
             Cashier Login
           </CardTitle>
           <p className="text-gray-500 mt-2 landscape:mt-0.5 landscape:text-[10px]">
@@ -242,7 +242,7 @@ function CashierLogin({ onLogin }) {
                 readOnly
                 placeholder="Enter PIN"
                 value={pin.replace(/./g, "●")}
-                className="text-center text-3xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800 landscape:text-xl landscape:h-10"
+                className="text-center text-4xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800 h-16 landscape:text-xl landscape:h-10"
                 inputMode="none"
                 autoComplete="off"
                 onFocus={(e) => e.target.blur()}
@@ -250,7 +250,7 @@ function CashierLogin({ onLogin }) {
             </div>
 
             {/* On-Screen Numeric Keypad */}
-            <div className="grid grid-cols-3 gap-2 landscape:gap-1">
+            <div className="grid grid-cols-3 gap-3 landscape:gap-1">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <Button
                   key={num}
@@ -258,7 +258,7 @@ function CashierLogin({ onLogin }) {
                   variant="outline"
                   size="lg"
                   onClick={() => handleKeypadPress(num.toString())}
-                  className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground landscape:h-10 landscape:text-lg"
+                  className="h-20 text-3xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-10 landscape:text-lg"
                 >
                   {num}
                 </Button>
@@ -268,7 +268,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("clear")}
-                className="h-16 text-sm font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 landscape:h-10 landscape:text-xs"
+                className="h-20 text-base font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all active:scale-95 landscape:h-10 landscape:text-xs"
               >
                 Clear
               </Button>
@@ -277,7 +277,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("0")}
-                className="h-16 text-2xl font-semibold hover:bg-primary hover:text-primary-foreground landscape:h-10 landscape:text-lg"
+                className="h-20 text-3xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-10 landscape:text-lg"
               >
                 0
               </Button>
@@ -286,7 +286,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("backspace")}
-                className="h-16 text-sm font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950 landscape:h-10 landscape:text-xs"
+                className="h-20 text-2xl font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950 transition-all active:scale-95 landscape:h-10 landscape:text-xs"
               >
                 ⌫
               </Button>
@@ -295,7 +295,7 @@ function CashierLogin({ onLogin }) {
             {/* Login Button */}
             <Button
               type="submit"
-              className="w-full h-12 text-lg landscape:h-9 landscape:text-sm"
+              className="w-full h-14 text-xl font-semibold landscape:h-9 landscape:text-sm"
               disabled={loading || pin.length < 4}
             >
               {loading ? "Logging in..." : "Login"}

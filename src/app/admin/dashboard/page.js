@@ -229,10 +229,20 @@ export default function AdminDashboard() {
             existing.inStock > 0 ||
             existing.inventoryLevels)
         ) {
-          itemToSave.stock = existing.stock;
-          itemToSave.inStock = existing.inStock;
-          itemToSave.inventoryLevels = existing.inventoryLevels;
-          itemToSave.lastInventorySync = existing.lastInventorySync;
+          if (existing.stock !== undefined && existing.stock !== null)
+            itemToSave.stock = existing.stock;
+          if (existing.inStock !== undefined && existing.inStock !== null)
+            itemToSave.inStock = existing.inStock;
+          if (
+            existing.inventoryLevels !== undefined &&
+            existing.inventoryLevels !== null
+          )
+            itemToSave.inventoryLevels = existing.inventoryLevels;
+          if (
+            existing.lastInventorySync !== undefined &&
+            existing.lastInventorySync !== null
+          )
+            itemToSave.lastInventorySync = existing.lastInventorySync;
         }
 
         await setDocument(COLLECTIONS.PRODUCTS, item.id, itemToSave);

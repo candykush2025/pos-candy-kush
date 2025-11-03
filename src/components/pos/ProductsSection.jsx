@@ -26,9 +26,12 @@ import {
   X,
   ImageIcon,
   Palette,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { productsService, categoriesService } from "@/lib/firebase/firestore";
 import { discountsService } from "@/lib/firebase/discountsService";
+import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
 import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -53,6 +56,8 @@ export default function ProductsSection() {
   const [discounts, setDiscounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState(null);
   const [discountFormData, setDiscountFormData] = useState({
@@ -106,6 +111,21 @@ export default function ProductsSection() {
     loadData();
   }, []);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isCategoryDropdownOpen) {
+        const dropdown = event.target.closest(".relative.min-w-\\[200px\\]");
+        if (!dropdown) {
+          setIsCategoryDropdownOpen(false);
+        }
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isCategoryDropdownOpen]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -114,7 +134,42 @@ export default function ProductsSection() {
         categoriesService.getAll(),
         discountsService.getAll(),
       ]);
-      setProducts(productData);
+
+      // Enrich products with current stock from stock history
+      const enrichedProducts = await Promise.all(
+        productData.map(async (product) => {
+          if (product.trackStock) {
+            try {
+              // Get the latest stock history entry for this product
+              const history = await stockHistoryService.getProductHistory(
+                product.id,
+                1
+              );
+
+              // If there's a history entry, use its newStock value
+              if (history.length > 0) {
+                return {
+                  ...product,
+                  stock: history[0].newStock,
+                };
+              }
+            } catch (error) {
+              console.error(
+                `Error fetching stock history for ${product.name}:`,
+                error
+              );
+            }
+          }
+
+          // If no stock history or not tracking stock, use the product's stock value
+          return {
+            ...product,
+            stock: product.stock || product.inStock || 0,
+          };
+        })
+      );
+
+      setProducts(enrichedProducts);
       setCategories(categoryData.filter((cat) => !cat.deletedAt));
       setDiscounts(discountData);
     } catch (error) {
@@ -126,16 +181,29 @@ export default function ProductsSection() {
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return products;
 
-    return products.filter(
-      (product) =>
-        product.name?.toLowerCase().includes(query) ||
-        product.sku?.toLowerCase().includes(query) ||
-        product.barcode?.toLowerCase().includes(query) ||
-        product.category?.toLowerCase().includes(query)
-    );
-  }, [products, searchQuery]);
+    let filtered = products;
+
+    // Filter by category
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(
+        (product) => product.category === selectedCategory
+      );
+    }
+
+    // Filter by search query
+    if (query) {
+      filtered = filtered.filter(
+        (product) =>
+          product.name?.toLowerCase().includes(query) ||
+          product.sku?.toLowerCase().includes(query) ||
+          product.barcode?.toLowerCase().includes(query) ||
+          product.category?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [products, searchQuery, selectedCategory]);
 
   const filteredCategories = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -303,7 +371,7 @@ export default function ProductsSection() {
       sku: product.sku || "",
       barcode: product.barcode || "",
       trackStock: product.trackStock || false,
-      inStock: product.inStock || "",
+      inStock: product.stock || product.inStock || "",
       lowStock: product.lowStock || "",
       representationType: product.image ? "image" : "color",
       color: product.color || "GREY",
@@ -367,53 +435,96 @@ export default function ProductsSection() {
 
     setIsSubmittingProduct(true);
     try {
+      // Build product data with only defined values
       const productData = {
         name: productFormData.name,
         category: productFormData.category,
         soldBy: productFormData.soldBy,
-        price: parseFloat(productFormData.price),
+        price: parseFloat(productFormData.price) || 0,
         cost: productFormData.cost ? parseFloat(productFormData.cost) : 0,
-        sku: productFormData.sku,
-        barcode: productFormData.barcode,
+        sku: productFormData.sku || "",
+        barcode: productFormData.barcode || "",
         trackStock: productFormData.trackStock,
-        inStock: productFormData.trackStock
-          ? parseFloat(productFormData.inStock) || 0
-          : null,
-        lowStock: productFormData.trackStock
-          ? parseFloat(productFormData.lowStock) || 0
-          : null,
-        color:
-          productFormData.representationType === "color"
-            ? productFormData.color
-            : null,
-        image:
-          productFormData.representationType === "image"
-            ? productFormData.imagePreview
-            : null,
       };
 
+      // Only add stock fields if tracking stock
+      if (productFormData.trackStock) {
+        productData.inStock = parseFloat(productFormData.inStock) || 0;
+        productData.lowStock = parseFloat(productFormData.lowStock) || 0;
+      }
+
+      // Add color if using color representation
+      if (productFormData.representationType === "color") {
+        productData.color = productFormData.color || "GREY";
+      }
+
+      // Add image if using image representation
+      if (
+        productFormData.representationType === "image" &&
+        productFormData.imagePreview
+      ) {
+        productData.image = productFormData.imagePreview;
+      }
+
       if (editingProduct) {
+        // Check if stock changed for tracked products
+        if (productFormData.trackStock) {
+          const newStock = parseFloat(productFormData.inStock) || 0;
+          const currentStock = editingProduct.stock || 0;
+
+          // If stock value changed, log it to stock history
+          if (newStock !== currentStock) {
+            const stockDifference = newStock - currentStock;
+            const stockType =
+              stockDifference > 0
+                ? "adjustment_increase"
+                : "adjustment_decrease";
+
+            await stockHistoryService.logStockMovement({
+              productId: editingProduct.id,
+              productName: productData.name,
+              productSku: productData.sku,
+              type: stockType,
+              quantity: Math.abs(stockDifference),
+              previousStock: currentStock,
+              newStock: newStock,
+              reason: `Stock adjusted from POS by ${user?.name || "System"}`,
+              referenceId: `POS-EDIT-${Date.now()}`,
+              userId: user?.id || "system",
+              userName: user?.name || "System",
+            });
+
+            toast.success(
+              `Stock ${
+                stockDifference > 0 ? "increased" : "decreased"
+              } by ${Math.abs(stockDifference)} units`
+            );
+          }
+        }
+
         await productsService.update(editingProduct.id, productData);
         toast.success("Product updated");
       } else {
-        await productsService.create(productData);
+        // Creating new product
+        const newProduct = await productsService.create(productData);
 
-        // Add to stock movement if tracking stock
+        // Add initial stock to history if tracking stock
         if (productFormData.trackStock && productFormData.inStock > 0) {
-          const stockMovement = {
-            productId: productData.sku,
+          await stockHistoryService.logStockMovement({
+            productId: newProduct.id,
             productName: productData.name,
-            type: "purchase",
+            productSku: productData.sku,
+            type: "initial",
             quantity: parseFloat(productFormData.inStock),
-            from: 0,
-            to: parseFloat(productFormData.inStock),
-            note: "Initial stock from POS",
-            cashierId: user?.id || null,
-            cashierName: user?.name || "System",
-            createdAt: new Date(),
-          };
-          // TODO: Add to stock movement collection
-          console.log("Stock movement:", stockMovement);
+            previousStock: 0,
+            newStock: parseFloat(productFormData.inStock),
+            reason: `Initial stock created from POS by ${
+              user?.name || "System"
+            }`,
+            referenceId: `POS-CREATE-${Date.now()}`,
+            userId: user?.id || "system",
+            userName: user?.name || "System",
+          });
         }
 
         toast.success("Product created");
@@ -584,8 +695,74 @@ export default function ProductsSection() {
 
       {/* Right Content Area - 70% */}
       <div className="w-[70%] flex flex-col gap-4">
-        {/* Header with Search, Add and Refresh */}
-        <div className="flex items-center gap-4">
+        {/* Header with Category Filter, Search, Add and Refresh */}
+        <div className="flex items-center gap-3">
+          {/* Category Filter Dropdown - First */}
+          {activeMenu === "products" && (
+            <div className="relative min-w-[200px]">
+              {/* Custom Dropdown Button */}
+              <button
+                onClick={() =>
+                  setIsCategoryDropdownOpen(!isCategoryDropdownOpen)
+                }
+                className="w-full h-12 pl-10 pr-10 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm font-medium text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-600 flex items-center justify-between"
+              >
+                <FolderTree className="absolute left-3 h-4 w-4 text-neutral-400" />
+                <span className="flex-1 text-left">
+                  {selectedCategory === "all"
+                    ? "All Categories"
+                    : selectedCategory}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 text-neutral-400 transition-transform ${
+                    isCategoryDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Dropdown Menu */}
+              {isCategoryDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg shadow-lg max-h-64 overflow-y-auto z-50">
+                  {/* All Categories Option */}
+                  <button
+                    onClick={() => {
+                      setSelectedCategory("all");
+                      setIsCategoryDropdownOpen(false);
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center justify-between"
+                  >
+                    <span className="text-neutral-900 dark:text-neutral-100">
+                      All Categories
+                    </span>
+                    {selectedCategory === "all" && (
+                      <Check className="h-4 w-4 text-primary" />
+                    )}
+                  </button>
+
+                  {/* Category Options */}
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      onClick={() => {
+                        setSelectedCategory(category.name);
+                        setIsCategoryDropdownOpen(false);
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center justify-between"
+                    >
+                      <span className="text-neutral-900 dark:text-neutral-100">
+                        {category.name}
+                      </span>
+                      {selectedCategory === category.name && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Search Bar - Second */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-neutral-400" />
             <Input
@@ -595,6 +772,8 @@ export default function ProductsSection() {
               className="pl-10 h-12"
             />
           </div>
+
+          {/* Add Button */}
           {activeMenu === "products" && (
             <Button size="lg" onClick={handleAddProduct}>
               <Plus className="h-5 w-5 mr-2" />
@@ -652,7 +831,8 @@ export default function ProductsSection() {
                       filteredProducts.map((product) => (
                         <div
                           key={product.id}
-                          className="flex items-center gap-4 p-4 border rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+                          onClick={() => handleEditProduct(product)}
+                          className="flex items-center gap-4 p-4 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
                         >
                           {/* Image/Color */}
                           {getProductDisplay(product)}
@@ -669,7 +849,7 @@ export default function ProductsSection() {
                             </p>
                             {product.trackStock && (
                               <p className="text-xs text-neutral-400 mt-1">
-                                Stock: {product.inStock || 0}
+                                Stock: {product.stock || 0}
                                 {product.lowStock &&
                                   ` (Low: ${product.lowStock})`}
                               </p>
@@ -679,25 +859,6 @@ export default function ProductsSection() {
                           {/* Price */}
                           <div className="text-xl font-bold text-green-600">
                             {formatCurrency(product.price || 0)}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditProduct(product)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDeleteProduct(product.id)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
                           </div>
                         </div>
                       ))
@@ -1058,7 +1219,7 @@ export default function ProductsSection() {
 
       {/* Product Modal */}
       <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingProduct ? "Edit Product" : "Add New Product"}
@@ -1463,20 +1624,28 @@ export default function ProductsSection() {
 
             {/* Submit Buttons */}
             <div className="flex gap-2 pt-4">
+              {editingProduct && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleDeleteProduct(editingProduct.id)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                  disabled={isSubmittingProduct}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Product
+                </Button>
+              )}
+              <div className="flex-1" />
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setIsProductModalOpen(false)}
-                className="flex-1"
                 disabled={isSubmittingProduct}
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                className="flex-1"
-                disabled={isSubmittingProduct}
-              >
+              <Button type="submit" disabled={isSubmittingProduct}>
                 {isSubmittingProduct
                   ? "Saving..."
                   : editingProduct

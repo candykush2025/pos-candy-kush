@@ -26,6 +26,9 @@ import {
   DollarSign,
   ShoppingBag,
   Award,
+  AlertCircle,
+  CheckCircle,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
@@ -40,27 +43,70 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [syncingCustomers, setSyncingCustomers] = useState({});
 
   const [formData, setFormData] = useState({
+    // Required
     name: "",
-    customerCode: "",
+    // Personal Information
+    lastName: "",
+    nickname: "",
+    nationality: "",
+    dateOfBirth: "",
+    // Contact Information
     email: "",
-    phone: "",
-    address: "",
-    city: "",
-    province: "",
-    postalCode: "",
-    countryCode: "",
-    note: "",
+    cell: "",
+    // Member Information
+    memberId: "",
+    customPoints: 0,
+    isNoMember: false,
+    isActive: true,
+    // Kiosk Permissions
+    allowedCategories: [],
   });
 
   useEffect(() => {
     loadCustomers();
+    loadCategoriesFromKiosk();
   }, []);
 
   useEffect(() => {
     filterCustomers();
   }, [searchQuery, customers]);
+
+  const loadCategoriesFromKiosk = async () => {
+    try {
+      setLoadingCategories(true);
+      // Fetch categories from kiosk API (external kiosk system)
+      const kioskUrl =
+        "https://candy-kush-kiosk.vercel.app/api/categories?active=true";
+      const response = await fetch(kioskUrl);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch categories from kiosk");
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        console.log("📂 Loaded categories from kiosk API:", result.data);
+        setCategories(result.data);
+      } else {
+        console.warn("No categories returned from kiosk API");
+        setCategories([]);
+      }
+    } catch (error) {
+      console.error("Error loading categories from kiosk:", error);
+      toast.error(
+        "Failed to load categories from kiosk. Category selection may be limited."
+      );
+      setCategories([]);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   const loadCustomers = async () => {
     try {
@@ -99,15 +145,17 @@ export default function CustomersPage() {
     setEditingCustomer(null);
     setFormData({
       name: "",
-      customerCode: "",
+      lastName: "",
+      nickname: "",
+      nationality: "",
+      dateOfBirth: "",
       email: "",
-      phone: "",
-      address: "",
-      city: "",
-      province: "",
-      postalCode: "",
-      countryCode: "",
-      note: "",
+      cell: "",
+      memberId: "",
+      customPoints: 0,
+      isNoMember: false,
+      isActive: true,
+      allowedCategories: [],
     });
     setIsModalOpen(true);
   };
@@ -116,15 +164,17 @@ export default function CustomersPage() {
     setEditingCustomer(customer);
     setFormData({
       name: customer.name || "",
-      customerCode: customer.customerCode || "",
+      lastName: customer.lastName || "",
+      nickname: customer.nickname || "",
+      nationality: customer.nationality || "",
+      dateOfBirth: customer.dateOfBirth || "",
       email: customer.email || "",
-      phone: customer.phone || "",
-      address: customer.address || "",
-      city: customer.city || "",
-      province: customer.province || "",
-      postalCode: customer.postalCode || "",
-      countryCode: customer.countryCode || "",
-      note: customer.note || "",
+      cell: customer.cell || customer.phone || "",
+      memberId: customer.memberId || "",
+      customPoints: customer.customPoints || 0,
+      isNoMember: customer.isNoMember || false,
+      isActive: customer.isActive !== false,
+      allowedCategories: customer.allowedCategories || [],
     });
     setIsModalOpen(true);
   };
@@ -142,6 +192,59 @@ export default function CustomersPage() {
     }
   };
 
+  const handleSyncToKiosk = async (customer) => {
+    setSyncingCustomers({ ...syncingCustomers, [customer.id]: true });
+
+    try {
+      // Prepare customer data for kiosk API
+      const kioskCustomerData = {
+        customerId: customer.customerId,
+        memberId: customer.memberId || customer.customerId,
+        name: customer.name,
+        lastName: customer.lastName || "",
+        nickname: customer.nickname || "",
+        nationality: customer.nationality || "",
+        dateOfBirth: customer.dateOfBirth || "",
+        email: customer.email || "",
+        cell: customer.cell || customer.phone || "",
+        isNoMember: customer.isNoMember || false,
+        isActive: customer.isActive !== false,
+        customPoints: customer.customPoints || 0,
+        allowedCategories: customer.allowedCategories || [],
+      };
+
+      // Send to kiosk API
+      const kioskUrl = "https://candy-kush-kiosk.vercel.app/api/customers";
+      const response = await fetch(kioskUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(kioskCustomerData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Failed to sync to kiosk");
+      }
+
+      // Update local customer with syncedToKiosk flag
+      await dbService.updateCustomer(customer.id, {
+        syncedToKiosk: true,
+        lastSyncedAt: new Date().toISOString(),
+      });
+
+      toast.success(`✅ ${customer.name} synced to kiosk successfully!`);
+      loadCustomers(); // Refresh the list
+    } catch (error) {
+      console.error("Error syncing to kiosk:", error);
+      toast.error(`Failed to sync to kiosk: ${error.message}`);
+    } finally {
+      setSyncingCustomers({ ...syncingCustomers, [customer.id]: false });
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -151,19 +254,51 @@ export default function CustomersPage() {
     }
 
     try {
+      // Generate customerId for new customers
+      let customerId = editingCustomer?.customerId;
+      if (!customerId) {
+        const customerCount = customers.length + 1;
+        customerId = `CK-${customerCount.toString().padStart(4, "0")}`;
+      }
+
       const customerData = {
+        // Customer Identification
+        customerId: customerId,
+        memberId: formData.memberId || customerId,
+
+        // Personal Information (required)
         name: formData.name.trim(),
-        customerCode:
-          formData.customerCode || `CUST-${Date.now().toString().slice(-8)}`,
+        lastName: formData.lastName.trim(),
+        nickname: formData.nickname.trim(),
+        nationality: formData.nationality.trim(),
+        dateOfBirth: formData.dateOfBirth,
+
+        // Contact Information
         email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        address: formData.address.trim(),
-        city: formData.city.trim(),
-        province: formData.province.trim(),
-        postalCode: formData.postalCode.trim(),
-        countryCode: formData.countryCode.trim(),
-        note: formData.note.trim(),
+        cell: formData.cell.trim(),
+
+        // Member Status & Points
+        isNoMember: formData.isNoMember,
+        isActive: formData.isActive,
+        customPoints: parseInt(formData.customPoints) || 0,
+        points: editingCustomer?.points || [],
+
+        // Purchase History (preserve existing or initialize)
+        totalSpent: editingCustomer?.totalSpent || 0,
+        visitCount:
+          editingCustomer?.visitCount || editingCustomer?.totalVisits || 0,
+
+        // Kiosk Permissions
+        allowedCategories: formData.allowedCategories,
+
+        // Timestamps
         updatedAt: new Date().toISOString(),
+
+        // Source tracking
+        source: editingCustomer?.source || "admin",
+
+        // Kiosk sync status
+        syncedToKiosk: false, // Will be true when synced to Firebase
       };
 
       if (editingCustomer) {
@@ -171,16 +306,17 @@ export default function CustomersPage() {
         await dbService.updateCustomer(editingCustomer.id, customerData);
         toast.success("Customer updated successfully");
       } else {
-        // Create new - follow Loyverse format
+        // Create new
         customerData.id = `cust_${Date.now()}`;
         customerData.createdAt = new Date().toISOString();
-        customerData.source = "local";
-        // Use both naming conventions for compatibility
+
+        // Also support old field names for compatibility
+        customerData.customerCode = customerId;
+        customerData.phone = formData.cell;
         customerData.visits = 0;
         customerData.totalVisits = 0;
         customerData.spent = 0;
         customerData.totalSpent = 0;
-        customerData.points = 0;
         customerData.totalPoints = 0;
         customerData.firstVisit = null;
         customerData.lastVisit = null;
@@ -331,7 +467,7 @@ export default function CustomersPage() {
               {filteredCustomers.map((customer) => (
                 <div
                   key={customer.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-neutral-50 transition-colors"
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
                 >
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center space-x-3">
@@ -351,6 +487,23 @@ export default function CustomersPage() {
                               className="text-xs"
                             >
                               {customer.source}
+                            </Badge>
+                          )}
+                          {customer.syncedToKiosk ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                            >
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Synced to Kiosk
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-yellow-50 dark:bg-yellow-950 border-yellow-500 text-yellow-700 dark:text-yellow-400"
+                            >
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Not Synced
                             </Badge>
                           )}
                         </div>
@@ -411,6 +564,27 @@ export default function CustomersPage() {
                   </div>
 
                   <div className="flex space-x-2">
+                    {!customer.syncedToKiosk && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleSyncToKiosk(customer)}
+                        disabled={syncingCustomers[customer.id]}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        {syncingCustomers[customer.id] ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Syncing...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 mr-1" />
+                            Sync to Kiosk
+                          </>
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -455,133 +629,307 @@ export default function CustomersPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-2">
-                  Customer Name *
-                </label>
-                <Input
-                  placeholder="John Doe"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  required
-                  autoFocus
-                />
+            {/* Personal Information Section */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg border-b pb-2">
+                Personal Information
+              </h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Name - Required */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    First Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="John"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                {/* Last Name */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Last Name
+                  </label>
+                  <Input
+                    placeholder="Doe"
+                    value={formData.lastName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lastName: e.target.value })
+                    }
+                  />
+                </div>
+
+                {/* Nickname */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Nickname
+                  </label>
+                  <Input
+                    placeholder="Johnny"
+                    value={formData.nickname}
+                    onChange={(e) =>
+                      setFormData({ ...formData, nickname: e.target.value })
+                    }
+                  />
+                </div>
+
+                {/* Nationality */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Nationality
+                  </label>
+                  <Input
+                    placeholder="Thai"
+                    value={formData.nationality}
+                    onChange={(e) =>
+                      setFormData({ ...formData, nationality: e.target.value })
+                    }
+                  />
+                </div>
+
+                {/* Date of Birth */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium mb-2">
+                    Date of Birth
+                  </label>
+                  <Input
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) =>
+                      setFormData({ ...formData, dateOfBirth: e.target.value })
+                    }
+                  />
+                </div>
               </div>
+            </div>
+
+            {/* Contact Information Section */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg border-b pb-2">
+                Contact Information
+              </h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Email
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="john@example.com"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Phone Number
+                  </label>
+                  <Input
+                    type="tel"
+                    placeholder="+66812345678"
+                    value={formData.cell}
+                    onChange={(e) =>
+                      setFormData({ ...formData, cell: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Member Information Section */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg border-b pb-2">
+                Member Information
+              </h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Member ID */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Member ID
+                  </label>
+                  <Input
+                    placeholder="Auto-generated if empty"
+                    value={formData.memberId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, memberId: e.target.value })
+                    }
+                    disabled={!editingCustomer}
+                  />
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Leave empty to auto-generate
+                  </p>
+                </div>
+
+                {/* Points */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Initial Points
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={formData.customPoints}
+                    onChange={(e) =>
+                      setFormData({ ...formData, customPoints: e.target.value })
+                    }
+                  />
+                </div>
+
+                {/* Is No Member */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isNoMember"
+                    checked={formData.isNoMember}
+                    onChange={(e) =>
+                      setFormData({ ...formData, isNoMember: e.target.checked })
+                    }
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="isNoMember" className="text-sm font-medium">
+                    Non-Member
+                  </label>
+                </div>
+
+                {/* Is Active */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isActive"
+                    checked={formData.isActive}
+                    onChange={(e) =>
+                      setFormData({ ...formData, isActive: e.target.checked })
+                    }
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="isActive" className="text-sm font-medium">
+                    Active Account
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Kiosk Permissions Section */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg border-b pb-2">
+                Kiosk Permissions
+              </h3>
 
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Customer Code
+                  Allowed Categories
                 </label>
-                <Input
-                  placeholder="Auto-generated"
-                  value={formData.customerCode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, customerCode: e.target.value })
-                  }
-                />
-              </div>
+                <p className="text-xs text-neutral-500 mb-3">
+                  Leave empty to allow access to all categories. Select specific
+                  categories to restrict access.
+                </p>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Email</label>
-                <Input
-                  type="email"
-                  placeholder="customer@example.com"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                />
+                {/* Category checkboxes from Kiosk API */}
+                <div className="border rounded-lg p-4 bg-neutral-50 dark:bg-neutral-900">
+                  {loadingCategories ? (
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                      Loading categories from kiosk...
+                    </p>
+                  ) : categories.length === 0 ? (
+                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                      ⚠️ No categories available from kiosk. Customer will have
+                      access to all categories.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {categories.map((category) => (
+                        <label
+                          key={category.id}
+                          className="flex items-center gap-2 p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.allowedCategories.includes(
+                              category.id
+                            )}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  allowedCategories: [
+                                    ...formData.allowedCategories,
+                                    category.id,
+                                  ],
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  allowedCategories:
+                                    formData.allowedCategories.filter(
+                                      (id) => id !== category.id
+                                    ),
+                                });
+                              }
+                            }}
+                            className="rounded border-neutral-300 dark:border-neutral-600"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm font-medium">
+                              {category.name}
+                            </span>
+                            {category.description && (
+                              <p className="text-xs text-neutral-500">
+                                {category.description}
+                              </p>
+                            )}
+                          </div>
+                          {category.isActive && (
+                            <Badge variant="outline" className="text-xs">
+                              Active
+                            </Badge>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
+            </div>
 
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-2">Phone</label>
-                <Input
-                  type="tel"
-                  placeholder="+1 (555) 123-4567"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-2">
-                  Address
-                </label>
-                <Input
-                  placeholder="123 Main Street"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">City</label>
-                <Input
-                  placeholder="New York"
-                  value={formData.city}
-                  onChange={(e) =>
-                    setFormData({ ...formData, city: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  State/Province
-                </label>
-                <Input
-                  placeholder="NY"
-                  value={formData.province}
-                  onChange={(e) =>
-                    setFormData({ ...formData, province: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Postal Code
-                </label>
-                <Input
-                  placeholder="10001"
-                  value={formData.postalCode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, postalCode: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Country Code
-                </label>
-                <Input
-                  placeholder="US"
-                  value={formData.countryCode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, countryCode: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-2">Notes</label>
-                <textarea
-                  className="w-full px-3 py-2 border rounded-md"
-                  rows={3}
-                  placeholder="Additional notes about this customer..."
-                  value={formData.note}
-                  onChange={(e) =>
-                    setFormData({ ...formData, note: e.target.value })
-                  }
-                />
+            {/* Sync Status Info */}
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  {editingCustomer?.syncedToKiosk ? (
+                    <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                      <CheckCircle className="h-5 w-5" />
+                      <span className="text-sm font-medium">
+                        Synced to Kiosk
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                      <AlertCircle className="h-5 w-5" />
+                      <span className="text-sm font-medium">
+                        Not Synced to Kiosk
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-sm text-blue-800 dark:text-blue-200">
+                  {editingCustomer?.syncedToKiosk
+                    ? "This customer is synced with the kiosk system and can be scanned."
+                    : "Customer will be synced to kiosk after saving. They will be able to scan their QR code once synced."}
+                </div>
               </div>
             </div>
 
@@ -804,4 +1152,3 @@ export default function CustomersPage() {
     </div>
   );
 }
-

@@ -2496,15 +2496,15 @@ export default function SalesSection({ cashier }) {
             {/* Customer Selection */}
             <div className="flex items-center gap-2">
               {cartCustomer ? (
-                <div className="flex-1 flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                <div className="flex-1 flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded">
                   <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-green-600" />
+                    <User className="h-4 w-4 text-green-600 dark:text-green-400" />
                     <div>
-                      <p className="text-sm font-medium text-green-900">
+                      <p className="text-sm font-medium text-green-900 dark:text-green-100">
                         {cartCustomer.name}
                       </p>
-                      <p className="text-xs text-green-600">
-                        {cartCustomer.customerCode}
+                      <p className="text-xs text-green-600 dark:text-green-400">
+                        {cartCustomer.customerCode || cartCustomer.customerId}
                       </p>
                     </div>
                   </div>
@@ -2512,9 +2512,9 @@ export default function SalesSection({ cashier }) {
                     variant="ghost"
                     size="sm"
                     onClick={() => setCartCustomer(null)}
-                    className="h-6 w-6 p-0"
+                    className="h-6 w-6 p-0 hover:bg-red-100 dark:hover:bg-red-900/30"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4 text-red-600 dark:text-red-400" />
                   </Button>
                 </div>
               ) : (
