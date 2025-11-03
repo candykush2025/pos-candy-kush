@@ -29,6 +29,7 @@ import HistorySection from "@/components/pos/HistorySection";
 import ProductsSection from "@/components/pos/ProductsSection";
 import SettingsSection from "@/components/pos/SettingsSection";
 import ShiftsSection from "@/components/pos/ShiftsSection";
+import KioskOrdersPanel from "@/components/pos/KioskOrdersPanel";
 
 // Cashier Login Component
 function CashierLogin({ onLogin }) {
@@ -577,6 +578,9 @@ export default function SalesPage() {
       {activeTab === "shifts" && <ShiftsSection cashier={cashier} />}
       {activeTab === "products" && <ProductsSection />}
       {activeTab === "settings" && <SettingsSection />}
+      {activeTab === "kiosk-orders" && (
+        <KioskOrdersPanel currentUser={cashier} />
+      )}
     </div>
   );
 }
