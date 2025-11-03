@@ -26,6 +26,7 @@ import {
   DollarSign,
   AlertTriangle,
   Clock,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -440,6 +441,17 @@ export default function POSLayout({ children }) {
                 >
                   <Package className="h-3.5 w-3.5" />
                   Products
+                </button>
+                <button
+                  onClick={() => setActiveTab("kiosk-orders")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    activeTab === "kiosk-orders"
+                      ? "bg-primary/10 text-primary"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <Bell className="h-3.5 w-3.5" />
+                  Kiosk Orders
                 </button>
                 <button
                   onClick={() => setActiveTab("settings")}

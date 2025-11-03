@@ -8,6 +8,13 @@ import {
 import { db } from "@/lib/firebase";
 
 export async function POST(request) {
+  // Set CORS headers for kiosk website
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "https://candy-kush-kiosk.vercel.app",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Kiosk-ID, X-API-Key",
+  };
+
   try {
     // 1. Parse request body
     const body = await request.json();
@@ -23,7 +30,7 @@ export async function POST(request) {
           message: validation.message,
           validationErrors: validation.errors,
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -40,7 +47,7 @@ export async function POST(request) {
           error: "Unauthorized",
           message: "Invalid API key",
         },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -158,7 +165,7 @@ export async function POST(request) {
           estimatedWaitTime: "2-3 minutes",
         },
       },
-      { status: 200 }
+      { status: 200, headers: corsHeaders }
     );
   } catch (error) {
     console.error("❌ Error processing kiosk order:", error);
@@ -169,7 +176,7 @@ export async function POST(request) {
         error: "Internal server error",
         message: error.message,
       },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
@@ -233,6 +240,21 @@ async function getQueuePosition() {
   return Math.floor(Math.random() * 10) + 1;
 }
 
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS() {
+  return NextResponse.json(
+    {},
+    {
+      status: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "https://candy-kush-kiosk.vercel.app",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-Kiosk-ID, X-API-Key",
+      },
+    }
+  );
+}
+
 // Only allow POST requests
 export async function GET() {
   return NextResponse.json(
@@ -240,6 +262,11 @@ export async function GET() {
       error: "Method not allowed",
       message: "This endpoint only accepts POST requests",
     },
-    { status: 405 }
+    {
+      status: 405,
+      headers: {
+        "Access-Control-Allow-Origin": "https://candy-kush-kiosk.vercel.app",
+      },
+    }
   );
 }

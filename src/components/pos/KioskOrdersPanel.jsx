@@ -131,7 +131,7 @@ export default function KioskOrdersPanel({ currentUser }) {
       )}
 
       {/* Orders Panel */}
-      <div className="kiosk-orders-panel bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <div className="kiosk-orders-panel bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Package className="w-6 h-6" />
@@ -214,7 +214,7 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
   };
 
   return (
-    <div className="order-card bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-gray-700 dark:to-gray-600 rounded-lg p-4 border-2 border-yellow-400 dark:border-yellow-600 shadow-lg hover:shadow-xl transition-shadow">
+    <div className="order-card bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-gray-800 dark:to-gray-700 rounded-lg p-4 border-2 border-yellow-400 dark:border-yellow-600 shadow-lg hover:shadow-xl transition-shadow">
       {/* Order Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
@@ -232,7 +232,7 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
       </div>
 
       {/* Customer Info */}
-      <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
+      <div className="mb-3 p-3 bg-white dark:bg-gray-900 rounded-lg">
         <div className="flex items-center gap-2 mb-1">
           <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           <p className="font-semibold text-gray-900 dark:text-white">
@@ -248,7 +248,7 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
       </div>
 
       {/* Items Summary */}
-      <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
+      <div className="mb-3 p-3 bg-white dark:bg-gray-900 rounded-lg">
         <p className="text-sm font-semibold mb-2 text-gray-900 dark:text-white">
           📦 {order.items.length} Item(s)
         </p>
@@ -273,12 +273,12 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
       </div>
 
       {/* Total */}
-      <div className="mb-3 p-3 bg-green-100 dark:bg-green-900 rounded-lg">
+      <div className="mb-3 p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
         <div className="flex justify-between items-center">
           <span className="font-bold text-gray-900 dark:text-white">
             Total:
           </span>
-          <span className="text-xl font-bold text-green-700 dark:text-green-300">
+          <span className="text-xl font-bold text-green-700 dark:text-green-400">
             ฿{order.pricing.total}
           </span>
         </div>
@@ -291,7 +291,7 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
       </div>
 
       {/* Payment Method */}
-      <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
+      <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
         <div className="flex items-center gap-2 mb-2">
           <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           <span className="font-semibold text-gray-900 dark:text-white">
@@ -379,7 +379,7 @@ function OrderCard({ order, onView, onConfirm, onReject, currentUser }) {
         <div className="flex gap-2">
           <button
             onClick={onView}
-            className="flex-1 px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center justify-center gap-2 text-sm font-semibold"
+            className="flex-1 px-3 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 flex items-center justify-center gap-2 text-sm font-semibold"
           >
             <Eye className="w-4 h-4" />
             View
@@ -442,7 +442,7 @@ function OrderDetailsModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-6 rounded-t-lg">
           <div className="flex justify-between items-center">
@@ -466,7 +466,7 @@ function OrderDetailsModal({
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Customer Information */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <h3 className="text-lg font-bold mb-3 text-gray-900 dark:text-white flex items-center gap-2">
               <User className="w-5 h-5" />
               Customer Information
@@ -508,7 +508,7 @@ function OrderDetailsModal({
           </div>
 
           {/* Order Items */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <h3 className="text-lg font-bold mb-3 text-gray-900 dark:text-white flex items-center gap-2">
               <Package className="w-5 h-5" />
               Order Items ({order.items.length})
@@ -517,7 +517,7 @@ function OrderDetailsModal({
               {order.items.map((item, idx) => (
                 <div
                   key={idx}
-                  className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded"
+                  className="flex justify-between items-center p-3 bg-white dark:bg-gray-900 rounded"
                 >
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900 dark:text-white">
@@ -541,7 +541,7 @@ function OrderDetailsModal({
           </div>
 
           {/* Pricing Details */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <h3 className="text-lg font-bold mb-3 text-gray-900 dark:text-white">
               Pricing
             </h3>
@@ -570,7 +570,7 @@ function OrderDetailsModal({
           </div>
 
           {/* Payment Method */}
-          <div className="bg-blue-50 dark:bg-blue-900 rounded-lg p-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
             <h3 className="text-lg font-bold mb-3 text-gray-900 dark:text-white flex items-center gap-2">
               <CreditCard className="w-5 h-5" />
               Payment: {order.payment.method.toUpperCase()}
