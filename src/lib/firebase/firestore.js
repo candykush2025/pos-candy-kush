@@ -13,6 +13,8 @@ import {
   limit,
   serverTimestamp,
   onSnapshot,
+  getDocsFromServer,
+  getDocFromServer,
 } from "firebase/firestore";
 import { db } from "./config";
 
@@ -74,7 +76,8 @@ export const setDocument = async (collectionName, id, data) => {
 export const getDocument = async (collectionName, id) => {
   try {
     const docRef = doc(db, collectionName, id);
-    const docSnap = await getDoc(docRef);
+    // FORCE FETCH FROM SERVER - NOT CACHE!
+    const docSnap = await getDocFromServer(docRef);
 
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
@@ -89,18 +92,26 @@ export const getDocument = async (collectionName, id) => {
 // Get all documents
 export const getDocuments = async (collectionName, options = {}) => {
   try {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(
+      `🔥 FETCHING ${collectionName.toUpperCase()} FROM FIREBASE SERVER`
+    );
+    console.log("Options:", JSON.stringify(options, null, 2));
+
     let q = collection(db, collectionName);
 
     if (options.where) {
-      // where should be an array: [field, operator, value]
+      console.log("🔍 Adding WHERE filter:", options.where);
       q = query(q, where(...options.where));
     }
 
     if (options.orderBy) {
       // orderBy can be an object {field, direction} or array [field, direction]
       if (Array.isArray(options.orderBy)) {
+        console.log("📊 Adding ORDER BY (array):", options.orderBy);
         q = query(q, orderBy(...options.orderBy));
       } else if (options.orderBy.field) {
+        console.log("📊 Adding ORDER BY (object):", options.orderBy);
         q = query(
           q,
           orderBy(options.orderBy.field, options.orderBy.direction || "asc")
@@ -109,11 +120,48 @@ export const getDocuments = async (collectionName, options = {}) => {
     }
 
     if (options.limit) {
+      console.log("🔢 Adding LIMIT:", options.limit);
       q = query(q, limit(options.limit));
     }
 
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    console.log("⏳ Executing Firebase query...");
+    // FORCE FETCH FROM SERVER - NOT CACHE!
+    const querySnapshot = await getDocsFromServer(q);
+
+    console.log(`📦 Raw query result: ${querySnapshot.size} documents`);
+    console.log(`📦 Empty: ${querySnapshot.empty}`);
+
+    const results = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    console.log(
+      `✅ FETCHED ${
+        results.length
+      } ${collectionName.toUpperCase()} FROM FIREBASE SERVER`
+    );
+
+    if (results.length > 0) {
+      console.log(
+        "📄 First document sample:",
+        JSON.stringify(results[0], null, 2)
+      );
+      console.log(
+        "📋 All document IDs:",
+        results.map((r) => r.id)
+      );
+    } else {
+      console.warn(`⚠️ NO ${collectionName.toUpperCase()} FOUND IN FIREBASE!`);
+      console.warn(
+        "Collection path:",
+        `${db.app.options.projectId}/firestore/${collectionName}`
+      );
+    }
+
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    return results;
   } catch (error) {
     console.error(`Error getting documents from ${collectionName}:`, error);
     throw error;

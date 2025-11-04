@@ -27,6 +27,12 @@ import {
   ShoppingBag,
   Calendar,
   DollarSign,
+  RefreshCw,
+  Award,
+  Filter,
+  Database,
+  Monitor,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
@@ -559,6 +565,7 @@ export default function CustomersSection({ cashier }) {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("all"); // all, loyverse, local, kiosk
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -585,24 +592,35 @@ export default function CustomersSection({ cashier }) {
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredCustomers(customers);
-    } else {
+    let filtered = customers;
+
+    // Apply source filter
+    if (sourceFilter !== "all") {
+      filtered = filtered.filter((c) => c.source === sourceFilter);
+    }
+
+    // Apply search filter
+    if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
-      const filtered = customers.filter(
+      filtered = filtered.filter(
         (c) =>
           c.name?.toLowerCase().includes(query) ||
           c.customerCode?.toLowerCase().includes(query) ||
           c.email?.toLowerCase().includes(query) ||
           c.phone?.includes(query)
       );
-      setFilteredCustomers(filtered);
     }
-  }, [searchQuery, customers]);
+
+    setFilteredCustomers(filtered);
+  }, [searchQuery, customers, sourceFilter]);
 
   const loadCustomers = async () => {
     try {
       setLoading(true);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🔄 LOADING CUSTOMERS FROM FIREBASE...");
+      console.log("Current cashier:", cashier);
+
       // Clear previous customers when switching users
       setCustomers([]);
       setFilteredCustomers([]);
@@ -611,21 +629,36 @@ export default function CustomersSection({ cashier }) {
         orderBy: { field: "name", direction: "asc" },
       });
 
-      // Filter customers by cashier if cashier is provided
-      const cashierCustomers = cashier
-        ? data.filter((c) => c.createdBy === cashier.id)
-        : data;
+      console.log("📊 RAW DATA FROM FIREBASE:", data);
+      console.log("📊 Total customers fetched:", data.length);
 
-      console.log(
-        `Loaded ${cashierCustomers.length} customers for ${
-          cashier?.name || "all"
-        }`
-      );
-      setCustomers(cashierCustomers);
-      setFilteredCustomers(cashierCustomers);
+      if (data.length > 0) {
+        console.log("📄 Sample customer data:", data[0]);
+        console.log(
+          "📋 All customer IDs:",
+          data.map((c) => c.id)
+        );
+        console.log(
+          "📋 All customer names:",
+          data.map((c) => c.name)
+        );
+      }
+
+      // DON'T FILTER BY CASHIER - SHOW ALL CUSTOMERS
+      console.log("✅ Showing ALL customers (no cashier filter)");
+
+      console.log(`✅ FINAL RESULT: ${data.length} customers displayed`);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+      setCustomers(data);
+      setFilteredCustomers(data);
+
+      toast.success(`Loaded ${data.length} customers from Firebase`);
     } catch (error) {
-      console.error("Error loading customers:", error);
-      toast.error("Failed to load customers");
+      console.error("❌ ERROR LOADING CUSTOMERS:", error);
+      console.error("Error details:", error.message);
+      console.error("Error stack:", error.stack);
+      toast.error("Failed to load customers from Firebase");
     } finally {
       setLoading(false);
     }
@@ -726,104 +759,298 @@ export default function CustomersSection({ cashier }) {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto bg-gray-50 dark:bg-gray-950 min-h-full">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Users className="h-8 w-8 text-primary" />
-              Customers
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">
-              Manage your customer database
-            </p>
+    <div className="h-full overflow-y-auto bg-gray-50 dark:bg-gray-950">
+      <div className="p-6 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                <Users className="h-8 w-8 text-primary" />
+                Customers
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
+                Manage your customer database
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={loadCustomers}
+                variant="outline"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </>
+                )}
+              </Button>
+              <Button onClick={handleAddCustomer}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Customer
+              </Button>
+            </div>
           </div>
-          <Button onClick={handleAddCustomer}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Customer
-          </Button>
-        </div>
 
-        {/* Search Bar */}
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              placeholder="Search by name, code, email, or phone..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          {/* Search Bar */}
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Input
+                placeholder="Search by name, code, email, or phone..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Stats */}
-        <div className="mt-4 flex gap-4">
-          <Badge variant="secondary" className="text-base px-4 py-2">
-            {customers.length} Total Customers
-          </Badge>
-          {searchQuery && (
-            <Badge variant="outline" className="text-base px-4 py-2">
-              {filteredCustomers.length} Results
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      {/* Customers Grid */}
-      {loading ? (
-        <div className="text-center py-12">
-          <p className="text-gray-500">Loading customers...</p>
-        </div>
-      ) : filteredCustomers.length === 0 ? (
-        <Card className="p-12 text-center">
-          <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">No customers found</h3>
-          <p className="text-gray-500 mb-6">
-            {searchQuery
-              ? "Try adjusting your search query"
-              : "Get started by adding your first customer"}
-          </p>
-          {!searchQuery && (
-            <Button onClick={handleAddCustomer}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add First Customer
+          {/* Source Filter Buttons */}
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={sourceFilter === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSourceFilter("all")}
+              className="gap-1"
+            >
+              <Filter className="h-4 w-4" />
+              All Sources
+              <Badge variant="secondary" className="ml-1">
+                {customers.length}
+              </Badge>
             </Button>
-          )}
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCustomers.map((customer) => (
-            <CustomerCard
-              key={customer.id}
-              customer={customer}
-              onEdit={handleEditCustomer}
-              onDelete={handleDeleteCustomer}
-              onViewPurchases={handleViewPurchases}
-              onRedeemPoints={handleRedeemPoints}
-            />
-          ))}
+            <Button
+              variant={sourceFilter === "loyverse" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSourceFilter("loyverse")}
+              className="gap-1"
+            >
+              <Database className="h-4 w-4" />
+              Loyverse
+              <Badge variant="secondary" className="ml-1">
+                {customers.filter((c) => c.source === "loyverse").length}
+              </Badge>
+            </Button>
+            <Button
+              variant={sourceFilter === "local" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSourceFilter("local")}
+              className="gap-1"
+            >
+              <Building2 className="h-4 w-4" />
+              Local
+              <Badge variant="secondary" className="ml-1">
+                {customers.filter((c) => c.source === "local").length}
+              </Badge>
+            </Button>
+            <Button
+              variant={sourceFilter === "kiosk" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSourceFilter("kiosk")}
+              className="gap-1"
+            >
+              <Monitor className="h-4 w-4" />
+              Kiosk
+              <Badge variant="secondary" className="ml-1">
+                {customers.filter((c) => c.source === "kiosk").length}
+              </Badge>
+            </Button>
+          </div>
+
+          {/* Stats */}
+          <div className="mt-4 flex gap-4">
+            <Badge variant="secondary" className="text-base px-4 py-2">
+              {filteredCustomers.length} Customers
+              {sourceFilter !== "all" && ` (${sourceFilter})`}
+            </Badge>
+            {searchQuery && (
+              <Badge variant="outline" className="text-base px-4 py-2">
+                {filteredCustomers.length} Search Results
+              </Badge>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* Customer Form Modal */}
-      <CustomerFormModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        customer={editingCustomer}
-        onSave={handleSaveCustomer}
-      />
+        {/* Customers List */}
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading customers...</p>
+          </div>
+        ) : filteredCustomers.length === 0 ? (
+          <Card className="p-12 text-center">
+            <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">No customers found</h3>
+            <p className="text-gray-500 mb-6">
+              {searchQuery
+                ? "Try adjusting your search query"
+                : "Get started by adding your first customer"}
+            </p>
+            {!searchQuery && (
+              <Button onClick={handleAddCustomer}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add First Customer
+              </Button>
+            )}
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Customers ({filteredCustomers.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {filteredCustomers.map((customer) => (
+                  <div
+                    key={customer.id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  >
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center space-x-3">
+                        <User className="h-10 w-10 text-gray-400" />
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-lg">
+                              {customer.name}
+                            </h3>
+                            {customer.source && (
+                              <Badge
+                                variant="outline"
+                                className={`text-xs ${
+                                  customer.source === "loyverse"
+                                    ? "bg-purple-50 dark:bg-purple-950 border-purple-500 text-purple-700 dark:text-purple-400"
+                                    : customer.source === "kiosk"
+                                    ? "bg-blue-50 dark:bg-blue-950 border-blue-500 text-blue-700 dark:text-blue-400"
+                                    : "bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                                }`}
+                              >
+                                {customer.source === "loyverse"
+                                  ? "📊 Loyverse"
+                                  : customer.source === "kiosk"
+                                  ? "🖥️ Kiosk"
+                                  : "💼 Local"}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {customer.customerCode || customer.id}
+                          </p>
+                        </div>
+                      </div>
 
-      {/* Purchase History Modal */}
-      <PurchaseHistoryModal
-        isOpen={showPurchaseHistory}
-        onClose={() => {
-          setShowPurchaseHistory(false);
-          setSelectedCustomerForHistory(null);
-        }}
-        customer={selectedCustomerForHistory}
-      />
+                      <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400 ml-13">
+                        {customer.email && (
+                          <div className="flex items-center gap-1">
+                            <Mail className="h-4 w-4" />
+                            {customer.email}
+                          </div>
+                        )}
+                        {customer.phone && (
+                          <div className="flex items-center gap-1">
+                            <Phone className="h-4 w-4" />
+                            {customer.phone}
+                          </div>
+                        )}
+                        {customer.address && (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            {customer.address}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-4 text-sm ml-13">
+                        <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                          <Award className="h-4 w-4" />
+                          <span>{customer.points || 0} points</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                          <ShoppingBag className="h-4 w-4" />
+                          <span>
+                            {customer.visits || customer.totalVisits || 0}{" "}
+                            visits
+                          </span>
+                        </div>
+                        {customer.lastVisit && (
+                          <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                            <Calendar className="h-4 w-4" />
+                            <span>
+                              Last:{" "}
+                              {new Date(
+                                customer.lastVisit.toDate
+                                  ? customer.lastVisit.toDate()
+                                  : customer.lastVisit
+                              ).toLocaleDateString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewPurchases(customer)}
+                      >
+                        <ShoppingBag className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Purchases</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRedeemPoints(customer)}
+                        disabled={!customer.points || customer.points === 0}
+                      >
+                        <DollarSign className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Redeem</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditCustomer(customer)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteCustomer(customer)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Customer Form Modal */}
+        <CustomerFormModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          customer={editingCustomer}
+          onSave={handleSaveCustomer}
+        />
+
+        {/* Purchase History Modal */}
+        <PurchaseHistoryModal
+          isOpen={showPurchaseHistory}
+          onClose={() => {
+            setShowPurchaseHistory(false);
+            setSelectedCustomerForHistory(null);
+          }}
+          customer={selectedCustomerForHistory}
+        />
+      </div>
     </div>
   );
 }

@@ -225,6 +225,10 @@ export const dbService = {
     return await db.customers.bulkPut(customers);
   },
 
+  async addCustomer(customer) {
+    return await db.customers.add(customer);
+  },
+
   async updateCustomer(id, updates) {
     return await db.customers.update(id, updates);
   },

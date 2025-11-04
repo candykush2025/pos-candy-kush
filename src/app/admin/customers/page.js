@@ -29,9 +29,11 @@ import {
   AlertCircle,
   CheckCircle,
   Upload,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
+import { customersService } from "@/lib/firebase/firestore";
 import { formatCurrency } from "@/lib/utils/format";
 
 export default function CustomersPage() {
@@ -111,14 +113,44 @@ export default function CustomersPage() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
-      const data = await dbService.getCustomers();
-      console.log("📊 Loaded customers from database:", data);
-      console.log("📊 Number of customers:", data.length);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🔄 LOADING CUSTOMERS FROM FIREBASE (ADMIN)...");
+
+      // Load from Firebase (primary source for admin)
+      const data = await customersService.getAll({
+        orderBy: { field: "name", direction: "asc" },
+      });
+
+      console.log("📊 RAW DATA FROM FIREBASE:", data);
+      console.log("📊 Total customers fetched:", data.length);
+
+      if (data.length === 0) {
+        console.warn("⚠️ No customers found in Firebase!");
+        toast.info("No customers found. Try adding a new customer.");
+      } else {
+        console.log("📄 First customer sample:", data[0]);
+        console.log(
+          "📋 All customer IDs:",
+          data.map((c) => c.id)
+        );
+        console.log(
+          "📋 All customer names:",
+          data.map((c) => c.name)
+        );
+
+        // Also sync to IndexedDB for offline access
+        await dbService.upsertCustomers(data);
+        console.log("✅ Synced to IndexedDB for offline access");
+      }
+
       setCustomers(data);
       setFilteredCustomers(data);
+      toast.success(`Loaded ${data.length} customers from Firebase`);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     } catch (error) {
-      console.error("Error loading customers:", error);
-      toast.error("Failed to load customers");
+      console.error("❌ ERROR LOADING CUSTOMERS FROM FIREBASE:", error);
+      console.error("Error details:", error.message);
+      toast.error("Failed to load customers from Firebase");
     } finally {
       setLoading(false);
     }
@@ -409,10 +441,25 @@ export default function CustomersPage() {
             Manage your store customers and track their activity
           </p>
         </div>
-        <Button onClick={handleAdd}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Customer
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={loadCustomers} variant="outline" disabled={loading}>
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-neutral-600 mr-2"></div>
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
+              </>
+            )}
+          </Button>
+          <Button onClick={handleAdd}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Customer
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

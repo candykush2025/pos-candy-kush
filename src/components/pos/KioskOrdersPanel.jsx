@@ -555,7 +555,7 @@ function OrderDetailsModal({
               <Package className="w-5 h-5" />
               Order Items ({order.items.length})
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
               {order.items.map((item, idx) => (
                 <div
                   key={idx}

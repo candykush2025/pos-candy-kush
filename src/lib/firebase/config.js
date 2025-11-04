@@ -17,8 +17,12 @@ const firebaseConfig = {
 // Initialize Firebase
 let app;
 if (!getApps().length) {
+  console.log("🔥 Initializing Firebase app...");
+  console.log("Project ID:", process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
   app = initializeApp(firebaseConfig);
+  console.log("✅ Firebase initialized successfully");
 } else {
+  console.log("♻️ Using existing Firebase app");
   app = getApps()[0];
 }
 
@@ -26,6 +30,9 @@ if (!getApps().length) {
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+console.log("🔥 Firebase Firestore DB:", db.type);
+console.log("🔥 Firebase Project ID:", app.options.projectId);
 
 // Initialize Analytics (only in browser)
 export const analytics =

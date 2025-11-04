@@ -29,6 +29,7 @@ import {
   AlertCircle,
   CheckCircle,
   Upload,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
@@ -112,6 +113,7 @@ export default function CashierCustomersPage() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
+      console.log("🔄 Fetching customers...");
 
       // Try loading from Firebase first (if online)
       try {
@@ -129,6 +131,9 @@ export default function CashierCustomersPage() {
 
           // Also update IndexedDB for offline access
           await dbService.upsertCustomers(firebaseData);
+          toast.success(
+            `Loaded ${firebaseData.length} customers from Firebase`
+          );
           return;
         }
       } catch (firebaseError) {
@@ -145,7 +150,12 @@ export default function CashierCustomersPage() {
       setFilteredCustomers(indexedDBData);
 
       if (indexedDBData.length === 0) {
-        console.log("⚠️ No customers found in IndexedDB or Firebase");
+        console.warn("⚠️ No customers found in IndexedDB or Firebase");
+        toast.info("No customers found. Try adding a new customer.");
+      } else {
+        toast.success(
+          `Loaded ${indexedDBData.length} customers from local database`
+        );
       }
     } catch (error) {
       console.error("Error loading customers:", error);
@@ -404,14 +414,6 @@ export default function CashierCustomersPage() {
     setIsDetailModalOpen(true);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 dark:border-white"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -422,10 +424,30 @@ export default function CashierCustomersPage() {
             Manage your customer database and sync with kiosk
           </p>
         </div>
-        <Button onClick={handleAdd} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Customer
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={loadCustomers}
+            variant="outline"
+            disabled={loading}
+            className="gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-neutral-600"></div>
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </>
+            )}
+          </Button>
+          <Button onClick={handleAdd} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Customer
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -444,7 +466,14 @@ export default function CashierCustomersPage() {
       </Card>
 
       {/* Customer List */}
-      {filteredCustomers.length === 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 dark:border-white mb-4"></div>
+            <p className="text-neutral-500">Loading customers...</p>
+          </CardContent>
+        </Card>
+      ) : filteredCustomers.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <UserCircle className="h-16 w-16 text-neutral-300 mb-4" />
