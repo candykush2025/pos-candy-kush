@@ -172,8 +172,60 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
     points: 0,
     visits: 0,
     lastVisit: null,
+    allowedCategories: [],
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [selectedCategoryForColor, setSelectedCategoryForColor] =
+    useState(null);
+  const [longPressTimer, setLongPressTimer] = useState(null);
+
+  // Color palette for category indicators
+  const CATEGORY_COLORS = [
+    "#3b82f6", // Blue
+    "#ef4444", // Red
+    "#10b981", // Green
+    "#f59e0b", // Orange
+    "#8b5cf6", // Purple
+    "#ec4899", // Pink
+    "#06b6d4", // Cyan
+    "#84cc16", // Lime
+  ];
+
+  useEffect(() => {
+    if (isOpen) {
+      loadCategoriesFromKiosk();
+    }
+  }, [isOpen]);
+
+  const loadCategoriesFromKiosk = async () => {
+    try {
+      setLoadingCategories(true);
+      const kioskUrl =
+        "https://candy-kush-kiosk.vercel.app/api/categories?active=true";
+      const response = await fetch(kioskUrl);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch categories from kiosk");
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setCategories(result.data);
+      } else {
+        setCategories([]);
+      }
+    } catch (error) {
+      console.error("Error loading categories from kiosk:", error);
+      toast.error("Failed to load categories from kiosk");
+      setCategories([]);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   useEffect(() => {
     if (customer) {
@@ -191,6 +243,7 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
         points: customer.points || 0,
         visits: customer.visits || 0,
         lastVisit: customer.lastVisit || null,
+        allowedCategories: customer.allowedCategories || [],
       });
     } else {
       // Generate customer code for new customer
@@ -208,12 +261,54 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
         points: 0,
         visits: 0,
         lastVisit: null,
+        allowedCategories: [],
+        lastVisit: null,
       });
     }
   }, [customer, isOpen]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Handle category color selection
+  const handleCategoryColorClick = (category, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedCategoryForColor(category);
+    setColorPickerOpen(true);
+  };
+
+  const handleCategoryLongPress = (category) => {
+    setSelectedCategoryForColor(category);
+    setColorPickerOpen(true);
+  };
+
+  const handleCategoryMouseDown = (category) => {
+    const timer = setTimeout(() => {
+      handleCategoryLongPress(category);
+    }, 500);
+    setLongPressTimer(timer);
+  };
+
+  const handleCategoryMouseUp = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+  };
+
+  const updateCategoryColor = (color) => {
+    if (!selectedCategoryForColor) return;
+
+    setCategories(
+      categories.map((cat) =>
+        cat.id === selectedCategoryForColor.id ? { ...cat, color } : cat
+      )
+    );
+    toast.success(`Color updated for ${selectedCategoryForColor.name}`);
+    setColorPickerOpen(false);
+    setSelectedCategoryForColor(null);
   };
 
   const handleSubmit = async (e) => {
@@ -367,6 +462,96 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
                 placeholder="Additional notes about this customer..."
               />
             </div>
+
+            {/* Allowed Categories - Kiosk Permissions */}
+            <div className="col-span-2">
+              <label className="text-sm font-medium mb-2 block">
+                Allowed Categories (Kiosk Access)
+              </label>
+              <p className="text-xs text-gray-500 mb-3">
+                Leave empty to allow access to all categories. Select specific
+                categories to restrict access on kiosk.
+              </p>
+
+              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+                {loadingCategories ? (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Loading categories from kiosk...
+                  </p>
+                ) : categories.length === 0 ? (
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                    ⚠️ No categories available from kiosk. Customer will have
+                    access to all categories.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {categories.map((category) => (
+                      <label
+                        key={category.id}
+                        className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded cursor-pointer group"
+                        onMouseDown={() => handleCategoryMouseDown(category)}
+                        onMouseUp={handleCategoryMouseUp}
+                        onMouseLeave={handleCategoryMouseUp}
+                        onTouchStart={() => handleCategoryMouseDown(category)}
+                        onTouchEnd={handleCategoryMouseUp}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.allowedCategories.includes(
+                            category.id
+                          )}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({
+                                ...formData,
+                                allowedCategories: [
+                                  ...formData.allowedCategories,
+                                  category.id,
+                                ],
+                              });
+                            } else {
+                              setFormData({
+                                ...formData,
+                                allowedCategories:
+                                  formData.allowedCategories.filter(
+                                    (id) => id !== category.id
+                                  ),
+                              });
+                            }
+                          }}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        {/* Color Indicator */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleCategoryColorClick(category, e)}
+                          className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex-shrink-0 hover:scale-110 transition-transform"
+                          style={{
+                            backgroundColor: category.color || "#808080",
+                          }}
+                          title="Click to change color"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">
+                            {category.name}
+                          </span>
+                          {category.description && (
+                            <p className="text-xs text-gray-500">
+                              {category.description}
+                            </p>
+                          )}
+                        </div>
+                        {category.isActive && (
+                          <Badge variant="outline" className="text-xs">
+                            Active
+                          </Badge>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <Separator />
@@ -381,6 +566,109 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
           </div>
         </form>
       </DialogContent>
+
+      {/* Color Picker Dialog */}
+      <Dialog open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Category Color</DialogTitle>
+            <DialogDescription>
+              {selectedCategoryForColor && (
+                <>
+                  Choose a color for{" "}
+                  <strong>{selectedCategoryForColor.name}</strong>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Color Palette */}
+            <div>
+              <label className="block text-sm font-medium mb-3">
+                Select from palette:
+              </label>
+              <div className="grid grid-cols-4 gap-3">
+                {CATEGORY_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => updateCategoryColor(color)}
+                    className={`h-12 w-full rounded-lg border-2 transition-all hover:scale-105 ${
+                      selectedCategoryForColor?.color === color
+                        ? "border-gray-900 dark:border-white scale-110"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Color Picker */}
+            <div>
+              <label className="block text-sm font-medium mb-3">
+                Or choose custom color:
+              </label>
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="color"
+                  value={selectedCategoryForColor?.color || "#808080"}
+                  onChange={(e) => {
+                    if (selectedCategoryForColor) {
+                      setSelectedCategoryForColor({
+                        ...selectedCategoryForColor,
+                        color: e.target.value,
+                      });
+                    }
+                  }}
+                  className="h-12 w-20 cursor-pointer"
+                />
+                <Button
+                  onClick={() =>
+                    updateCategoryColor(selectedCategoryForColor?.color)
+                  }
+                  className="flex-1"
+                >
+                  Apply Custom Color
+                </Button>
+              </div>
+            </div>
+
+            {/* Preview */}
+            {selectedCategoryForColor && (
+              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+                <p className="text-xs text-gray-500 mb-2">Preview:</p>
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-6 h-6 rounded-full border-2 border-gray-300"
+                    style={{
+                      backgroundColor:
+                        selectedCategoryForColor.color || "#808080",
+                    }}
+                  />
+                  <span className="font-medium">
+                    {selectedCategoryForColor.name}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setColorPickerOpen(false);
+                  setSelectedCategoryForColor(null);
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

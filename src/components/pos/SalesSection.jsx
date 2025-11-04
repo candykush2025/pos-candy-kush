@@ -123,11 +123,15 @@ function SortableTab({
         className={cn(
           "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors w-full select-none touch-manipulation",
           isSelected
-            ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2 border-t-green-600"
+            ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2"
             : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800",
           isDragMode && "ring-2 ring-blue-400 cursor-move"
         )}
-        style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
+        style={{
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          borderTopColor: isSelected ? "#16a34a" : undefined,
+        }}
       >
         {category}
       </button>
@@ -194,6 +198,22 @@ export default function SalesSection({ cashier }) {
   const [isDragMode, setIsDragMode] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const longPressTimer = useRef(null);
+
+  // Category SLOT colors (for boxes in grid) - key: "categoryName-index-categoryId"
+  const [categorySlotColors, setCategorySlotColors] = useState({});
+  const [showSlotColorPicker, setShowSlotColorPicker] = useState(false);
+  const [selectedSlotForColor, setSelectedSlotForColor] = useState(null);
+
+  const CATEGORY_COLORS = [
+    "#3b82f6", // Blue
+    "#ef4444", // Red
+    "#10b981", // Green
+    "#f59e0b", // Orange
+    "#8b5cf6", // Purple
+    "#ec4899", // Pink
+    "#06b6d4", // Cyan
+    "#84cc16", // Lime
+  ];
 
   // DnD Kit sensors
   const pointerSensor = useSensor(PointerSensor, {
@@ -306,12 +326,23 @@ export default function SalesSection({ cashier }) {
       window.removeEventListener("cashier-update", handleCashierUpdate);
   }, [cashier?.id]);
 
-  // Reload custom tabs when user changes (login/logout)
+  // Reload custom tabs when user changes (login/logout) or products load
   useEffect(() => {
+    console.log(
+      "🔵 useEffect triggered - userId:",
+      userId,
+      "products.length:",
+      products.length
+    );
     if (userId && products.length > 0) {
+      console.log("✅ Calling loadCustomTabsFromUser");
       loadCustomTabsFromUser();
+    } else {
+      console.log(
+        "❌ Skipping loadCustomTabsFromUser - missing userId or products"
+      );
     }
-  }, [userId]);
+  }, [userId, products.length]);
 
   const loadCustomTabsFromUser = async () => {
     if (!userId || products.length === 0) return;
@@ -320,12 +351,35 @@ export default function SalesSection({ cashier }) {
       // Load ALL custom tabs from all users in Firebase (shared across all users)
       const firebaseTabs = await customTabsService.getAllCustomTabs();
 
+      console.log("🎨 Firebase tabs loaded:", firebaseTabs);
+      console.log(
+        "🎨 categorySlotColors from Firebase:",
+        firebaseTabs?.categorySlotColors
+      );
+
       if (firebaseTabs && firebaseTabs.categories) {
         setCustomCategories(firebaseTabs.categories || []);
+
+        // Load category slot colors if available
+        if (firebaseTabs.categorySlotColors) {
+          console.log(
+            "✅ Setting categorySlotColors:",
+            firebaseTabs.categorySlotColors
+          );
+          setCategorySlotColors(firebaseTabs.categorySlotColors);
+        } else {
+          console.log("❌ No categorySlotColors in Firebase - starting fresh");
+        }
 
         // Convert slot IDs back to full objects
         const productMap = {};
         products.forEach((p) => (productMap[p.id] = p));
+
+        const categoryMap = {};
+        categoriesData.forEach((c) => (categoryMap[c.id] = c));
+
+        console.log("📂 Available categoriesData:", categoriesData);
+        console.log("🗺️ categoryMap:", categoryMap);
 
         const resolvedSlots = {};
         Object.keys(firebaseTabs.categoryProducts || {}).forEach((category) => {
@@ -339,7 +393,34 @@ export default function SalesSection({ cashier }) {
                 ? { type: "product", id: slot.id, data: product }
                 : null;
             } else if (slot.type === "category") {
-              return { type: "category", id: slot.id, data: { name: slot.id } };
+              console.log("🔍 Looking up category slot.id:", slot.id);
+              const categoryData = categoryMap[slot.id];
+              console.log("📋 Found categoryData:", categoryData);
+
+              if (categoryData) {
+                return {
+                  type: "category",
+                  id: slot.id,
+                  data: {
+                    name: categoryData.name,
+                    categoryId: slot.id,
+                  },
+                };
+              } else {
+                // Fallback: use slot.id as name if category not found
+                console.warn(
+                  "⚠️ Category not found, using ID as name:",
+                  slot.id
+                );
+                return {
+                  type: "category",
+                  id: slot.id,
+                  data: {
+                    name: slot.id,
+                    categoryId: slot.id,
+                  },
+                };
+              }
             }
             return null;
           });
@@ -785,6 +866,7 @@ export default function SalesSection({ cashier }) {
       await customTabsService.saveUserTabs(userId, {
         categories,
         categoryProducts: slotIds,
+        categorySlotColors: categorySlotColors, // Save category slot box colors
       });
 
       toast.success("Custom tabs synced to cloud (shared with all users)");
@@ -866,13 +948,15 @@ export default function SalesSection({ cashier }) {
   const slotLongPressTimer = useRef(null);
   const isLongPress = useRef(false);
 
-  const handleSlotLongPressStart = (index) => {
+  const handleSlotLongPressStart = (index, event) => {
     isLongPress.current = false;
+
     slotLongPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
       const currentSlots = customCategoryProducts[selectedCategory] || [];
       const currentSlot = currentSlots[index];
 
+      // Show product select modal for all slots
       setSelectedSlotIndex(index);
       setShowProductSelectModal(true);
       setProductSearchQuery("");
@@ -1121,6 +1205,49 @@ export default function SalesSection({ cashier }) {
 
     setShowTabMenu(false);
     toast.success(`Category "${categoryToDelete}" deleted for all users`);
+  };
+
+  // Handle category SLOT color change (for boxes in grid)
+  const saveCategorySlotColor = async (slotKey, color) => {
+    const updatedColors = {
+      ...categorySlotColors,
+      [slotKey]: color,
+    };
+    setCategorySlotColors(updatedColors);
+
+    // Save to Firebase with updated colors
+    if (!userId) {
+      return;
+    }
+
+    try {
+      // Convert slots to minimal structure (type and id only)
+      const slotIds = {};
+      Object.keys(customCategoryProducts).forEach((category) => {
+        slotIds[category] = customCategoryProducts[category].map((slot) => {
+          if (!slot) return null;
+          return {
+            type: slot.type,
+            id: slot.id,
+          };
+        });
+      });
+
+      // Save to Firebase with the UPDATED colors
+      await customTabsService.saveUserTabs(userId, {
+        categories: customCategories,
+        categoryProducts: slotIds,
+        categorySlotColors: updatedColors, // Use the updatedColors, not the old state
+      });
+
+      toast.success("Category box color updated");
+    } catch (error) {
+      console.error("Error saving color to Firebase:", error);
+      toast.error("Failed to save color");
+    }
+
+    setShowSlotColorPicker(false);
+    setSelectedSlotForColor(null);
   };
 
   // Load available discounts
@@ -2179,10 +2306,10 @@ export default function SalesSection({ cashier }) {
                           }
                         : undefined
                     }
-                    onMouseDown={() => handleSlotLongPressStart(index)}
+                    onMouseDown={(e) => handleSlotLongPressStart(index, e)}
                     onMouseUp={handleSlotLongPressEnd}
                     onMouseLeave={handleSlotLongPressEnd}
-                    onTouchStart={() => handleSlotLongPressStart(index)}
+                    onTouchStart={(e) => handleSlotLongPressStart(index, e)}
                     onTouchEnd={handleSlotLongPressEnd}
                     onContextMenu={(e) => e.preventDefault()}
                   >
@@ -2192,14 +2319,53 @@ export default function SalesSection({ cashier }) {
                           <>
                             {slot.type === "category" ? (
                               /* Category Slot */
-                              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 relative">
-                                <h3 className="text-lg font-bold text-white text-center px-2">
-                                  {slot.data.name}
-                                </h3>
-                                <div className="absolute top-2 right-2 bg-white/20 px-2 py-0.5 rounded text-xs text-white">
-                                  Category
-                                </div>
-                              </div>
+                              (() => {
+                                // Create unique key for this category slot
+                                const slotKey = `${selectedCategory}-${index}-${slot.data.categoryId}`;
+                                const customColor = categorySlotColors[slotKey];
+
+                                console.log("🎨 RENDERING CATEGORY BOX:");
+                                console.log(
+                                  "  - selectedCategory:",
+                                  selectedCategory
+                                );
+                                console.log("  - index:", index);
+                                console.log("  - slot.data:", slot.data);
+                                console.log(
+                                  "  - slot.data.categoryId:",
+                                  slot.data.categoryId
+                                );
+                                console.log("  - Generated slotKey:", slotKey);
+                                console.log(
+                                  "  - categorySlotColors state:",
+                                  categorySlotColors
+                                );
+                                console.log(
+                                  "  - customColor found:",
+                                  customColor
+                                );
+
+                                // Generate gradient colors from custom color or use default blue
+                                const baseColor = customColor || "#3b82f6";
+
+                                return (
+                                  <div
+                                    className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br relative"
+                                    style={{
+                                      backgroundImage: customColor
+                                        ? `linear-gradient(to bottom right, ${customColor}, ${customColor}dd, ${customColor}bb)`
+                                        : "linear-gradient(to bottom right, rgb(59, 130, 246), rgb(37, 99, 235), rgb(29, 78, 216))",
+                                    }}
+                                  >
+                                    <h3 className="text-lg font-bold text-white text-center px-2">
+                                      {slot.data.name}
+                                    </h3>
+                                    <div className="absolute top-2 right-2 bg-white/20 px-2 py-0.5 rounded text-xs text-white">
+                                      Category
+                                    </div>
+                                  </div>
+                                );
+                              })()
                             ) : slot.type === "product" && slot.data ? (
                               /* Product Slot */
                               <>
@@ -3383,6 +3549,45 @@ export default function SalesSection({ cashier }) {
             </DialogHeader>
 
             <div className="space-y-3 sm:space-y-4 py-2 sm:py-4 flex-1 overflow-hidden flex flex-col">
+              {/* Current slot info and actions */}
+              {selectedSlotIndex !== null &&
+                (() => {
+                  const currentSlots =
+                    customCategoryProducts[selectedCategory] || [];
+                  const currentSlot = currentSlots[selectedSlotIndex];
+
+                  if (currentSlot && currentSlot.type === "category") {
+                    const slotKey = `${selectedCategory}-${selectedSlotIndex}-${currentSlot.data.categoryId}`;
+                    return (
+                      <div className="flex gap-2 pb-2 border-b flex-shrink-0">
+                        <div className="flex-1 px-3 py-2 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Current:
+                          </div>
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
+                            {currentSlot.data.name}
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowProductSelectModal(false);
+                            setSelectedSlotForColor({
+                              key: slotKey,
+                              name: currentSlot.data.name,
+                            });
+                            setShowSlotColorPicker(true);
+                          }}
+                          className="px-4"
+                        >
+                          🎨 Change Color
+                        </Button>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
               {/* Type Toggle */}
               <div className="flex gap-2 border-b pb-2 flex-shrink-0">
                 <Button
@@ -3613,6 +3818,83 @@ export default function SalesSection({ cashier }) {
             </div>
           </>
         )}
+
+        {/* Category SLOT Color Picker Dialog (for boxes in grid) */}
+        <Dialog
+          open={showSlotColorPicker}
+          onOpenChange={setShowSlotColorPicker}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Select Box Color</DialogTitle>
+              <DialogDescription>
+                Choose a color for category box:{" "}
+                <strong>{selectedSlotForColor?.name}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Color Palette */}
+              <div>
+                <label className="block text-sm font-medium mb-3">
+                  Select from palette:
+                </label>
+                <div className="grid grid-cols-4 gap-3">
+                  {CATEGORY_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() =>
+                        saveCategorySlotColor(selectedSlotForColor?.key, color)
+                      }
+                      className="h-16 w-full rounded-lg border-2 transition-all hover:scale-105 border-gray-200 dark:border-gray-700"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Color Picker */}
+              <div>
+                <label className="block text-sm font-medium mb-3">
+                  Or choose custom color:
+                </label>
+                <Input
+                  type="color"
+                  value={
+                    categorySlotColors[selectedSlotForColor?.key] || "#3b82f6"
+                  }
+                  onChange={(e) =>
+                    saveCategorySlotColor(
+                      selectedSlotForColor?.key,
+                      e.target.value
+                    )
+                  }
+                  className="h-16 cursor-pointer"
+                />
+              </div>
+
+              {/* Reset Button */}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const updatedColors = { ...categorySlotColors };
+                  delete updatedColors[selectedSlotForColor?.key];
+                  setCategorySlotColors(updatedColors);
+                  saveCustomTabsToFirebase(
+                    customCategories,
+                    customCategoryProducts
+                  );
+                  toast.success("Color reset to default blue");
+                  setShowSlotColorPicker(false);
+                  setSelectedSlotForColor(null);
+                }}
+                className="w-full"
+              >
+                Reset to Default Blue
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Edit Category Modal */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>

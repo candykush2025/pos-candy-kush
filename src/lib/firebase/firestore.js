@@ -303,6 +303,7 @@ export const customTabsService = {
         userId,
         categories: tabsData.categories || [],
         categoryProducts: tabsData.categoryProducts || {},
+        categorySlotColors: tabsData.categorySlotColors || {},
         updatedAt: serverTimestamp(),
       });
       return true;
@@ -337,6 +338,7 @@ export const customTabsService = {
       // Merge all categories and products from all documents
       const allCategories = [];
       const allCategoryProducts = {};
+      const allCategorySlotColors = {};
 
       querySnapshot.forEach((doc) => {
         const data = doc.data();
@@ -356,11 +358,20 @@ export const customTabsService = {
             }
           });
         }
+        if (data.categorySlotColors) {
+          // Merge category slot colors
+          Object.keys(data.categorySlotColors).forEach((slotKey) => {
+            if (!allCategorySlotColors[slotKey]) {
+              allCategorySlotColors[slotKey] = data.categorySlotColors[slotKey];
+            }
+          });
+        }
       });
 
       return {
         categories: allCategories,
         categoryProducts: allCategoryProducts,
+        categorySlotColors: allCategorySlotColors,
       };
     } catch (error) {
       console.error("Error getting all custom tabs:", error);

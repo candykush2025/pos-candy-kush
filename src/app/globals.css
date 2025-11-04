@@ -277,3 +277,24 @@ button,
   -webkit-touch-callout: none; /* iOS Safari */
   -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
 }
+
+/* Prevent zooming on PWA and mobile */
+html,
+body {
+  touch-action: pan-x pan-y;
+  -ms-touch-action: pan-x pan-y;
+}
+
+* {
+  touch-action: manipulation;
+}
+
+/* Additional zoom prevention for iOS PWA */
+@media (display-mode: standalone) {
+  html,
+  body {
+    touch-action: pan-x pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
