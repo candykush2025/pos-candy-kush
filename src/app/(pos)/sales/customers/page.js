@@ -33,8 +33,9 @@ import {
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
 import { formatCurrency } from "@/lib/utils/format";
+import { customersService } from "@/lib/firebase/firestore";
 
-export default function CustomersPage() {
+export default function CashierCustomersPage() {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,14 +112,46 @@ export default function CustomersPage() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
-      const data = await dbService.getCustomers();
-      console.log("📊 Loaded customers from database:", data);
-      console.log("📊 Number of customers:", data.length);
-      setCustomers(data);
-      setFilteredCustomers(data);
+
+      // Try loading from Firebase first (if online)
+      try {
+        const firebaseData = await customersService.getAll({
+          orderBy: ["name", "asc"],
+        });
+
+        if (firebaseData && firebaseData.length > 0) {
+          console.log(
+            "📊 Loaded customers from Firebase:",
+            firebaseData.length
+          );
+          setCustomers(firebaseData);
+          setFilteredCustomers(firebaseData);
+
+          // Also update IndexedDB for offline access
+          await dbService.upsertCustomers(firebaseData);
+          return;
+        }
+      } catch (firebaseError) {
+        console.warn(
+          "Failed to load from Firebase, trying IndexedDB:",
+          firebaseError
+        );
+      }
+
+      // Fallback to IndexedDB (offline mode or Firebase failed)
+      const indexedDBData = await dbService.getCustomers();
+      console.log("📊 Loaded customers from IndexedDB:", indexedDBData.length);
+      setCustomers(indexedDBData);
+      setFilteredCustomers(indexedDBData);
+
+      if (indexedDBData.length === 0) {
+        console.log("⚠️ No customers found in IndexedDB or Firebase");
+      }
     } catch (error) {
       console.error("Error loading customers:", error);
       toast.error("Failed to load customers");
+      setCustomers([]);
+      setFilteredCustomers([]);
     } finally {
       setLoading(false);
     }
@@ -138,6 +171,7 @@ export default function CustomersPage() {
         customer.phone?.includes(query) ||
         customer.customerCode?.toLowerCase().includes(query)
     );
+
     setFilteredCustomers(filtered);
   };
 
@@ -280,48 +314,28 @@ export default function CustomersPage() {
         // Member Status & Points
         isNoMember: formData.isNoMember,
         isActive: formData.isActive,
-        customPoints: parseInt(formData.customPoints) || 0,
+        customPoints: Number(formData.customPoints) || 0,
         points: editingCustomer?.points || [],
-
-        // Purchase History (preserve existing or initialize)
+        visitCount: editingCustomer?.visitCount || 0,
         totalSpent: editingCustomer?.totalSpent || 0,
-        visitCount:
-          editingCustomer?.visitCount || editingCustomer?.totalVisits || 0,
 
         // Kiosk Permissions
         allowedCategories: formData.allowedCategories,
 
+        // Sync status
+        syncedToKiosk: false, // Will be true when synced to kiosk
+        source: editingCustomer?.source || "cashier",
+
         // Timestamps
+        createdAt: editingCustomer?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-
-        // Source tracking
-        source: editingCustomer?.source || "admin",
-
-        // Kiosk sync status
-        syncedToKiosk: false, // Will be true when synced to Firebase
       };
 
       if (editingCustomer) {
-        // Update existing
         await dbService.updateCustomer(editingCustomer.id, customerData);
         toast.success("Customer updated successfully");
       } else {
-        // Create new
-        customerData.id = `cust_${Date.now()}`;
-        customerData.createdAt = new Date().toISOString();
-
-        // Also support old field names for compatibility
-        customerData.customerCode = customerId;
-        customerData.phone = formData.cell;
-        customerData.visits = 0;
-        customerData.totalVisits = 0;
-        customerData.spent = 0;
-        customerData.totalSpent = 0;
-        customerData.totalPoints = 0;
-        customerData.firstVisit = null;
-        customerData.lastVisit = null;
-
-        await dbService.upsertCustomers([customerData]);
+        await dbService.addCustomer(customerData);
 
         // Automatically sync new customer to kiosk
         toast.success("Customer created successfully. Syncing to kiosk...");
@@ -390,97 +404,37 @@ export default function CustomersPage() {
     setIsDetailModalOpen(true);
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 dark:border-white"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Customer Management</h1>
-          <p className="text-neutral-500 mt-2">
-            Manage your store customers and track their activity
+          <p className="text-neutral-500">
+            Manage your customer database and sync with kiosk
           </p>
         </div>
-        <Button onClick={handleAdd}>
-          <Plus className="mr-2 h-4 w-4" />
+        <Button onClick={handleAdd} className="gap-2">
+          <Plus className="h-4 w-4" />
           Add Customer
         </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Total Customers</p>
-                <p className="text-2xl font-bold">{customers.length}</p>
-              </div>
-              <UserCircle className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Synced from Loyverse</p>
-                <p className="text-2xl font-bold">
-                  {customers.filter((c) => c.source === "loyverse").length}
-                </p>
-              </div>
-              <Badge variant="secondary">Loyverse</Badge>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Local Customers</p>
-                <p className="text-2xl font-bold">
-                  {customers.filter((c) => c.source === "local").length}
-                </p>
-              </div>
-              <Badge>Local</Badge>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Total Spent</p>
-                <p className="text-2xl font-bold">
-                  {formatCurrency(
-                    customers.reduce(
-                      (sum, c) => sum + (c.totalSpent || c.spent || 0),
-                      0
-                    )
-                  )}
-                </p>
-              </div>
-              <DollarSign className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Search */}
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 h-5 w-5" />
             <Input
-              placeholder="Search by name, email, phone, or customer code..."
+              placeholder="Search customers by name, email, phone, or code..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -489,21 +443,20 @@ export default function CustomersPage() {
         </CardContent>
       </Card>
 
-      {/* Customers List */}
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <p className="text-neutral-500">Loading customers...</p>
-        </div>
-      ) : filteredCustomers.length === 0 ? (
+      {/* Customer List */}
+      {filteredCustomers.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <UserCircle className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
-            <p className="text-neutral-500">
-              {searchQuery ? "No customers found" : "No customers yet"}
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <UserCircle className="h-16 w-16 text-neutral-300 mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Customers Found</h3>
+            <p className="text-neutral-500 mb-4">
+              {searchQuery
+                ? "Try adjusting your search"
+                : "Get started by adding your first customer"}
             </p>
             {!searchQuery && (
-              <Button onClick={handleAdd} className="mt-4">
-                <Plus className="mr-2 h-4 w-4" />
+              <Button onClick={handleAdd} className="gap-2">
+                <Plus className="h-4 w-4" />
                 Add Your First Customer
               </Button>
             )}
@@ -560,7 +513,7 @@ export default function CustomersPage() {
                           )}
                         </div>
                         <p className="text-sm text-neutral-500">
-                          {customer.customerCode}
+                          {customer.customerCode || customer.customerId}
                         </p>
                       </div>
                     </div>
@@ -572,10 +525,10 @@ export default function CustomersPage() {
                           {customer.email}
                         </div>
                       )}
-                      {customer.phone && (
+                      {(customer.cell || customer.phone) && (
                         <div className="flex items-center gap-1">
                           <Phone className="h-4 w-4" />
-                          {customer.phone}
+                          {customer.cell || customer.phone}
                         </div>
                       )}
                       {(customer.city || customer.province) && (
@@ -592,7 +545,8 @@ export default function CustomersPage() {
                       <div className="flex items-center gap-1 text-neutral-600">
                         <ShoppingBag className="h-4 w-4" />
                         <span>
-                          {customer.totalVisits || customer.visits || 0} visits
+                          {customer.totalVisits || customer.visitCount || 0}{" "}
+                          visits
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-green-600">
@@ -604,11 +558,17 @@ export default function CustomersPage() {
                           spent
                         </span>
                       </div>
-                      {(customer.totalPoints || customer.points || 0) > 0 && (
+                      {(customer.totalPoints ||
+                        customer.customPoints ||
+                        customer.points ||
+                        0) > 0 && (
                         <div className="flex items-center gap-1 text-purple-600">
                           <Award className="h-4 w-4" />
                           <span>
-                            {customer.totalPoints || customer.points} points
+                            {customer.totalPoints ||
+                              customer.customPoints ||
+                              customer.points}{" "}
+                            points
                           </span>
                         </div>
                       )}
@@ -680,7 +640,7 @@ export default function CustomersPage() {
                 : "Create a new customer record"}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Personal Information Section */}
             <div className="space-y-4">
               <h3 className="font-semibold text-lg border-b pb-2">
@@ -688,10 +648,9 @@ export default function CustomersPage() {
               </h3>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Name - Required */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    First Name <span className="text-red-500">*</span>
+                    First Name *
                   </label>
                   <Input
                     placeholder="John"
@@ -700,10 +659,10 @@ export default function CustomersPage() {
                       setFormData({ ...formData, name: e.target.value })
                     }
                     required
+                    autoFocus
                   />
                 </div>
 
-                {/* Last Name */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Last Name
@@ -717,7 +676,6 @@ export default function CustomersPage() {
                   />
                 </div>
 
-                {/* Nickname */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Nickname
@@ -731,7 +689,6 @@ export default function CustomersPage() {
                   />
                 </div>
 
-                {/* Nationality */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Nationality
@@ -745,7 +702,6 @@ export default function CustomersPage() {
                   />
                 </div>
 
-                {/* Date of Birth */}
                 <div className="col-span-2">
                   <label className="block text-sm font-medium mb-2">
                     Date of Birth
@@ -768,7 +724,6 @@ export default function CustomersPage() {
               </h3>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Email */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Email
@@ -783,7 +738,6 @@ export default function CustomersPage() {
                   />
                 </div>
 
-                {/* Phone */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Phone Number
@@ -807,25 +761,22 @@ export default function CustomersPage() {
               </h3>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Member ID */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Member ID
                   </label>
                   <Input
-                    placeholder="Auto-generated if empty"
+                    placeholder="Auto-generated from customer ID"
                     value={formData.memberId}
                     onChange={(e) =>
                       setFormData({ ...formData, memberId: e.target.value })
                     }
-                    disabled={!editingCustomer}
                   />
                   <p className="text-xs text-neutral-500 mt-1">
                     Leave empty to auto-generate
                   </p>
                 </div>
 
-                {/* Points */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Initial Points
@@ -836,40 +787,45 @@ export default function CustomersPage() {
                     placeholder="0"
                     value={formData.customPoints}
                     onChange={(e) =>
-                      setFormData({ ...formData, customPoints: e.target.value })
+                      setFormData({
+                        ...formData,
+                        customPoints: parseInt(e.target.value) || 0,
+                      })
                     }
                   />
                 </div>
 
-                {/* Is No Member */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isNoMember"
-                    checked={formData.isNoMember}
-                    onChange={(e) =>
-                      setFormData({ ...formData, isNoMember: e.target.checked })
-                    }
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isNoMember" className="text-sm font-medium">
-                    Non-Member
+                <div className="col-span-2 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.isNoMember}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          isNoMember: e.target.checked,
+                        })
+                      }
+                      className="rounded border-neutral-300 dark:border-neutral-600"
+                    />
+                    <span className="text-sm font-medium">
+                      Non-Member Account
+                    </span>
                   </label>
-                </div>
 
-                {/* Is Active */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={formData.isActive}
-                    onChange={(e) =>
-                      setFormData({ ...formData, isActive: e.target.checked })
-                    }
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isActive" className="text-sm font-medium">
-                    Active Account
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.isActive}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          isActive: e.target.checked,
+                        })
+                      }
+                      className="rounded border-neutral-300 dark:border-neutral-600"
+                    />
+                    <span className="text-sm font-medium">Active Account</span>
                   </label>
                 </div>
               </div>
@@ -977,10 +933,12 @@ export default function CustomersPage() {
                     </div>
                   )}
                 </div>
-                <div className="text-sm text-blue-800 dark:text-blue-200">
-                  {editingCustomer?.syncedToKiosk
-                    ? "This customer is synced with the kiosk system and can be scanned."
-                    : "Customer will be synced to kiosk after saving. They will be able to scan their QR code once synced."}
+                <div className="flex-1">
+                  <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                    {editingCustomer?.syncedToKiosk
+                      ? "This customer is synced with the kiosk system and can scan their QR code."
+                      : "Customer will be synced to kiosk after saving. Use the 'Sync to Kiosk' button to enable QR code scanning."}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1002,200 +960,72 @@ export default function CustomersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Customer Detail Modal */}
+      {/* Customer Details Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Customer Details</DialogTitle>
           </DialogHeader>
           {selectedCustomer && (
             <div className="space-y-6">
-              {/* Customer Info */}
-              <div className="flex items-start gap-4">
+              <div className="flex items-center gap-4">
                 <UserCircle className="h-16 w-16 text-neutral-400" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h2 className="text-2xl font-bold">
-                      {selectedCustomer.name}
-                    </h2>
-                    {selectedCustomer.source && (
-                      <Badge
-                        variant={
-                          selectedCustomer.source === "loyverse"
-                            ? "secondary"
-                            : "default"
-                        }
-                      >
-                        {selectedCustomer.source}
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {selectedCustomer.name}
+                  </h2>
+                  <p className="text-neutral-500">
+                    {selectedCustomer.customerCode ||
+                      selectedCustomer.customerId}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-neutral-500">Email:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.email || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Phone:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.cell || selectedCustomer.phone || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Total Visits:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.visitCount || 0}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Total Spent:</span>
+                  <p className="font-medium">
+                    {formatCurrency(selectedCustomer.totalSpent || 0)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Points:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.customPoints ||
+                      selectedCustomer.points ||
+                      0}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Kiosk Sync:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.syncedToKiosk ? (
+                      <Badge className="bg-green-500">Synced</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-yellow-600">
+                        Not Synced
                       </Badge>
                     )}
-                  </div>
-                  <p className="text-neutral-500">
-                    {selectedCustomer.customerCode}
                   </p>
                 </div>
-              </div>
-
-              {/* Contact Information */}
-              <div>
-                <h3 className="font-semibold mb-3">Contact Information</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-neutral-500">Email</p>
-                    <p className="font-medium">
-                      {selectedCustomer.email || "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-neutral-500">Phone</p>
-                    <p className="font-medium">
-                      {selectedCustomer.phone || "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Address */}
-              {(selectedCustomer.address ||
-                selectedCustomer.city ||
-                selectedCustomer.province) && (
-                <div>
-                  <h3 className="font-semibold mb-3">Address</h3>
-                  <div className="text-sm space-y-1">
-                    {selectedCustomer.address && (
-                      <p>{selectedCustomer.address}</p>
-                    )}
-                    <p>
-                      {[
-                        selectedCustomer.city,
-                        selectedCustomer.province,
-                        selectedCustomer.postalCode,
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </p>
-                    {(selectedCustomer.countryCode ||
-                      selectedCustomer.country) && (
-                      <p>
-                        {selectedCustomer.countryCode ||
-                          selectedCustomer.country}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Statistics */}
-              <div>
-                <h3 className="font-semibold mb-3">Statistics</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <ShoppingBag className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">
-                        {selectedCustomer.totalVisits ||
-                          selectedCustomer.visits ||
-                          0}
-                      </p>
-                      <p className="text-sm text-neutral-500">Total Visits</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <DollarSign className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">
-                        {formatCurrency(
-                          selectedCustomer.totalSpent ||
-                            selectedCustomer.spent ||
-                            0
-                        )}
-                      </p>
-                      <p className="text-sm text-neutral-500">Total Spent</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <Award className="h-8 w-8 text-purple-500 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">
-                        {selectedCustomer.totalPoints ||
-                          selectedCustomer.points ||
-                          0}
-                      </p>
-                      <p className="text-sm text-neutral-500">Loyalty Points</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-
-              {/* Visit History */}
-              {(selectedCustomer.firstVisit || selectedCustomer.lastVisit) && (
-                <div>
-                  <h3 className="font-semibold mb-3">Visit History</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-neutral-500">First Visit</p>
-                      <p className="font-medium">
-                        {formatDate(selectedCustomer.firstVisit)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-neutral-500">Last Visit</p>
-                      <p className="font-medium">
-                        {formatDate(selectedCustomer.lastVisit)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              {selectedCustomer.note && (
-                <div>
-                  <h3 className="font-semibold mb-3">Notes</h3>
-                  <p className="text-sm text-neutral-600">
-                    {selectedCustomer.note}
-                  </p>
-                </div>
-              )}
-
-              {/* Timestamps */}
-              <div>
-                <h3 className="font-semibold mb-3">Record Information</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-neutral-500">Created</p>
-                    <p className="font-medium">
-                      {formatDate(selectedCustomer.createdAt)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-neutral-500">Last Updated</p>
-                    <p className="font-medium">
-                      {formatDate(selectedCustomer.updatedAt)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsDetailModalOpen(false);
-                    handleEdit(selectedCustomer);
-                  }}
-                  className="flex-1"
-                >
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit Customer
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDetailModalOpen(false)}
-                  className="flex-1"
-                >
-                  Close
-                </Button>
               </div>
             </div>
           )}

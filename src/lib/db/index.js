@@ -3,8 +3,9 @@ import Dexie from "dexie";
 // Initialize Dexie database
 export const db = new Dexie("CandyKushPOS");
 
-// Define database schema
-db.version(1).stores({
+// Version 3: Fresh start with kiosk-compatible customer schema
+// Note: Skipping version 2 migration issues, going straight to v3
+db.version(3).stores({
   // Products table (Loyverse compatible)
   products:
     "id, barcode, sku, name, categoryId, price, stock, source, createdAt, updatedAt",
@@ -26,9 +27,9 @@ db.version(1).stores({
   // Ticket items table
   ticketItems: "++id, ticketId, productId, quantity, price, discount",
 
-  // Customers table (Loyverse compatible)
+  // Customers table with kiosk integration fields
   customers:
-    "id, name, email, phone, customerCode, source, createdAt, updatedAt",
+    "id, customerId, memberId, name, lastName, email, phone, cell, customerCode, nationality, isActive, syncedToKiosk, source",
 
   // Users (staff) table
   users: "++id, username, name, role, email, lastSynced",
