@@ -75,7 +75,7 @@ export default function ProductsSection() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [productFormData, setProductFormData] = useState({
     name: "",
-    category: "",
+    categoryId: "",
     soldBy: "each",
     price: "",
     cost: "",
@@ -184,10 +184,10 @@ export default function ProductsSection() {
 
     let filtered = products;
 
-    // Filter by category
+    // Filter by category (comparing categoryId UUID)
     if (selectedCategory !== "all") {
       filtered = filtered.filter(
-        (product) => product.category === selectedCategory
+        (product) => product.categoryId === selectedCategory
       );
     }
 
@@ -197,8 +197,7 @@ export default function ProductsSection() {
         (product) =>
           product.name?.toLowerCase().includes(query) ||
           product.sku?.toLowerCase().includes(query) ||
-          product.barcode?.toLowerCase().includes(query) ||
-          product.category?.toLowerCase().includes(query)
+          product.barcode?.toLowerCase().includes(query)
       );
     }
 
@@ -212,8 +211,14 @@ export default function ProductsSection() {
     return categories.filter((cat) => cat.name?.toLowerCase().includes(query));
   }, [categories, searchQuery]);
 
-  const getCategoryProductCount = (categoryName) => {
-    return products.filter((p) => p.category === categoryName).length;
+  const getCategoryProductCount = (categoryId) => {
+    return products.filter((p) => p.categoryId === categoryId).length;
+  };
+
+  const getCategoryName = (categoryId) => {
+    if (!categoryId) return "Uncategorized";
+    const category = categories.find((c) => c.id === categoryId);
+    return category?.name || "Uncategorized";
   };
 
   // Discount handlers
@@ -343,7 +348,7 @@ export default function ProductsSection() {
     setEditingProduct(null);
     setProductFormData({
       name: "",
-      category: categories[0]?.name || "",
+      categoryId: categories[0]?.id || "",
       soldBy: "each",
       price: "",
       cost: "",
@@ -364,7 +369,7 @@ export default function ProductsSection() {
     setEditingProduct(product);
     setProductFormData({
       name: product.name || "",
-      category: product.category || "",
+      categoryId: product.categoryId || "",
       soldBy: product.soldBy || "each",
       price: product.price || "",
       cost: product.cost || "",
@@ -438,7 +443,7 @@ export default function ProductsSection() {
       // Build product data with only defined values
       const productData = {
         name: productFormData.name,
-        category: productFormData.category,
+        categoryId: productFormData.categoryId || null,
         soldBy: productFormData.soldBy,
         price: parseFloat(productFormData.price) || 0,
         cost: productFormData.cost ? parseFloat(productFormData.cost) : 0,
@@ -608,7 +613,7 @@ export default function ProductsSection() {
         name: quickCategoryName.trim(),
       };
 
-      await categoriesService.create(categoryData);
+      const newCategory = await categoriesService.create(categoryData);
       toast.success(`Category "${quickCategoryName}" created`);
 
       // Reload categories
@@ -617,7 +622,7 @@ export default function ProductsSection() {
       // Set the new category as selected
       setProductFormData({
         ...productFormData,
-        category: quickCategoryName.trim(),
+        categoryId: newCategory.id,
       });
 
       // Reset and hide quick add
@@ -711,7 +716,7 @@ export default function ProductsSection() {
                 <span className="flex-1 text-left">
                   {selectedCategory === "all"
                     ? "All Categories"
-                    : selectedCategory}
+                    : getCategoryName(selectedCategory)}
                 </span>
                 <ChevronDown
                   className={`h-4 w-4 text-neutral-400 transition-transform ${
@@ -744,7 +749,7 @@ export default function ProductsSection() {
                     <button
                       key={category.id}
                       onClick={() => {
-                        setSelectedCategory(category.name);
+                        setSelectedCategory(category.id);
                         setIsCategoryDropdownOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center justify-between"
@@ -752,7 +757,7 @@ export default function ProductsSection() {
                       <span className="text-neutral-900 dark:text-neutral-100">
                         {category.name}
                       </span>
-                      {selectedCategory === category.name && (
+                      {selectedCategory === category.id && (
                         <Check className="h-4 w-4 text-primary" />
                       )}
                     </button>
@@ -844,8 +849,8 @@ export default function ProductsSection() {
                             </h3>
                             <p className="text-sm text-neutral-500">
                               {product.sku && `SKU: ${product.sku}`}
-                              {product.sku && product.category && " • "}
-                              {product.category}
+                              {product.sku && product.categoryId && " • "}
+                              {getCategoryName(product.categoryId)}
                             </p>
                             {product.trackStock && (
                               <p className="text-xs text-neutral-400 mt-1">
@@ -893,7 +898,7 @@ export default function ProductsSection() {
                               {category.name}
                             </h3>
                             <p className="text-sm text-neutral-500">
-                              {getCategoryProductCount(category.name)} products
+                              {getCategoryProductCount(category.id)} products
                             </p>
                           </div>
 
@@ -1257,18 +1262,18 @@ export default function ProductsSection() {
                 </label>
                 <select
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md mb-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  value={productFormData.category}
+                  value={productFormData.categoryId}
                   onChange={(e) =>
                     setProductFormData({
                       ...productFormData,
-                      category: e.target.value,
+                      categoryId: e.target.value,
                     })
                   }
                   required
                 >
                   <option value="">Select category</option>
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.name}>
+                    <option key={cat.id} value={cat.id}>
                       {cat.name}
                     </option>
                   ))}

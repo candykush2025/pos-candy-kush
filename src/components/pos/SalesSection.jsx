@@ -293,10 +293,6 @@ export default function SalesSection({ cashier }) {
   // Reload data when cashier changes
   useEffect(() => {
     if (cashier?.id) {
-      console.log(
-        `👤 Cashier changed, reloading categories for: ${cashier.name} (${cashier.id})`
-      );
-
       // Clear old categories first
       setCategories([]);
       setCategoriesData([]);
@@ -314,7 +310,6 @@ export default function SalesSection({ cashier }) {
   // Listen for cashier-update events from other components
   useEffect(() => {
     const handleCashierUpdate = () => {
-      console.log("🔄 Received cashier-update event in SalesSection");
       if (cashier?.id) {
         loadProducts();
         checkActiveShift();
@@ -328,19 +323,8 @@ export default function SalesSection({ cashier }) {
 
   // Reload custom tabs when user changes (login/logout) or products load
   useEffect(() => {
-    console.log(
-      "🔵 useEffect triggered - userId:",
-      userId,
-      "products.length:",
-      products.length
-    );
     if (userId && products.length > 0) {
-      console.log("✅ Calling loadCustomTabsFromUser");
       loadCustomTabsFromUser();
-    } else {
-      console.log(
-        "❌ Skipping loadCustomTabsFromUser - missing userId or products"
-      );
     }
   }, [userId, products.length]);
 
@@ -351,24 +335,12 @@ export default function SalesSection({ cashier }) {
       // Load ALL custom tabs from all users in Firebase (shared across all users)
       const firebaseTabs = await customTabsService.getAllCustomTabs();
 
-      console.log("🎨 Firebase tabs loaded:", firebaseTabs);
-      console.log(
-        "🎨 categorySlotColors from Firebase:",
-        firebaseTabs?.categorySlotColors
-      );
-
       if (firebaseTabs && firebaseTabs.categories) {
         setCustomCategories(firebaseTabs.categories || []);
 
         // Load category slot colors if available
         if (firebaseTabs.categorySlotColors) {
-          console.log(
-            "✅ Setting categorySlotColors:",
-            firebaseTabs.categorySlotColors
-          );
           setCategorySlotColors(firebaseTabs.categorySlotColors);
-        } else {
-          console.log("❌ No categorySlotColors in Firebase - starting fresh");
         }
 
         // Convert slot IDs back to full objects
@@ -377,9 +349,6 @@ export default function SalesSection({ cashier }) {
 
         const categoryMap = {};
         categoriesData.forEach((c) => (categoryMap[c.id] = c));
-
-        console.log("📂 Available categoriesData:", categoriesData);
-        console.log("🗺️ categoryMap:", categoryMap);
 
         const resolvedSlots = {};
         Object.keys(firebaseTabs.categoryProducts || {}).forEach((category) => {
@@ -393,9 +362,7 @@ export default function SalesSection({ cashier }) {
                 ? { type: "product", id: slot.id, data: product }
                 : null;
             } else if (slot.type === "category") {
-              console.log("🔍 Looking up category slot.id:", slot.id);
               const categoryData = categoryMap[slot.id];
-              console.log("📋 Found categoryData:", categoryData);
 
               if (categoryData) {
                 return {
@@ -408,10 +375,6 @@ export default function SalesSection({ cashier }) {
                 };
               } else {
                 // Fallback: use slot.id as name if category not found
-                console.warn(
-                  "⚠️ Category not found, using ID as name:",
-                  slot.id
-                );
                 return {
                   type: "category",
                   id: slot.id,
@@ -435,12 +398,6 @@ export default function SalesSection({ cashier }) {
         localStorage.setItem(
           "custom_category_products",
           JSON.stringify(resolvedSlots)
-        );
-
-        console.log(
-          `📂 Loaded ${
-            firebaseTabs.categories?.length || 0
-          } custom tabs from ALL users`
         );
       }
     } catch (error) {
@@ -488,7 +445,7 @@ export default function SalesSection({ cashier }) {
     }
 
     setFilteredProducts(filtered);
-  }, [searchQuery, products, selectedCategory]);
+  }, [searchQuery, products, selectedCategory, categoriesData]);
 
   const loadProducts = async () => {
     try {
@@ -508,16 +465,9 @@ export default function SalesSection({ cashier }) {
         (cat) => cat.name && !cat.deletedAt
       );
 
-      console.log(
-        `📂 Loaded ${allCategories.length} total categories from Firebase`
-      );
-
       // If still no categories, extract from products as fallback
       let finalCategories = allCategories;
       if (finalCategories.length === 0 && productsData.length > 0) {
-        console.log(
-          "📂 No categories in Firebase, extracting from products..."
-        );
         const categorySet = new Set();
         productsData.forEach((product) => {
           const categoryName =
@@ -538,10 +488,6 @@ export default function SalesSection({ cashier }) {
           description: `Products in ${name}`,
           userId: userId || null,
         }));
-
-        console.log(
-          `📂 Extracted ${finalCategories.length} categories from products`
-        );
       }
 
       setCategoriesData(finalCategories);
@@ -729,7 +675,22 @@ export default function SalesSection({ cashier }) {
   };
 
   const getProductCategory = (product) => {
-    if (!product) return null;
+    if (!product) {
+      return null;
+    }
+
+    // If product has categoryId, look up the category name from categoriesData
+    if (product.categoryId && categoriesData.length > 0) {
+      const category = categoriesData.find(
+        (cat) => cat.id === product.categoryId
+      );
+
+      if (category) {
+        return category.name;
+      }
+    }
+
+    // Fallback to direct category name fields
     return (
       product.categoryName ||
       product.category ||
@@ -2323,27 +2284,6 @@ export default function SalesSection({ cashier }) {
                                 // Create unique key for this category slot
                                 const slotKey = `${selectedCategory}-${index}-${slot.data.categoryId}`;
                                 const customColor = categorySlotColors[slotKey];
-
-                                console.log("🎨 RENDERING CATEGORY BOX:");
-                                console.log(
-                                  "  - selectedCategory:",
-                                  selectedCategory
-                                );
-                                console.log("  - index:", index);
-                                console.log("  - slot.data:", slot.data);
-                                console.log(
-                                  "  - slot.data.categoryId:",
-                                  slot.data.categoryId
-                                );
-                                console.log("  - Generated slotKey:", slotKey);
-                                console.log(
-                                  "  - categorySlotColors state:",
-                                  categorySlotColors
-                                );
-                                console.log(
-                                  "  - customColor found:",
-                                  customColor
-                                );
 
                                 // Generate gradient colors from custom color or use default blue
                                 const baseColor = customColor || "#3b82f6";

@@ -398,6 +398,12 @@ export default function ItemListPage() {
   };
 
   const handleEdit = (product) => {
+    console.log("🔍 Editing product:", {
+      name: product.name,
+      categoryId: product.categoryId,
+      availableCategories: categories.map((c) => ({ id: c.id, name: c.name })),
+    });
+
     setEditingProduct(product);
     setFormData({
       name: product.name || "",
@@ -640,7 +646,21 @@ export default function ItemListPage() {
 
   // Get category name by ID
   const getCategoryName = (categoryId) => {
+    if (!categoryId) {
+      return "Uncategorized";
+    }
+
     const category = categories.find((c) => c.id === categoryId);
+
+    if (!category) {
+      console.warn(
+        "⚠️ Category not found for ID:",
+        categoryId,
+        "Available:",
+        categories.map((c) => c.id)
+      );
+    }
+
     return category?.name || "Uncategorized";
   };
 
