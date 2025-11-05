@@ -29,9 +29,12 @@ import {
   AlertCircle,
   CheckCircle,
   Upload,
+  RefreshCw,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
+import { customersService } from "@/lib/firebase/firestore";
 import { formatCurrency } from "@/lib/utils/format";
 
 export default function CustomersPage() {
@@ -46,6 +49,15 @@ export default function CustomersPage() {
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [syncingCustomers, setSyncingCustomers] = useState({});
+  const [isForceFetching, setIsForceFetching] = useState(false);
+  const [isFetchingFromKiosk, setIsFetchingFromKiosk] = useState(false);
+
+  // Source filters
+  const [sourceFilters, setSourceFilters] = useState({
+    loyverse: true,
+    kiosk: true,
+    local: true,
+  });
 
   const [formData, setFormData] = useState({
     // Required
@@ -72,7 +84,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     filterCustomers();
-  }, [searchQuery, customers]);
+  }, [searchQuery, customers, sourceFilters]);
 
   const loadCategoriesFromKiosk = async () => {
     try {
@@ -109,34 +121,215 @@ export default function CustomersPage() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
-      const data = await dbService.getCustomers();
-      console.log("📊 Loaded customers from database:", data);
+
+      // Try to fetch from Firebase first
+      const data = await customersService.getAll();
+      console.log("📊 Loaded customers from Firebase:", data);
       console.log("📊 Number of customers:", data.length);
+
       setCustomers(data);
       setFilteredCustomers(data);
+
+      // Sync to IndexedDB for offline access
+      if (data.length > 0) {
+        await dbService.upsertCustomers(data);
+      }
     } catch (error) {
-      console.error("Error loading customers:", error);
-      toast.error("Failed to load customers");
+      console.error("Error loading customers from Firebase:", error);
+
+      // Fallback to IndexedDB if Firebase fails
+      try {
+        const localData = await dbService.getCustomers();
+        console.log(
+          "📊 Loaded customers from IndexedDB (fallback):",
+          localData
+        );
+        setCustomers(localData);
+        setFilteredCustomers(localData);
+        toast.warning("Loaded customers from local database (offline mode)");
+      } catch (dbError) {
+        console.error("Error loading customers from IndexedDB:", dbError);
+        toast.error("Failed to load customers");
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const handleForceFetchFromFirebase = async () => {
+    try {
+      setIsForceFetching(true);
+      toast.info("Fetching customers from Firebase...");
+
+      // Fetch directly from Firebase, not from IndexedDB
+      const data = await customersService.getAll();
+      console.log("🔄 Force fetched customers from Firebase:", data);
+      console.log("🔄 Number of customers fetched:", data.length);
+
+      setCustomers(data);
+      setFilteredCustomers(data);
+
+      // Also update IndexedDB with the fresh data
+      if (data.length > 0) {
+        await dbService.upsertCustomers(data);
+        console.log("💾 Synced customers to IndexedDB");
+      }
+
+      toast.success(
+        `Successfully fetched ${data.length} customers from Firebase`
+      );
+    } catch (error) {
+      console.error("Error force fetching customers from Firebase:", error);
+      toast.error("Failed to fetch customers from Firebase");
+    } finally {
+      setIsForceFetching(false);
+    }
+  };
+
+  const handleFetchFromKiosk = async () => {
+    try {
+      setIsFetchingFromKiosk(true);
+      toast.info("Fetching customers from Kiosk...");
+
+      // Fetch customers from kiosk API
+      const kioskUrl = "https://candy-kush-kiosk.vercel.app/api/customers";
+      const response = await fetch(kioskUrl);
+
+      if (!response.ok) {
+        throw new Error(`Kiosk API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("🏪 Kiosk API Response:", result);
+
+      if (!result.success || !result.data) {
+        throw new Error("Invalid response from Kiosk API");
+      }
+
+      const kioskCustomers = result.data;
+      console.log("🏪 Fetched customers from Kiosk:", kioskCustomers);
+      console.log("🏪 Number of customers:", kioskCustomers.length);
+
+      // Transform kiosk customer data to POS format
+      const transformedCustomers = kioskCustomers.map((kioskCustomer) => ({
+        // Identifiers
+        id: kioskCustomer.id || kioskCustomer.customerId,
+        customerId: kioskCustomer.customerId,
+        memberId: kioskCustomer.memberId,
+
+        // Personal Information
+        name: kioskCustomer.name || kioskCustomer.firstName || "",
+        lastName: kioskCustomer.lastName || "",
+        nickname: kioskCustomer.nickname || "",
+        nationality: kioskCustomer.nationality || "",
+        dateOfBirth: kioskCustomer.dateOfBirth || kioskCustomer.dob || "",
+
+        // Contact
+        email: kioskCustomer.email || "",
+        phone: kioskCustomer.phone || kioskCustomer.cell || "",
+        cell: kioskCustomer.cell || kioskCustomer.phone || "",
+
+        // Member Status
+        isNoMember: kioskCustomer.isNoMember || false,
+        isActive: kioskCustomer.isActive !== false,
+
+        // Points & Loyalty
+        customPoints: kioskCustomer.customPoints || kioskCustomer.points || 0,
+        totalSpent: kioskCustomer.totalSpent || 0,
+        totalVisits: kioskCustomer.totalVisits || 0,
+
+        // Kiosk Permissions
+        allowedCategories: kioskCustomer.allowedCategories || [],
+
+        // Tags - Add "kiosk" tag to identify source
+        tags: ["kiosk"],
+
+        // Metadata
+        source: "kiosk",
+        syncedToKiosk: true, // Already in Kiosk, so it's synced
+        lastSyncedAt: new Date().toISOString(),
+        createdAt: kioskCustomer.createdAt || new Date().toISOString(),
+        updatedAt: kioskCustomer.updatedAt || new Date().toISOString(),
+      }));
+
+      // Save to Firebase (create or update)
+      const savePromises = transformedCustomers.map(async (customer) => {
+        try {
+          // Check if customer already exists
+          const existing = await customersService.get(customer.id);
+
+          if (existing) {
+            // Update existing customer
+            await customersService.update(customer.id, customer);
+            console.log(`✅ Updated customer: ${customer.name}`);
+          } else {
+            // Create new customer
+            await customersService.create(customer);
+            console.log(`✅ Created customer: ${customer.name}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error saving customer ${customer.name}:`, error);
+          throw error;
+        }
+      });
+
+      await Promise.all(savePromises);
+      console.log("💾 All Kiosk customers saved to Firebase");
+
+      // Fetch ALL customers from Firebase (not just kiosk)
+      const allCustomers = await customersService.getAll();
+      console.log("📊 Total customers in Firebase:", allCustomers.length);
+
+      // Sync all customers to IndexedDB
+      await dbService.upsertCustomers(allCustomers);
+
+      // Update UI with all customers (mixed data)
+      setCustomers(allCustomers);
+      setFilteredCustomers(allCustomers);
+
+      toast.success(
+        `Successfully imported ${transformedCustomers.length} customers from Kiosk. Showing all ${allCustomers.length} customers.`
+      );
+    } catch (error) {
+      console.error("Error fetching customers from Kiosk:", error);
+      toast.error(`Failed to fetch from Kiosk: ${error.message}`);
+    } finally {
+      setIsFetchingFromKiosk(false);
+    }
+  };
+
   const filterCustomers = () => {
-    if (!searchQuery) {
-      setFilteredCustomers(customers);
-      return;
+    let filtered = customers;
+
+    // Filter by source
+    filtered = filtered.filter((customer) => {
+      const source = customer.source || "local";
+      return sourceFilters[source] === true;
+    });
+
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (customer) =>
+          customer.name?.toLowerCase().includes(query) ||
+          customer.email?.toLowerCase().includes(query) ||
+          customer.phone?.includes(query) ||
+          customer.cell?.includes(query) ||
+          customer.customerCode?.toLowerCase().includes(query) ||
+          customer.customerId?.toLowerCase().includes(query) ||
+          customer.memberId?.toLowerCase().includes(query)
+      );
     }
 
-    const query = searchQuery.toLowerCase();
-    const filtered = customers.filter(
-      (customer) =>
-        customer.name?.toLowerCase().includes(query) ||
-        customer.email?.toLowerCase().includes(query) ||
-        customer.phone?.includes(query) ||
-        customer.customerCode?.toLowerCase().includes(query)
-    );
     setFilteredCustomers(filtered);
+  };
+
+  const handleSourceFilterChange = (source) => {
+    setSourceFilters((prev) => ({
+      ...prev,
+      [source]: !prev[source],
+    }));
   };
 
   const handleAdd = () => {
@@ -292,19 +485,20 @@ export default function CustomersPage() {
         // Timestamps
         updatedAt: new Date().toISOString(),
 
-        // Source tracking
-        source: editingCustomer?.source || "admin",
+        // Source tracking - mark as "local" for customers created in admin/POS
+        source: editingCustomer?.source || "local",
 
         // Kiosk sync status
-        syncedToKiosk: false, // Will be true when synced to Firebase
+        syncedToKiosk: false, // Will be true when synced to kiosk
       };
 
       if (editingCustomer) {
-        // Update existing
+        // Update existing customer
+        await customersService.update(editingCustomer.id, customerData);
         await dbService.updateCustomer(editingCustomer.id, customerData);
         toast.success("Customer updated successfully");
       } else {
-        // Create new
+        // Create new customer
         customerData.id = `cust_${Date.now()}`;
         customerData.createdAt = new Date().toISOString();
 
@@ -319,6 +513,8 @@ export default function CustomersPage() {
         customerData.firstVisit = null;
         customerData.lastVisit = null;
 
+        // Save to both Firebase and IndexedDB
+        await customersService.create(customerData);
         await dbService.upsertCustomers([customerData]);
 
         // Automatically sync new customer to kiosk
@@ -407,14 +603,40 @@ export default function CustomersPage() {
             Manage your store customers and track their activity
           </p>
         </div>
-        <Button onClick={handleAdd}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Customer
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleFetchFromKiosk}
+            disabled={isFetchingFromKiosk}
+          >
+            <Download
+              className={`mr-2 h-4 w-4 ${
+                isFetchingFromKiosk ? "animate-bounce" : ""
+              }`}
+            />
+            {isFetchingFromKiosk ? "Importing..." : "Import from Kiosk"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleForceFetchFromFirebase}
+            disabled={isForceFetching}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${
+                isForceFetching ? "animate-spin" : ""
+              }`}
+            />
+            {isForceFetching ? "Fetching..." : "Force Fetch"}
+          </Button>
+          <Button onClick={handleAdd}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Customer
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -430,7 +652,7 @@ export default function CustomersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-neutral-500">Synced from Loyverse</p>
+                <p className="text-sm text-neutral-500">Loyverse</p>
                 <p className="text-2xl font-bold">
                   {customers.filter((c) => c.source === "loyverse").length}
                 </p>
@@ -443,12 +665,32 @@ export default function CustomersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-neutral-500">Local Customers</p>
+                <p className="text-sm text-neutral-500">Kiosk</p>
                 <p className="text-2xl font-bold">
-                  {customers.filter((c) => c.source === "local").length}
+                  {customers.filter((c) => c.source === "kiosk").length}
                 </p>
               </div>
-              <Badge>Local</Badge>
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                Kiosk
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-neutral-500">Local</p>
+                <p className="text-2xl font-bold">
+                  {
+                    customers.filter((c) => !c.source || c.source === "local")
+                      .length
+                  }
+                </p>
+              </div>
+              <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100">
+                Local
+              </Badge>
             </div>
           </CardContent>
         </Card>
@@ -478,11 +720,72 @@ export default function CustomersPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <Input
-              placeholder="Search by name, email, phone, or customer code..."
+              placeholder="Search by name, email, phone, customer ID, member ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Source Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-6">
+            <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              Filter by Source:
+            </span>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sourceFilters.loyverse}
+                  onChange={() => handleSourceFilterChange("loyverse")}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm">Loyverse</span>
+                <Badge variant="secondary" className="ml-1">
+                  {customers.filter((c) => c.source === "loyverse").length}
+                </Badge>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sourceFilters.kiosk}
+                  onChange={() => handleSourceFilterChange("kiosk")}
+                  className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <span className="text-sm">Kiosk</span>
+                <Badge
+                  variant="secondary"
+                  className="ml-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                >
+                  {customers.filter((c) => c.source === "kiosk").length}
+                </Badge>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sourceFilters.local}
+                  onChange={() => handleSourceFilterChange("local")}
+                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-sm">Local</span>
+                <Badge
+                  variant="secondary"
+                  className="ml-1 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
+                >
+                  {
+                    customers.filter((c) => !c.source || c.source === "local")
+                      .length
+                  }
+                </Badge>
+              </label>
+            </div>
+            <div className="ml-auto text-sm text-neutral-500">
+              Showing {filteredCustomers.length} of {customers.length} customers
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -532,14 +835,23 @@ export default function CustomersPage() {
                               variant={
                                 customer.source === "loyverse"
                                   ? "secondary"
-                                  : "default"
+                                  : customer.source === "kiosk"
+                                  ? "default"
+                                  : "outline"
                               }
-                              className="text-xs"
+                              className={
+                                customer.source === "kiosk"
+                                  ? "text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                                  : customer.source === "local"
+                                  ? "text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
+                                  : "text-xs"
+                              }
                             >
                               {customer.source}
                             </Badge>
                           )}
-                          {customer.syncedToKiosk ? (
+                          {customer.source === "kiosk" ||
+                          customer.syncedToKiosk ? (
                             <Badge
                               variant="outline"
                               className="text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
@@ -548,18 +860,27 @@ export default function CustomersPage() {
                               Synced to Kiosk
                             </Badge>
                           ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-yellow-50 dark:bg-yellow-950 border-yellow-500 text-yellow-700 dark:text-yellow-400"
-                            >
-                              <AlertCircle className="h-3 w-3 mr-1" />
-                              Not Synced
-                            </Badge>
+                            customer.source !== "kiosk" && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-yellow-50 dark:bg-yellow-950 border-yellow-500 text-yellow-700 dark:text-yellow-400"
+                              >
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                Not Synced
+                              </Badge>
+                            )
                           )}
                         </div>
-                        <p className="text-sm text-neutral-500">
-                          {customer.customerCode}
-                        </p>
+                        <div className="flex items-center gap-2 text-sm text-neutral-500">
+                          {customer.customerId && (
+                            <span className="font-mono font-semibold text-primary">
+                              {customer.customerId}
+                            </span>
+                          )}
+                          {customer.customerCode && !customer.customerId && (
+                            <span>{customer.customerCode}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -614,7 +935,7 @@ export default function CustomersPage() {
                   </div>
 
                   <div className="flex space-x-2">
-                    {!customer.syncedToKiosk && (
+                    {!customer.syncedToKiosk && customer.source !== "kiosk" && (
                       <Button
                         variant="default"
                         size="sm"

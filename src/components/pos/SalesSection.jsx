@@ -74,6 +74,8 @@ import {
   ArrowLeft,
   Percent,
   Tag,
+  Mail,
+  Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
@@ -631,12 +633,35 @@ export default function SalesSection({ cashier }) {
 
   const loadCustomers = async () => {
     try {
-      const customersData = await customersService.getAll({
-        orderBy: ["name", "asc"],
-      });
-      setCustomers(customersData);
+      // If online, fetch from Firebase and sync to IndexedDB
+      if (isOnline) {
+        console.log("🔄 Fetching customers from Firebase (online)...");
+        const firebaseCustomers = await customersService.getAll({
+          orderBy: ["name", "asc"],
+        });
+        console.log(
+          `✅ Loaded ${firebaseCustomers.length} customers from Firebase`
+        );
+
+        // Save all customers to IndexedDB for offline use
+        if (firebaseCustomers.length > 0) {
+          await dbService.upsertCustomers(firebaseCustomers);
+          console.log("💾 Synced all customers to IndexedDB");
+        }
+
+        setCustomers(firebaseCustomers);
+      } else {
+        // If offline, load from IndexedDB
+        console.log("📱 Loading customers from IndexedDB (offline)...");
+        const offlineCustomers = await dbService.getAllCustomers();
+        console.log(
+          `✅ Loaded ${offlineCustomers.length} customers from IndexedDB`
+        );
+        setCustomers(offlineCustomers);
+      }
     } catch (error) {
       console.error("Error loading customers:", error);
+      toast.error("Failed to load customers");
     }
   };
 
@@ -659,6 +684,39 @@ export default function SalesSection({ cashier }) {
       return Number.isFinite(parsed) ? parsed : fallback;
     }
     return fallback;
+  };
+
+  // Helper to safely get customer points (handles both number and object types)
+  const getCustomerPoints = (customer) => {
+    if (!customer) return 0;
+
+    // Try customPoints first
+    if (customer.customPoints !== undefined && customer.customPoints !== null) {
+      if (typeof customer.customPoints === "number") {
+        return customer.customPoints;
+      }
+      if (
+        typeof customer.customPoints === "object" &&
+        customer.customPoints.amount !== undefined
+      ) {
+        return toNumber(customer.customPoints.amount, 0);
+      }
+    }
+
+    // Try points next
+    if (customer.points !== undefined && customer.points !== null) {
+      if (typeof customer.points === "number") {
+        return customer.points;
+      }
+      if (
+        typeof customer.points === "object" &&
+        customer.points.amount !== undefined
+      ) {
+        return toNumber(customer.points.amount, 0);
+      }
+    }
+
+    return 0;
   };
 
   const getProductImage = (product) => {
@@ -2602,23 +2660,53 @@ export default function SalesSection({ cashier }) {
             {/* Customer Selection */}
             <div className="flex items-center gap-2">
               {cartCustomer ? (
-                <div className="flex-1 flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <div>
-                      <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                        {cartCustomer.name}
-                      </p>
-                      <p className="text-xs text-green-600 dark:text-green-400">
-                        {cartCustomer.customerCode || cartCustomer.customerId}
-                      </p>
+                <div className="flex-1 flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                          {cartCustomer.name}
+                        </p>
+                        {cartCustomer.source && (
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "text-xs",
+                              cartCustomer.source === "kiosk" &&
+                                "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
+                              cartCustomer.source === "local" &&
+                                "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
+                            )}
+                          >
+                            {cartCustomer.source}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {cartCustomer.customerId ? (
+                          <p className="text-xs font-mono text-primary">
+                            {cartCustomer.customerId}
+                          </p>
+                        ) : cartCustomer.customerCode ? (
+                          <p className="text-xs text-neutral-500">
+                            {cartCustomer.customerCode}
+                          </p>
+                        ) : null}
+                        <span className="text-xs text-neutral-400">•</span>
+                        <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                          {getCustomerPoints(cartCustomer)} pts
+                        </p>
+                      </div>
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setCartCustomer(null)}
-                    className="h-6 w-6 p-0 hover:bg-red-100 dark:hover:bg-red-900/30"
+                    className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30 flex-shrink-0"
                   >
                     <X className="h-4 w-4 text-red-600 dark:text-red-400" />
                   </Button>
@@ -2626,10 +2714,10 @@ export default function SalesSection({ cashier }) {
               ) : (
                 <Button
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 h-12"
                   onClick={() => setShowCustomerSelectModal(true)}
                 >
-                  <UserPlus className="h-4 w-4 mr-2" />
+                  <UserPlus className="h-5 w-5 mr-2" />
                   Add Customer
                 </Button>
               )}
@@ -3198,43 +3286,49 @@ export default function SalesSection({ cashier }) {
           open={showCustomerSelectModal}
           onOpenChange={setShowCustomerSelectModal}
         >
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
             <DialogHeader>
-              <DialogTitle>Add Customer to Cart</DialogTitle>
+              <DialogTitle className="text-xl font-bold">
+                Add Customer to Cart
+              </DialogTitle>
               <DialogDescription>
-                Link this sale to a customer for purchase history tracking
+                Link this sale to a customer for purchase history tracking and
+                loyalty rewards
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4">
-              {/* Search */}
+            <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+              {/* Search Bar */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-neutral-400" />
                 <Input
-                  placeholder="Search customers by name, email, or phone..."
+                  placeholder="Search by name, customer ID, member ID, email, or phone..."
                   value={customerSearchQuery}
                   onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-12"
                 />
               </div>
 
               {/* Customer List */}
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto space-y-3 pr-2">
                 {customers
                   .filter((c) => {
                     if (!customerSearchQuery) return true;
                     const query = customerSearchQuery.toLowerCase();
                     return (
                       c.name?.toLowerCase().includes(query) ||
+                      c.customerId?.toLowerCase().includes(query) ||
+                      c.memberId?.toLowerCase().includes(query) ||
                       c.email?.toLowerCase().includes(query) ||
                       c.phone?.includes(query) ||
+                      c.cell?.includes(query) ||
                       c.customerCode?.toLowerCase().includes(query)
                     );
                   })
                   .map((customer) => (
                     <div
                       key={customer.id}
-                      className="p-4 border border-gray-300 dark:border-gray-700 rounded-lg cursor-pointer transition-colors hover:border-green-300 hover:bg-gray-800 dark:hover:bg-gray-800"
+                      className="p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg cursor-pointer transition-all hover:border-primary hover:bg-neutral-50 dark:hover:bg-neutral-900 hover:shadow-md"
                       onClick={() => {
                         setCartCustomer(customer);
                         setShowCustomerSelectModal(false);
@@ -3244,45 +3338,166 @@ export default function SalesSection({ cashier }) {
                         );
                       }}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-gray-500" />
-                            <span className="font-semibold">
+                      <div className="flex items-start gap-4">
+                        {/* Customer Icon */}
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                            <User className="h-6 w-6 text-primary" />
+                          </div>
+                        </div>
+
+                        {/* Customer Info */}
+                        <div className="flex-1 min-w-0">
+                          {/* Name and Badges */}
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <h3 className="font-semibold text-lg">
                               {customer.name}
-                            </span>
-                            <Badge variant="secondary" className="text-xs">
-                              {customer.customerCode}
-                            </Badge>
+                            </h3>
+
+                            {/* Source Badge */}
+                            {customer.source && (
+                              <Badge
+                                variant={
+                                  customer.source === "loyverse"
+                                    ? "secondary"
+                                    : customer.source === "kiosk"
+                                    ? "default"
+                                    : "outline"
+                                }
+                                className={
+                                  customer.source === "kiosk"
+                                    ? "text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                                    : customer.source === "local"
+                                    ? "text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
+                                    : "text-xs"
+                                }
+                              >
+                                {customer.source}
+                              </Badge>
+                            )}
+
+                            {/* Member Badge */}
+                            {customer.isMember && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-blue-50 dark:bg-blue-950 border-blue-500 text-blue-700 dark:text-blue-400"
+                              >
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Member
+                              </Badge>
+                            )}
                           </div>
-                          <div className="mt-1 text-sm text-gray-600 space-y-0.5">
-                            {customer.email && <div>📧 {customer.email}</div>}
-                            {customer.phone && <div>📱 {customer.phone}</div>}
+
+                          {/* Customer ID / Code */}
+                          <div className="flex items-center gap-2 mb-3">
+                            {customer.customerId ? (
+                              <span className="font-mono text-sm font-semibold text-primary">
+                                ID: {customer.customerId}
+                              </span>
+                            ) : customer.customerCode ? (
+                              <Badge variant="secondary" className="text-xs">
+                                {customer.customerCode}
+                              </Badge>
+                            ) : null}
+                            {customer.memberId && (
+                              <span className="font-mono text-sm text-neutral-500">
+                                Member: {customer.memberId}
+                              </span>
+                            )}
                           </div>
-                          {/* Customer Stats */}
-                          <div className="mt-2 flex gap-3 text-xs">
-                            <span className="text-green-600 font-medium">
-                              {customer.points || 0} pts
-                            </span>
-                            <span className="text-blue-600 font-medium">
-                              {customer.visits || 0} visits
-                            </span>
+
+                          {/* Contact Information */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-neutral-600 dark:text-neutral-400 mb-3">
+                            {customer.email && (
+                              <div className="flex items-center gap-2">
+                                <Mail className="h-4 w-4 flex-shrink-0" />
+                                <span className="truncate">
+                                  {customer.email}
+                                </span>
+                              </div>
+                            )}
+                            {customer.phone && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-4 w-4 flex-shrink-0" />
+                                <span>{customer.phone}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Stats */}
+                          <div className="flex gap-4 text-sm">
+                            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                              <ShoppingCart className="h-4 w-4" />
+                              <span className="font-medium">
+                                {getCustomerPoints(customer)} pts
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                              <User className="h-4 w-4" />
+                              <span className="font-medium">
+                                {customer.totalVisits || customer.visits || 0}{" "}
+                                visits
+                              </span>
+                            </div>
+                            {(customer.totalSpent || customer.spent) && (
+                              <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                                <CreditCard className="h-4 w-4" />
+                                <span className="font-medium">
+                                  {formatCurrency(
+                                    customer.totalSpent || customer.spent || 0
+                                  )}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
                     </div>
                   ))}
-              </div>
 
-              {customers.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <User className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                  <p>No customers found</p>
-                  <p className="text-sm">
-                    Go to Customers page to add customers
-                  </p>
-                </div>
-              )}
+                {/* Empty State */}
+                {customers.length === 0 && (
+                  <div className="text-center py-12 text-neutral-500">
+                    <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
+                      <User className="h-8 w-8 text-neutral-400" />
+                    </div>
+                    <p className="text-lg font-medium mb-2">
+                      No customers found
+                    </p>
+                    <p className="text-sm">
+                      Go to Customers page to add customers
+                    </p>
+                  </div>
+                )}
+
+                {/* No Results State */}
+                {customers.length > 0 &&
+                  customers.filter((c) => {
+                    if (!customerSearchQuery) return true;
+                    const query = customerSearchQuery.toLowerCase();
+                    return (
+                      c.name?.toLowerCase().includes(query) ||
+                      c.customerId?.toLowerCase().includes(query) ||
+                      c.memberId?.toLowerCase().includes(query) ||
+                      c.email?.toLowerCase().includes(query) ||
+                      c.phone?.includes(query) ||
+                      c.cell?.includes(query) ||
+                      c.customerCode?.toLowerCase().includes(query)
+                    );
+                  }).length === 0 && (
+                    <div className="text-center py-12 text-neutral-500">
+                      <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
+                        <Search className="h-8 w-8 text-neutral-400" />
+                      </div>
+                      <p className="text-lg font-medium mb-2">
+                        No results found
+                      </p>
+                      <p className="text-sm">
+                        Try searching with different keywords
+                      </p>
+                    </div>
+                  )}
+              </div>
             </div>
           </DialogContent>
         </Dialog>

@@ -60,9 +60,37 @@ function CustomerCard({
               <User className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-lg">{customer.name}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg">{customer.name}</CardTitle>
+                {customer.source && (
+                  <Badge
+                    variant={
+                      customer.source === "loyverse"
+                        ? "secondary"
+                        : customer.source === "kiosk"
+                        ? "default"
+                        : "outline"
+                    }
+                    className={
+                      customer.source === "kiosk"
+                        ? "text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                        : customer.source === "local"
+                        ? "text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
+                        : "text-xs"
+                    }
+                  >
+                    {customer.source}
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm text-gray-500">
-                Code: {customer.customerCode}
+                {customer.customerId ? (
+                  <span className="font-mono font-semibold text-primary">
+                    {customer.customerId}
+                  </span>
+                ) : (
+                  `Code: ${customer.customerCode || "N/A"}`
+                )}
               </p>
             </div>
           </div>
@@ -894,8 +922,11 @@ export default function CustomersSection({ cashier }) {
         (c) =>
           c.name?.toLowerCase().includes(query) ||
           c.customerCode?.toLowerCase().includes(query) ||
+          c.customerId?.toLowerCase().includes(query) ||
+          c.memberId?.toLowerCase().includes(query) ||
           c.email?.toLowerCase().includes(query) ||
-          c.phone?.includes(query)
+          c.phone?.includes(query) ||
+          c.cell?.includes(query)
       );
     }
 
@@ -969,9 +1000,10 @@ export default function CustomersSection({ cashier }) {
         await customersService.update(editingCustomer.id, formData);
         toast.success("Customer updated successfully");
       } else {
-        // Create new customer with cashier info
+        // Create new customer with cashier info and source as "local"
         const customerData = {
           ...formData,
+          source: "local", // Mark as locally created customer
           createdBy: cashier?.id || null,
           createdByName: cashier?.name || null,
         };
@@ -1091,7 +1123,7 @@ export default function CustomersSection({ cashier }) {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
-                placeholder="Search by name, code, email, or phone..."
+                placeholder="Search by name, customer ID, email, or phone..."
                 className="pl-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
