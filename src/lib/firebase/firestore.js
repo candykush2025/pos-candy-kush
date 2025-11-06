@@ -80,7 +80,14 @@ export const getDocument = async (collectionName, id) => {
     const docSnap = await getDocFromServer(docRef);
 
     if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() };
+      const data = docSnap.data();
+      // CRITICAL: Use Firestore Document ID, not the "id" field inside the document
+      return {
+        ...data,
+        id: docSnap.id, // ✅ Force Document ID to override any "id" field in data
+        _firestoreId: docSnap.id,
+        _dataId: data.id,
+      };
     }
     return null;
   } catch (error) {
@@ -131,10 +138,17 @@ export const getDocuments = async (collectionName, options = {}) => {
     console.log(`📦 Raw query result: ${querySnapshot.size} documents`);
     console.log(`📦 Empty: ${querySnapshot.empty}`);
 
-    const results = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const results = querySnapshot.docs.map((doc) => {
+      const data = doc.data();
+      // CRITICAL: Use Firestore Document ID, not the "id" field inside the document
+      // The spread operator was overwriting doc.id with data.id
+      return {
+        ...data,
+        id: doc.id, // ✅ Force Document ID to override any "id" field in data
+        _firestoreId: doc.id, // Backup: Store the real Firestore ID
+        _dataId: data.id, // Backup: Store the old "id" field for reference
+      };
+    });
 
     console.log(
       `✅ FETCHED ${
@@ -186,10 +200,34 @@ export const updateDocument = async (collectionName, id, data) => {
 // Delete document
 export const deleteDocument = async (collectionName, id) => {
   try {
-    await deleteDoc(doc(db, collectionName, id));
+    console.log(`🗑️ Attempting to delete from ${collectionName}:`, id);
+    const docRef = doc(db, collectionName, id);
+
+    // Verify document exists before deleting
+    const docSnap = await getDocFromServer(docRef);
+    if (!docSnap.exists()) {
+      console.warn(`⚠️ Document ${id} does not exist in ${collectionName}`);
+      return id;
+    }
+
+    console.log(`📄 Document exists, proceeding with deletion...`);
+    await deleteDoc(docRef);
+
+    // Verify deletion
+    const verifySnap = await getDocFromServer(docRef);
+    if (verifySnap.exists()) {
+      console.error(
+        `❌ DELETION FAILED! Document ${id} still exists after deleteDoc()`
+      );
+      throw new Error("Deletion verification failed - document still exists");
+    }
+
+    console.log(`✅ Successfully deleted ${id} from ${collectionName}`);
     return id;
   } catch (error) {
-    console.error(`Error deleting document from ${collectionName}:`, error);
+    console.error(`❌ Error deleting document from ${collectionName}:`, error);
+    console.error(`Error code:`, error.code);
+    console.error(`Error message:`, error.message);
     throw error;
   }
 };
@@ -199,7 +237,13 @@ export const subscribeToDocument = (collectionName, id, callback) => {
   const docRef = doc(db, collectionName, id);
   return onSnapshot(docRef, (doc) => {
     if (doc.exists()) {
-      callback({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      callback({
+        ...data,
+        id: doc.id, // ✅ Use Firestore Document ID
+        _firestoreId: doc.id,
+        _dataId: data.id,
+      });
     } else {
       callback(null);
     }
@@ -227,10 +271,15 @@ export const subscribeToCollection = (
   }
 
   return onSnapshot(q, (querySnapshot) => {
-    const documents = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const documents = querySnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id, // ✅ Use Firestore Document ID
+        _firestoreId: doc.id,
+        _dataId: data.id,
+      };
+    });
     callback(documents);
   });
 };

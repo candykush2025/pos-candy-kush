@@ -450,6 +450,7 @@ export default function ProductsSection() {
         sku: productFormData.sku || "",
         barcode: productFormData.barcode || "",
         trackStock: productFormData.trackStock,
+        source: editingProduct?.source || "local", // Mark locally created products
       };
 
       // Only add stock fields if tracking stock

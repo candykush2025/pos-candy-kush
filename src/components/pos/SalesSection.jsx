@@ -2238,11 +2238,33 @@ export default function SalesSection({ cashier }) {
                                     WebkitUserSelect: "none",
                                   }}
                                 />
-                                {/* Title overlay at bottom */}
+                                {/* Title overlay at bottom with source badge */}
                                 <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1.5">
-                                  <h3 className="text-xs font-semibold text-white text-center line-clamp-2">
-                                    {product.name}
-                                  </h3>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <h3 className="text-xs font-semibold text-white flex-1 line-clamp-2">
+                                      {product.name}
+                                    </h3>
+                                    {product.source && (
+                                      <Badge
+                                        variant="secondary"
+                                        className={cn(
+                                          "text-[10px] px-1 py-0 h-4 flex-shrink-0",
+                                          product.source === "kiosk" &&
+                                            "bg-green-500 text-white border-0",
+                                          product.source === "local" &&
+                                            "bg-purple-500 text-white border-0",
+                                          product.source === "loyverse" &&
+                                            "bg-gray-500 text-white border-0"
+                                        )}
+                                      >
+                                        {product.source === "kiosk"
+                                          ? "K"
+                                          : product.source === "local"
+                                          ? "L"
+                                          : "LV"}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                               </>
                             ) : colorClass ? (
@@ -2732,56 +2754,88 @@ export default function SalesSection({ cashier }) {
                 <p>Cart is empty</p>
               </div>
             ) : (
-              items.map((item) => (
-                <Card key={item.id} className="p-3">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{item.name}</h3>
-                      <p className="text-sm text-gray-500">
-                        {formatCurrency(item.price)} each
+              items.map((item) => {
+                // Check if we should show member pricing
+                const hasCustomer = !!cartCustomer;
+                const hasMemberPrice =
+                  item.source === "kiosk" &&
+                  item.memberPrice &&
+                  item.originalPrice &&
+                  item.memberPrice < item.originalPrice;
+                const showMemberPrice = hasCustomer && hasMemberPrice;
+                const displayPrice = showMemberPrice
+                  ? item.memberPrice
+                  : item.price;
+
+                return (
+                  <Card key={item.id} className="p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{item.name}</h3>
+                        {showMemberPrice ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm text-gray-400 line-through">
+                              {formatCurrency(item.originalPrice || item.price)}{" "}
+                              each
+                            </p>
+                            <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                              {formatCurrency(displayPrice)} each
+                            </p>
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
+                            >
+                              Member
+                            </Badge>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">
+                            {formatCurrency(item.price)} each
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeItem(item.id)}
+                        className="h-8 w-8"
+                      >
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() =>
+                            updateQuantity(item.id, item.quantity - 1)
+                          }
+                          className="h-8 w-8"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <span className="w-12 text-center font-semibold">
+                          {item.quantity}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() =>
+                            updateQuantity(item.id, item.quantity + 1)
+                          }
+                          className="h-8 w-8"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="font-bold text-lg">
+                        {formatCurrency(item.total)}
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeItem(item.id)}
-                      className="h-8 w-8"
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() =>
-                          updateQuantity(item.id, item.quantity - 1)
-                        }
-                        className="h-8 w-8"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="w-12 text-center font-semibold">
-                        {item.quantity}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() =>
-                          updateQuantity(item.id, item.quantity + 1)
-                        }
-                        className="h-8 w-8"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="font-bold text-lg">
-                      {formatCurrency(item.total)}
-                    </p>
-                  </div>
-                </Card>
-              ))
+                  </Card>
+                );
+              })
             )}
           </div>
 

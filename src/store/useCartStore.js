@@ -11,8 +11,17 @@ export const useCartStore = create((set, get) => ({
 
   // Add item to cart
   addItem: (product, quantity = 1) => {
-    const { items } = get();
+    const { items, customer } = get();
     const existingItem = items.find((item) => item.productId === product.id);
+
+    // Determine price to use (member price if available and customer is attached)
+    const hasCustomer = !!customer;
+    const hasMemberPrice =
+      product.source === "kiosk" &&
+      product.memberPrice &&
+      product.memberPrice < product.price;
+    const usePrice =
+      hasCustomer && hasMemberPrice ? product.memberPrice : product.price;
 
     if (existingItem) {
       // Update quantity if item exists
@@ -44,10 +53,13 @@ export const useCartStore = create((set, get) => ({
         productId: product.id,
         variantId: variantId, // Loyverse variant_id
         name: product.name,
-        price: product.price,
+        price: usePrice, // Use member price if applicable
+        originalPrice: product.price, // Keep original for reference
+        memberPrice: product.memberPrice || null,
+        source: product.source || null,
         quantity,
         discount: 0,
-        total: product.price * quantity,
+        total: usePrice * quantity,
         barcode: product.barcode,
         sku: product.sku,
         cost: product.cost || 0, // For Loyverse sync

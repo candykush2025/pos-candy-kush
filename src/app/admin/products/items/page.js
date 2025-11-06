@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { productsService, categoriesService } from "@/lib/firebase/firestore";
 import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
 import { loyverseService } from "@/lib/api/loyverse";
+import { dbService } from "@/lib/db/dbService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,7 @@ import {
   X,
   Palette,
   Upload,
+  Download,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -55,7 +57,11 @@ export default function ItemListPage() {
   const [categories, setCategories] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedSource, setSelectedSource] = useState("all");
+  const [selectedSources, setSelectedSources] = useState({
+    kiosk: true,
+    local: true,
+    loyverse: true,
+  });
   const [selectedAvailability, setSelectedAvailability] = useState("all");
   const [selectedTrackStock, setSelectedTrackStock] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,6 +74,14 @@ export default function ItemListPage() {
   const [quickCategoryName, setQuickCategoryName] = useState("");
   const [isQuickAddingCategory, setIsQuickAddingCategory] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [isFetchingFromKiosk, setIsFetchingFromKiosk] = useState(false);
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState({
+    current: 0,
+    total: 0,
+    failed: [],
+  });
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -78,6 +92,7 @@ export default function ItemListPage() {
     sku: "",
     barcode: "",
     price: "",
+    memberPrice: "",
     cost: "",
     stock: "",
     trackStock: false,
@@ -89,25 +104,233 @@ export default function ItemListPage() {
     representationType: "color",
     image: null,
     imagePreview: null,
+    // New Kiosk API fields
+    productId: "",
+    hasVariants: false,
+    variants: [],
+    mainImage: "",
+    images: [],
+    backgroundImage: "",
+    backgroundFit: "contain",
+    textColor: "#000000",
+    modelUrl: "",
+    modelRotationX: 0,
+    modelRotationY: 0,
+    modelRotationZ: 0,
+    notes: "",
+    isFeatured: false,
   });
 
   useEffect(() => {
+    // FORCE clear products first, then load from Firebase only
+    setProducts([]);
     loadProducts();
     loadCategories();
   }, []);
 
+  useEffect(() => {
+    console.log("🔄 PRODUCTS STATE CHANGED:", {
+      count: products.length,
+      ids: products.map((p) => p.id).slice(0, 10), // First 10 IDs
+    });
+  }, [products]);
+
   const loadProducts = async () => {
     try {
       setLoading(true);
+      console.log(
+        "🔄 loadProducts() called - Fetching from Firebase (Admin - Always Fresh)..."
+      );
+
+      // Admin always loads from Firebase (latest data, no IndexedDB)
       const data = await productsService.getAll({
         orderBy: ["name", "asc"],
       });
-      setProducts(data);
+
+      console.log("📦 Received products from Firebase:", data.length);
+      console.log(
+        "🔥 FIREBASE DATA SAMPLE (First 5):",
+        data.slice(0, 5).map((p) => ({ id: p.id, name: p.name }))
+      );
+
+      // Check if Firebase is actually empty
+      if (data.length === 0) {
+        console.warn("⚠️⚠️⚠️ FIREBASE IS EMPTY! ⚠️⚠️⚠️");
+        console.warn("All products you see are from IndexedDB cache only!");
+        console.warn("Use 'Import from Kiosk' to populate Firebase.");
+        toast.warning(
+          "Firebase database is empty! Import products from Kiosk."
+        );
+      } else {
+        console.log(
+          "🎯 First 10 Firebase product IDs:",
+          data.slice(0, 10).map((p) => p.id)
+        );
+        console.log("🎯 First product sample:", {
+          id: data[0].id,
+          name: data[0].name,
+          source: data[0].source,
+        });
+      }
+
+      // CRITICAL: Log what we're about to set
+      console.log("⚡ ABOUT TO CALL setProducts() with", data.length, "items");
+      console.log(
+        "⚡ IDs being set:",
+        data.slice(0, 5).map((p) => p.id)
+      );
+
+      // Check for duplicates (show in console)
+      const idCounts = {};
+      data.forEach((p) => {
+        idCounts[p.id] = (idCounts[p.id] || 0) + 1;
+      });
+      const duplicateIds = Object.keys(idCounts).filter(
+        (id) => idCounts[id] > 1
+      );
+
+      if (duplicateIds.length > 0) {
+        console.warn(
+          `⚠️ Found ${duplicateIds.length} duplicate product IDs:`,
+          duplicateIds
+        );
+        console.warn(
+          "Duplicate details:",
+          duplicateIds.map((id) => ({
+            id,
+            count: idCounts[id],
+            products: data
+              .filter((p) => p.id === id)
+              .map((p) => ({ id: p.id, name: p.name })),
+          }))
+        );
+      }
+
+      console.log(
+        "📋 Product IDs:",
+        data.map((p) => p.id)
+      );
+
+      // Force a complete state reset
+      setProducts([]);
+      setTimeout(() => {
+        setProducts(data);
+        setRefreshKey((prev) => prev + 1); // Force re-render
+        console.log("✅ Products state updated with", data.length, "products");
+        console.log(
+          "🎯 Products in state:",
+          data.length === 0 ? "EMPTY" : `${data.length} products from Firebase`
+        );
+        if (data.length > 0) {
+          console.log(
+            "First 5 product IDs:",
+            data.slice(0, 5).map((p) => p.id)
+          );
+        }
+      }, 0);
     } catch (error) {
-      console.error("Error loading products:", error);
+      console.error("❌ Error loading products:", error);
       toast.error("Failed to load products");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClearAndRefetch = async () => {
+    if (
+      !confirm(
+        "⚠️ This will clear ALL products from both Firebase and IndexedDB, then refetch from Kiosk. Continue?"
+      )
+    )
+      return;
+
+    try {
+      toast.info("🗑️ Clearing all products...");
+
+      // Step 1: Get all products from Firebase
+      const allProducts = await productsService.getAll();
+      console.log(`Found ${allProducts.length} products in Firebase to delete`);
+
+      // Step 2: Delete all from Firebase
+      for (const product of allProducts) {
+        try {
+          await productsService.delete(product.id);
+          console.log(`Deleted from Firebase: ${product.id}`);
+        } catch (error) {
+          console.warn(`Failed to delete from Firebase: ${product.id}`, error);
+        }
+      }
+
+      // Step 3: Clear IndexedDB
+      try {
+        const dbProducts = await dbService.getProducts();
+        const dbProductIds = dbProducts.map((p) => p.id);
+        if (dbProductIds.length > 0) {
+          await dbService.bulkDeleteProducts(dbProductIds);
+          console.log(`Cleared ${dbProductIds.length} products from IndexedDB`);
+        }
+      } catch (error) {
+        console.warn("Failed to clear IndexedDB:", error);
+      }
+
+      toast.success("✅ All products cleared!");
+
+      // Step 4: Reload to show empty state
+      await loadProducts();
+
+      // Step 5: Ask to refetch from Kiosk
+      if (confirm("Products cleared. Fetch fresh data from Kiosk now?")) {
+        await handleFetchFromKiosk();
+      }
+    } catch (error) {
+      console.error("Error clearing products:", error);
+      toast.error("Failed to clear products: " + error.message);
+    }
+  };
+
+  const handleClearIndexedDBOnly = async () => {
+    if (
+      !confirm(
+        "⚠️ Clear ALL IndexedDB data? This will remove offline cache for cashier."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      toast.info("🗑️ Clearing IndexedDB...");
+
+      // Clear all products from IndexedDB
+      const dbProducts = await dbService.getProducts();
+      console.log("🗑️ Found", dbProducts.length, "products in IndexedDB");
+      console.log(
+        "🗑️ Sample IDs:",
+        dbProducts.slice(0, 5).map((p) => ({ id: p.id, name: p.name }))
+      );
+
+      const dbProductIds = dbProducts.map((p) => p.id);
+
+      if (dbProductIds.length > 0) {
+        await dbService.bulkDeleteProducts(dbProductIds);
+        console.log(
+          `✅ Cleared ${dbProductIds.length} products from IndexedDB`
+        );
+        toast.success(
+          `Cleared ${dbProductIds.length} products from IndexedDB. Reloading page...`
+        );
+
+        // FORCE A COMPLETE PAGE RELOAD to clear all caches
+        setTimeout(() => {
+          window.location.reload(true);
+        }, 500);
+      } else {
+        toast.info("IndexedDB is already empty");
+        // Still reload to show Firebase data
+        window.location.reload(true);
+      }
+    } catch (error) {
+      console.error("Error clearing IndexedDB:", error);
+      toast.error("Failed to clear IndexedDB: " + error.message);
     }
   };
 
@@ -134,6 +357,146 @@ export default function ItemListPage() {
       }
     } catch (error) {
       console.error("Error loading categories:", error);
+    }
+  };
+
+  const handleFetchFromKiosk = async () => {
+    try {
+      setIsFetchingFromKiosk(true);
+      toast.info("🔄 Fetching products from Kiosk...");
+
+      const kioskUrl = "https://candy-kush-kiosk.vercel.app/api/products";
+      const response = await fetch(kioskUrl);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success || !result.data) {
+        throw new Error("Invalid response from Kiosk API");
+      }
+
+      const kioskProducts = result.data.products || [];
+      const kioskCategories = result.data.categories || [];
+
+      // First, sync categories
+      const categoryMap = new Map();
+      for (const kCat of kioskCategories) {
+        const existingCat = categories.find((c) => c.name === kCat.name);
+        if (existingCat) {
+          categoryMap.set(kCat.name, existingCat.id);
+        } else {
+          const newCat = await categoriesService.create({ name: kCat.name });
+          categoryMap.set(kCat.name, newCat.id);
+        }
+      }
+
+      await loadCategories();
+
+      // Transform Kiosk products to our format
+      const transformedProducts = kioskProducts.map((kp) => ({
+        id: kp.id || kp.productId || `kiosk-${Date.now()}-${Math.random()}`,
+        productId: kp.productId || kp.id,
+        name: kp.name || "",
+        handle: kp.name?.toLowerCase().replace(/\s+/g, "-") || "",
+        description: kp.description || "",
+        categoryId: categoryMap.get(kp.categoryName) || "",
+        categoryName: kp.categoryName || "",
+        subcategoryName: kp.subcategoryName || "",
+        sku: kp.sku || "",
+        barcode: kp.barcode || "",
+
+        // Variant handling
+        hasVariants: kp.hasVariants || false,
+        variants: kp.variants || [],
+
+        // Price - use first variant price if has variants, otherwise base price
+        price:
+          kp.hasVariants && kp.variants?.length > 0
+            ? kp.variants[0].price
+            : kp.price || 0,
+        memberPrice:
+          kp.hasVariants && kp.variants?.length > 0
+            ? kp.variants[0].memberPrice
+            : kp.memberPrice || null,
+
+        cost: kp.cost || 0,
+        stock: kp.stock || 0,
+        inStock: kp.inStock || kp.stock || 0,
+        trackStock: kp.trackStock ?? true,
+        soldByWeight: kp.soldByWeight || false,
+        availableForSale: kp.isActive ?? true,
+
+        // Images - use mainImage as primary imageUrl
+        imageUrl:
+          kp.mainImage || (kp.images?.length > 0 ? kp.images[0].url : ""),
+        images: kp.images || [],
+        mainImage: kp.mainImage || "",
+        backgroundImage: kp.backgroundImage || "",
+        backgroundFit: kp.backgroundFit || "contain",
+        textColor: kp.textColor || "#000000",
+
+        // 3D Model
+        modelUrl: kp.modelUrl || "",
+        modelRotationX: kp.modelRotationX || 0,
+        modelRotationY: kp.modelRotationY || 0,
+        modelRotationZ: kp.modelRotationZ || 0,
+
+        form: kp.form || "",
+        color: kp.color || "GREY",
+        representationType: kp.representationType || "color",
+        notes: kp.notes || "",
+        isFeatured: kp.isFeatured || false,
+
+        source: "kiosk",
+        createdAt: kp.createdAt || new Date().toISOString(),
+        updatedAt: kp.updatedAt || new Date().toISOString(),
+      }));
+
+      // Save to Firestore AND IndexedDB
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      for (const product of transformedProducts) {
+        try {
+          // Admin: Save to Firebase FIRST (source of truth)
+          const existing = await productsService.get(product.id);
+          if (existing) {
+            await productsService.update(product.id, product);
+            updatedCount++;
+          } else {
+            await productsService.create(product);
+            createdCount++;
+          }
+        } catch (error) {
+          console.error(`Error saving product ${product.name}:`, error);
+        }
+      }
+
+      // Sync all to IndexedDB for cashier offline use (bulk for speed)
+      try {
+        await dbService.upsertProducts(transformedProducts);
+        console.log(
+          `✅ Synced ${transformedProducts.length} products to IndexedDB (cashier offline)`
+        );
+      } catch (dbError) {
+        console.warn("⚠️ IndexedDB sync failed:", dbError.message);
+        // Don't fail - Firebase is source of truth
+      }
+
+      // Reload products
+      await loadProducts();
+
+      toast.success(
+        `✅ Imported ${createdCount} new products, updated ${updatedCount} existing products from Kiosk`
+      );
+    } catch (error) {
+      console.error("Error fetching from Kiosk:", error);
+      toast.error("Failed to fetch from Kiosk: " + error.message);
+    } finally {
+      setIsFetchingFromKiosk(false);
     }
   };
 
@@ -255,7 +618,7 @@ export default function ItemListPage() {
       // Generate SKU if empty
       const finalSKU = formData.sku || generateNextSKU();
 
-      // Match Loyverse data structure
+      // Match Loyverse data structure + new Kiosk API fields
       const productData = {
         // Basic info
         name: formData.name,
@@ -271,6 +634,9 @@ export default function ItemListPage() {
         sku: finalSKU,
         barcode: formData.barcode || "",
         price: parseFloat(formData.price) || 0,
+        memberPrice: formData.memberPrice
+          ? parseFloat(formData.memberPrice)
+          : null,
         cost: parseFloat(formData.cost) || 0,
         purchaseCost: parseFloat(formData.cost) || 0,
         pricingType: "FIXED",
@@ -286,6 +652,22 @@ export default function ItemListPage() {
         form: formData.form || null,
         color: formData.color || null,
         imageUrl: formData.imageUrl || null,
+
+        // New Kiosk API fields
+        productId: formData.productId || null,
+        hasVariants: formData.hasVariants || false,
+        variants: formData.variants || [],
+        mainImage: formData.mainImage || formData.imageUrl || null,
+        images: formData.images || [],
+        backgroundImage: formData.backgroundImage || null,
+        backgroundFit: formData.backgroundFit || "contain",
+        textColor: formData.textColor || "#000000",
+        modelUrl: formData.modelUrl || null,
+        modelRotationX: formData.modelRotationX || 0,
+        modelRotationY: formData.modelRotationY || 0,
+        modelRotationZ: formData.modelRotationZ || 0,
+        notes: formData.notes || "",
+        isFeatured: formData.isFeatured || false,
 
         // Flags
         isComposite: false,
@@ -304,7 +686,7 @@ export default function ItemListPage() {
         option3Name: null,
 
         // Source
-        source: "manual",
+        source: editingProduct?.source || "local",
 
         // Timestamps
         createdAt: editingProduct?.createdAt || new Date(),
@@ -317,7 +699,22 @@ export default function ItemListPage() {
         const newStock = productData.stock;
         const stockChanged = oldStock !== newStock;
 
+        // Admin: Save to Firebase FIRST (source of truth)
         await productsService.update(editingProduct.id, productData);
+        console.log("✅ Product updated in Firebase:", editingProduct.id);
+
+        // Sync to IndexedDB for cashier offline use
+        const updatedProduct = { ...productData, id: editingProduct.id };
+        try {
+          await dbService.upsertProducts([updatedProduct]);
+          console.log("✅ Product synced to IndexedDB for cashier offline use");
+        } catch (dbError) {
+          console.warn(
+            "⚠️ IndexedDB sync failed (cashier may have stale data):",
+            dbError.message
+          );
+          // Don't fail the save - Firebase is the source of truth
+        }
 
         // Log stock change in history if trackStock is enabled and stock changed
         if (productData.trackStock && stockChanged) {
@@ -348,8 +745,27 @@ export default function ItemListPage() {
 
         toast.success("Product updated successfully");
       } else {
+        // Admin: Create in Firebase FIRST (source of truth)
         const newProduct = await productsService.create(productData);
-        console.log("New product created:", newProduct);
+        console.log("✅ New product created in Firebase:", newProduct);
+
+        // Sync to IndexedDB for cashier offline use
+        if (newProduct && newProduct.id) {
+          try {
+            await dbService.upsertProducts([
+              { ...productData, id: newProduct.id },
+            ]);
+            console.log(
+              "✅ Product synced to IndexedDB for cashier offline use"
+            );
+          } catch (dbError) {
+            console.warn(
+              "⚠️ IndexedDB sync failed (cashier may have stale data):",
+              dbError.message
+            );
+            // Don't fail the save - Firebase is the source of truth
+          }
+        }
 
         // Log initial stock in history if trackStock is enabled
         if (
@@ -414,6 +830,7 @@ export default function ItemListPage() {
       sku: product.sku || "",
       barcode: product.barcode || "",
       price: product.price?.toString() || "",
+      memberPrice: product.memberPrice?.toString() || "",
       cost: product.cost?.toString() || "",
       stock: product.stock?.toString() || "",
       lowStock: product.lowStock?.toString() || "",
@@ -423,6 +840,21 @@ export default function ItemListPage() {
       form: product.form || "",
       color: product.color || "",
       imageUrl: product.imageUrl || "",
+      // New Kiosk API fields
+      productId: product.productId || "",
+      hasVariants: product.hasVariants || false,
+      variants: product.variants || [],
+      mainImage: product.mainImage || "",
+      images: product.images || [],
+      backgroundImage: product.backgroundImage || "",
+      backgroundFit: product.backgroundFit || "contain",
+      textColor: product.textColor || "#000000",
+      modelUrl: product.modelUrl || "",
+      modelRotationX: product.modelRotationX || 0,
+      modelRotationY: product.modelRotationY || 0,
+      modelRotationZ: product.modelRotationZ || 0,
+      notes: product.notes || "",
+      isFeatured: product.isFeatured || false,
     });
     setIsModalOpen(true);
   };
@@ -431,11 +863,27 @@ export default function ItemListPage() {
     if (!confirm("Are you sure you want to delete this product?")) return;
 
     try {
+      console.log("🗑️ Deleting product:", id);
+
+      // Admin: Delete from Firebase FIRST (source of truth)
       await productsService.delete(id);
+      console.log("✅ Product deleted from Firebase:", id);
+
+      // Sync deletion to IndexedDB for cashier
+      try {
+        await dbService.deleteProduct(id);
+        console.log("✅ Product deleted from IndexedDB (cashier sync)");
+      } catch (dbError) {
+        console.warn("⚠️ IndexedDB delete sync failed:", dbError.message);
+        // Don't fail - Firebase is source of truth
+      }
+
       toast.success("Product deleted successfully");
-      loadProducts();
+      console.log("🔄 Reloading products...");
+      await loadProducts();
+      console.log("✅ Products reloaded");
     } catch (error) {
-      console.error("Error deleting product:", error);
+      console.error("❌ Error deleting product:", error);
       toast.error("Failed to delete product");
     }
   };
@@ -454,17 +902,86 @@ export default function ItemListPage() {
       return;
 
     try {
-      await Promise.all(
-        selectedProducts.map((id) => productsService.delete(id))
-      );
+      console.log("🗑️ BULK DELETE START");
+      console.log("Selected product IDs:", selectedProducts);
+
+      setIsDeletingBulk(true);
+      setDeleteProgress({
+        current: 0,
+        total: selectedProducts.length,
+        failed: [],
+      });
+
+      let successCount = 0;
+      const failedDeletions = [];
+
+      // Delete from Firebase one by one (to track progress)
+      for (let i = 0; i < selectedProducts.length; i++) {
+        const productId = selectedProducts[i];
+        const product = products.find((p) => p.id === productId);
+        console.log(
+          `🗑️ [${i + 1}/${selectedProducts.length}] Deleting from Firebase:`,
+          {
+            id: productId,
+            name: product?.name,
+          }
+        );
+
+        try {
+          await productsService.delete(productId);
+          console.log(
+            `✅ [${i + 1}/${selectedProducts.length}] Deleted from Firebase:`,
+            productId
+          );
+          successCount++;
+        } catch (error) {
+          console.warn(
+            `⚠️ [${i + 1}/${
+              selectedProducts.length
+            }] Firebase delete failed (may not exist):`,
+            productId
+          );
+          // Don't add to failed list - product may not exist in Firebase
+        }
+
+        setDeleteProgress({
+          current: i + 1,
+          total: selectedProducts.length,
+          failed: failedDeletions,
+        });
+      }
+
+      // Delete from IndexedDB in bulk (faster)
+      console.log("�️ Deleting from IndexedDB (bulk)...");
+      try {
+        await dbService.bulkDeleteProducts(selectedProducts);
+        console.log("✅ Deleted from IndexedDB (bulk)");
+      } catch (dbError) {
+        console.error("❌ IndexedDB bulk delete failed:", dbError);
+        toast.error("Failed to delete from local storage");
+      }
+
+      console.log("📊 Bulk delete summary:", {
+        total: selectedProducts.length,
+        firebaseAttempts: successCount,
+        indexedDBDeleted: selectedProducts.length,
+      });
+
       toast.success(
-        `${selectedProducts.length} product(s) deleted successfully`
+        `✅ Successfully deleted ${selectedProducts.length} product(s)`
       );
+
+      console.log("🔄 Reloading products...");
       setSelectedProducts([]);
-      loadProducts();
+      await loadProducts();
+      console.log("✅ Products reloaded after bulk delete");
+      console.log("🎯 Current products in state:", products.length);
     } catch (error) {
-      console.error("Error deleting products:", error);
+      console.error("❌ Error in bulk delete:", error);
       toast.error("Failed to delete products");
+    } finally {
+      setIsDeletingBulk(false);
+      setDeleteProgress({ current: 0, total: 0, failed: [] });
     }
   };
 
@@ -588,6 +1105,7 @@ export default function ItemListPage() {
       sku: nextSKU,
       barcode: "",
       price: "",
+      memberPrice: "",
       cost: "",
       stock: "",
       trackStock: false,
@@ -599,6 +1117,21 @@ export default function ItemListPage() {
       representationType: "color",
       image: null,
       imagePreview: null,
+      // New Kiosk API fields
+      productId: "",
+      hasVariants: false,
+      variants: [],
+      mainImage: "",
+      images: [],
+      backgroundImage: "",
+      backgroundFit: "contain",
+      textColor: "#000000",
+      modelUrl: "",
+      modelRotationX: 0,
+      modelRotationY: 0,
+      modelRotationZ: 0,
+      notes: "",
+      isFeatured: false,
     });
     setEditingProduct(null);
     setShowQuickAddCategory(false);
@@ -619,9 +1152,13 @@ export default function ItemListPage() {
       p.categoryId === selectedCategory ||
       (!p.categoryId && selectedCategory === "uncategorized");
 
-    // Source filter
+    // Source filter - check if product source matches any selected source
+    const productSource = p.source || "local";
     const matchesSource =
-      selectedSource === "all" || p.source === selectedSource;
+      (productSource === "kiosk" && selectedSources.kiosk) ||
+      (productSource === "local" && selectedSources.local) ||
+      (productSource === "loyverse" && selectedSources.loyverse) ||
+      (!p.source && selectedSources.local); // Products without source are considered local
 
     // Availability filter
     const matchesAvailability =
@@ -665,7 +1202,7 @@ export default function ItemListPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" key={refreshKey}>
       {/* Product Detail Modal */}
       <Dialog
         open={!!selectedProduct}
@@ -946,6 +1483,68 @@ export default function ItemListPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Bulk Delete Progress Modal */}
+      <Dialog open={isDeletingBulk} onOpenChange={() => {}}>
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Deleting Products</DialogTitle>
+            <DialogDescription>
+              Please wait while we delete the selected products...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Progress Bar */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-neutral-600 dark:text-neutral-400">
+                  Progress
+                </span>
+                <span className="font-medium">
+                  {deleteProgress.current} / {deleteProgress.total}
+                </span>
+              </div>
+              <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-blue-600 h-2.5 transition-all duration-300 ease-out"
+                  style={{
+                    width: `${
+                      (deleteProgress.current / deleteProgress.total) * 100
+                    }%`,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-neutral-500">
+                {deleteProgress.current === deleteProgress.total
+                  ? "Completed!"
+                  : `Deleting product ${deleteProgress.current} of ${deleteProgress.total}...`}
+              </p>
+            </div>
+
+            {/* Failed Items */}
+            {deleteProgress.failed.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-red-600">
+                  Failed to delete ({deleteProgress.failed.length}):
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {deleteProgress.failed.map((name, idx) => (
+                    <p
+                      key={idx}
+                      className="text-xs text-neutral-600 dark:text-neutral-400"
+                    >
+                      • {name}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
@@ -955,6 +1554,37 @@ export default function ItemListPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <Button
+            variant="outline"
+            onClick={handleClearIndexedDBOnly}
+            className="flex-shrink-0 border-orange-500 text-orange-600 hover:bg-orange-50"
+          >
+            <Trash2 className="h-4 w-4 lg:mr-2" />
+            <span className="hidden lg:inline">Clear IndexedDB Cache</span>
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleClearAndRefetch}
+            className="flex-shrink-0"
+          >
+            <Trash2 className="h-4 w-4 lg:mr-2" />
+            <span className="hidden lg:inline">Clear All & Refetch</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleFetchFromKiosk}
+            disabled={isFetchingFromKiosk}
+            className="flex-shrink-0"
+          >
+            <Download
+              className={`h-4 w-4 lg:mr-2 ${
+                isFetchingFromKiosk ? "animate-bounce" : ""
+              }`}
+            />
+            <span className="hidden lg:inline">
+              {isFetchingFromKiosk ? "Importing..." : "Import from Kiosk"}
+            </span>
+          </Button>
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
             <DialogTrigger asChild>
               <Button onClick={resetForm} className="flex-shrink-0">
@@ -1102,25 +1732,48 @@ export default function ItemListPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2">
-                      Cost / Buy Price (฿)
+                      Member Price (฿)
                     </label>
                     <Input
                       type="number"
                       step="0.01"
                       min="0"
                       placeholder="0.00"
-                      value={formData.cost}
+                      value={formData.memberPrice}
                       onChange={(e) =>
-                        setFormData({ ...formData, cost: e.target.value })
+                        setFormData({
+                          ...formData,
+                          memberPrice: e.target.value,
+                        })
                       }
-                      disabled={formData.trackStock}
                     />
                     <p className="text-xs text-neutral-500 mt-1">
-                      {formData.trackStock
-                        ? "Enter cost in Track Stock section below"
-                        : "Your purchase cost per product"}
+                      Special price for members (optional)
                     </p>
                   </div>
+                </div>
+
+                {/* Cost Field */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Cost / Buy Price (฿)
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={formData.cost}
+                    onChange={(e) =>
+                      setFormData({ ...formData, cost: e.target.value })
+                    }
+                    disabled={formData.trackStock}
+                  />
+                  <p className="text-xs text-neutral-500 mt-1">
+                    {formData.trackStock
+                      ? "Enter cost in Track Stock section below"
+                      : "Your purchase cost per product"}
+                  </p>
                 </div>
 
                 {/* SKU and Barcode */}
@@ -1437,15 +2090,53 @@ export default function ItemListPage() {
               </select>
 
               {/* Source Filter */}
-              <select
-                className="px-3 py-1.5 text-sm border rounded-md bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-                value={selectedSource}
-                onChange={(e) => setSelectedSource(e.target.value)}
-              >
-                <option value="all">All Sources</option>
-                <option value="loyverse">Loyverse</option>
-                <option value="manual">Manual</option>
-              </select>
+              <div className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                <span className="text-neutral-700 dark:text-neutral-300 font-medium">
+                  Source:
+                </span>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-3.5 h-3.5 rounded border-neutral-300"
+                    checked={selectedSources.kiosk}
+                    onChange={(e) =>
+                      setSelectedSources({
+                        ...selectedSources,
+                        kiosk: e.target.checked,
+                      })
+                    }
+                  />
+                  <span className="text-green-600 font-medium">Kiosk</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-3.5 h-3.5 rounded border-neutral-300"
+                    checked={selectedSources.local}
+                    onChange={(e) =>
+                      setSelectedSources({
+                        ...selectedSources,
+                        local: e.target.checked,
+                      })
+                    }
+                  />
+                  <span className="text-purple-600 font-medium">Local</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-3.5 h-3.5 rounded border-neutral-300"
+                    checked={selectedSources.loyverse}
+                    onChange={(e) =>
+                      setSelectedSources({
+                        ...selectedSources,
+                        loyverse: e.target.checked,
+                      })
+                    }
+                  />
+                  <span className="text-gray-600 font-medium">Loyverse</span>
+                </label>
+              </div>
 
               {/* Availability Filter */}
               <select
@@ -1471,7 +2162,9 @@ export default function ItemListPage() {
 
               {/* Clear Filters */}
               {(selectedCategory !== "all" ||
-                selectedSource !== "all" ||
+                !selectedSources.kiosk ||
+                !selectedSources.local ||
+                !selectedSources.loyverse ||
                 selectedAvailability !== "all" ||
                 selectedTrackStock !== "all" ||
                 searchQuery) && (
@@ -1480,7 +2173,11 @@ export default function ItemListPage() {
                   size="sm"
                   onClick={() => {
                     setSelectedCategory("all");
-                    setSelectedSource("all");
+                    setSelectedSources({
+                      kiosk: true,
+                      local: true,
+                      loyverse: true,
+                    });
                     setSelectedAvailability("all");
                     setSelectedTrackStock("all");
                     setSearchQuery("");
@@ -1540,7 +2237,9 @@ export default function ItemListPage() {
 
               {/* Clear Filters Button - Mobile */}
               {(selectedCategory !== "all" ||
-                selectedSource !== "all" ||
+                !selectedSources.kiosk ||
+                !selectedSources.local ||
+                !selectedSources.loyverse ||
                 selectedAvailability !== "all" ||
                 selectedTrackStock !== "all" ||
                 searchQuery) && (
@@ -1549,7 +2248,11 @@ export default function ItemListPage() {
                   size="sm"
                   onClick={() => {
                     setSelectedCategory("all");
-                    setSelectedSource("all");
+                    setSelectedSources({
+                      kiosk: true,
+                      local: true,
+                      loyverse: true,
+                    });
                     setSelectedAvailability("all");
                     setSelectedTrackStock("all");
                     setSearchQuery("");
@@ -1624,6 +2327,9 @@ export default function ItemListPage() {
                         <th className="text-left p-4 font-semibold text-sm">
                           Category
                         </th>
+                        <th className="text-left p-4 font-semibold text-sm">
+                          Source
+                        </th>
                         <th className="text-right p-4 font-semibold text-sm">
                           Price
                         </th>
@@ -1639,7 +2345,7 @@ export default function ItemListPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-neutral-700">
-                      {filteredProducts.map((product) => {
+                      {filteredProducts.map((product, index) => {
                         const margin =
                           product.cost > 0
                             ? (
@@ -1651,7 +2357,7 @@ export default function ItemListPage() {
 
                         return (
                           <tr
-                            key={product.id}
+                            key={`${product.id}-${index}`}
                             className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
                           >
                             {/* Checkbox */}
@@ -1732,6 +2438,32 @@ export default function ItemListPage() {
                               </Badge>
                             </td>
 
+                            {/* Source */}
+                            <td
+                              className="p-4 cursor-pointer"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <Badge
+                                className={cn(
+                                  "text-xs font-medium",
+                                  product.source === "kiosk" &&
+                                    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+                                  product.source === "local" &&
+                                    "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+                                  product.source === "loyverse" &&
+                                    "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+                                  !product.source &&
+                                    "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                                )}
+                              >
+                                {product.source === "kiosk"
+                                  ? "Kiosk"
+                                  : product.source === "loyverse"
+                                  ? "Loyverse"
+                                  : "Local"}
+                              </Badge>
+                            </td>
+
                             {/* Price */}
                             <td
                               className="p-4 text-right cursor-pointer"
@@ -1803,11 +2535,11 @@ export default function ItemListPage() {
 
           {/* Mobile View - Compact Expandable Cards */}
           <div className="lg:hidden space-y-3">
-            {filteredProducts.map((product) => {
+            {filteredProducts.map((product, index) => {
               const isExpanded = expandedProductId === product.id;
               return (
                 <Card
-                  key={product.id}
+                  key={`${product.id}-${index}`}
                   className="overflow-hidden border-2 dark:border-neutral-800 transition-all"
                   onClick={() =>
                     setExpandedProductId(isExpanded ? null : product.id)

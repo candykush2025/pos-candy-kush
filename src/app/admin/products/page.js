@@ -25,6 +25,8 @@ import {
   FolderTree,
   Tag,
   Percent,
+  Download,
+  RefreshCw,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -39,6 +41,7 @@ function ItemListTab() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [isFetchingFromKiosk, setIsFetchingFromKiosk] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -75,6 +78,133 @@ function ItemListTab() {
     }
   };
 
+  const handleFetchFromKiosk = async () => {
+    try {
+      setIsFetchingFromKiosk(true);
+      toast.info("Fetching products from Kiosk...");
+
+      // Fetch products from kiosk API
+      const kioskUrl = "https://candy-kush-kiosk.vercel.app/api/products";
+      const response = await fetch(kioskUrl);
+
+      if (!response.ok) {
+        throw new Error(`Kiosk API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("🏪 Kiosk API Response:", result);
+
+      if (!result.success || !result.data) {
+        throw new Error("Invalid response from Kiosk API");
+      }
+
+      const kioskProducts = result.data.products || [];
+      console.log("🏪 Fetched products from Kiosk:", kioskProducts);
+      console.log("🏪 Number of products:", kioskProducts.length);
+
+      // Transform kiosk product data to POS format
+      const transformedProducts = kioskProducts.map((kioskProduct) => ({
+        // Basic Info
+        id: kioskProduct.id || `kiosk_${Date.now()}_${Math.random()}`,
+        name: kioskProduct.name || "",
+        description: kioskProduct.description || "",
+
+        // Category
+        categoryId: kioskProduct.categoryId || null,
+        categoryName: kioskProduct.categoryName || "",
+
+        // Pricing
+        price: kioskProduct.price || kioskProduct.thbPrice || 0,
+        memberPrice: kioskProduct.memberPrice || null,
+        cost: kioskProduct.cost || 0,
+
+        // Stock
+        stock: kioskProduct.stock || 0,
+        inStock: kioskProduct.stock || 0,
+        stockUnit: kioskProduct.stockUnit || "piece",
+        minStock: kioskProduct.minStock || 0,
+        lowStock: kioskProduct.minStock || 5,
+        trackStock: true,
+
+        // SKU/Barcode
+        sku: kioskProduct.sku || kioskProduct.id || "",
+        barcode: kioskProduct.barcode || "",
+
+        // Images
+        image: kioskProduct.image || null,
+        imageUrl: kioskProduct.image || null,
+        images: kioskProduct.images || [],
+
+        // Product Details
+        thcPercentage: kioskProduct.thcPercentage || null,
+        cbdPercentage: kioskProduct.cbdPercentage || null,
+        strain: kioskProduct.strain || null,
+        effects: kioskProduct.effects || [],
+        flavors: kioskProduct.flavors || [],
+
+        // Status
+        isActive: kioskProduct.isActive !== false,
+        isFeatured: kioskProduct.isFeatured || false,
+
+        // Source tracking - mark as from Kiosk
+        source: "kiosk",
+
+        // Loyverse IDs
+        loyverseId: kioskProduct.loyverseId || null,
+        loyverseVariantId: kioskProduct.loyverseVariantId || null,
+
+        // Metadata
+        createdAt: kioskProduct.createdAt || new Date().toISOString(),
+        updatedAt: kioskProduct.updatedAt || new Date().toISOString(),
+      }));
+
+      // Save to Firebase (create or update)
+      const savePromises = transformedProducts.map(async (product) => {
+        try {
+          // Check if product already exists
+          const existing = await productsService.get(product.id);
+
+          if (existing) {
+            // Update existing product
+            await productsService.update(product.id, product);
+            console.log(`✅ Updated product: ${product.name}`);
+          } else {
+            // Create new product
+            await productsService.create(product);
+            console.log(`✅ Created product: ${product.name}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error saving product ${product.name}:`, error);
+          throw error;
+        }
+      });
+
+      await Promise.all(savePromises);
+      console.log("💾 All Kiosk products saved to Firebase");
+
+      // Fetch ALL products from Firebase (not just kiosk)
+      const allProducts = await productsService.getAll({
+        orderBy: ["name", "asc"],
+      });
+      console.log("📊 Total products in Firebase:", allProducts.length);
+
+      // Sync all products to IndexedDB
+      await dbService.upsertProducts(allProducts);
+
+      // Update UI with all products (mixed data)
+      setProducts(allProducts);
+
+      toast.success(
+        `Successfully imported ${transformedProducts.length} products from Kiosk. Showing all ${allProducts.length} products.`
+      );
+    } catch (error) {
+      console.error("Error fetching products from Kiosk:", error);
+      toast.error(`Failed to fetch from Kiosk: ${error.message}`);
+    } finally {
+      setIsFetchingFromKiosk(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -87,6 +217,7 @@ function ItemListTab() {
         sku: formData.sku,
         category: formData.category,
         description: formData.description,
+        source: editingProduct?.source || "local", // Mark locally created products
       };
 
       if (editingProduct) {
@@ -162,128 +293,142 @@ function ItemListTab() {
           <h1 className="text-3xl font-bold">Products</h1>
           <p className="text-neutral-500 mt-2">Manage your product inventory</p>
         </div>
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {editingProduct ? "Edit Product" : "Add New Product"}
-              </DialogTitle>
-              <DialogDescription>
-                {editingProduct
-                  ? "Update product information"
-                  : "Create a new product"}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Product Name*</label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleFetchFromKiosk}
+            disabled={isFetchingFromKiosk}
+          >
+            <Download
+              className={`mr-2 h-4 w-4 ${
+                isFetchingFromKiosk ? "animate-bounce" : ""
+              }`}
+            />
+            {isFetchingFromKiosk ? "Importing..." : "Import from Kiosk"}
+          </Button>
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={resetForm}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Product
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingProduct ? "Edit Product" : "Add New Product"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingProduct
+                    ? "Update product information"
+                    : "Create a new product"}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Price*</label>
+                  <label className="text-sm font-medium">Product Name*</label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.price}
+                    value={formData.name}
                     onChange={(e) =>
-                      setFormData({ ...formData, price: e.target.value })
+                      setFormData({ ...formData, name: e.target.value })
                     }
                     required
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Price*</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.price}
+                      onChange={(e) =>
+                        setFormData({ ...formData, price: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Stock*</label>
+                    <Input
+                      type="number"
+                      value={formData.stock}
+                      onChange={(e) =>
+                        setFormData({ ...formData, stock: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Barcode</label>
+                    <Input
+                      value={formData.barcode}
+                      onChange={(e) =>
+                        setFormData({ ...formData, barcode: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">SKU</label>
+                    <Input
+                      value={formData.sku}
+                      onChange={(e) =>
+                        setFormData({ ...formData, sku: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Stock*</label>
-                  <Input
-                    type="number"
-                    value={formData.stock}
+                  <label className="text-sm font-medium">Category</label>
+                  <select
+                    className="w-full px-3 py-2 border rounded-md"
+                    value={formData.category}
                     onChange={(e) =>
-                      setFormData({ ...formData, stock: e.target.value })
+                      setFormData({ ...formData, category: e.target.value })
                     }
-                    required
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea
+                    className="w-full px-3 py-2 border rounded-md"
+                    rows={3}
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Barcode</label>
-                  <Input
-                    value={formData.barcode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, barcode: e.target.value })
-                    }
-                  />
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsModalOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit">
+                    {editingProduct ? "Update" : "Create"}
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">SKU</label>
-                  <Input
-                    value={formData.sku}
-                    onChange={(e) =>
-                      setFormData({ ...formData, sku: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Category</label>
-                <select
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
-                  }
-                >
-                  <option value="">Select category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.name}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
-                <textarea
-                  className="w-full px-3 py-2 border rounded-md"
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  {editingProduct ? "Update" : "Create"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search */}
@@ -333,6 +478,26 @@ function ItemListTab() {
                       <h3 className="font-semibold text-lg">{product.name}</h3>
                       {product.category && (
                         <Badge variant="secondary">{product.category}</Badge>
+                      )}
+                      {product.source && (
+                        <Badge
+                          variant={
+                            product.source === "loyverse"
+                              ? "secondary"
+                              : product.source === "kiosk"
+                              ? "default"
+                              : "outline"
+                          }
+                          className={
+                            product.source === "kiosk"
+                              ? "text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                              : product.source === "local"
+                              ? "text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
+                              : "text-xs"
+                          }
+                        >
+                          {product.source}
+                        </Badge>
                       )}
                     </div>
                     <div className="flex items-center space-x-4 mt-2 text-sm text-neutral-500">
