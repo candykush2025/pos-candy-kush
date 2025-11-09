@@ -278,11 +278,15 @@ button,
   -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
 }
 
-/* Prevent zooming on PWA and mobile */
+/* Prevent zooming on PWA and mobile and disable browser pull-to-refresh (overscroll) */
 html,
 body {
   touch-action: pan-x pan-y;
   -ms-touch-action: pan-x pan-y;
+  /* Prevent pull-to-refresh / overscroll on supporting browsers */
+  overscroll-behavior: none;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: none;
 }
 
 * {

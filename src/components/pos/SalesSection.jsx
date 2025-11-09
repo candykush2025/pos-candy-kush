@@ -217,6 +217,39 @@ export default function SalesSection({ cashier }) {
     "#84cc16", // Lime
   ];
 
+  // Prevent mobile pull-to-refresh on iOS (fallback for browsers that don't support overscroll-behavior)
+  useEffect(() => {
+    let startY = 0;
+    let maybePrevent = false;
+
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 1) return;
+      startY = e.touches[0].clientY;
+      // If the document is scrolled to the top, we may need to prevent pull-to-refresh
+      maybePrevent =
+        window.scrollY === 0 || document.documentElement.scrollTop === 0;
+    };
+
+    const onTouchMove = (e) => {
+      if (!maybePrevent) return;
+      const currentY = e.touches[0].clientY;
+      const diffY = currentY - startY;
+      // if user is pulling down (positive diff) while at page top, prevent default to stop refresh
+      if (diffY > 0) {
+        e.preventDefault();
+      }
+    };
+
+    // Use passive: false so we can call preventDefault()
+    document.addEventListener("touchstart", onTouchStart, { passive: false });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
+
   // DnD Kit sensors
   const pointerSensor = useSensor(PointerSensor, {
     activationConstraint: isDragMode

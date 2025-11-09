@@ -292,6 +292,8 @@ export const subscribeToCollection = (
 export const productsService = {
   create: (data) => createDocument(COLLECTIONS.PRODUCTS, data),
   get: (id) => getDocument(COLLECTIONS.PRODUCTS, id),
+  // Backwards-compatible alias used across the codebase
+  getById: (id) => getDocument(COLLECTIONS.PRODUCTS, id),
   getAll: (options) => getDocuments(COLLECTIONS.PRODUCTS, options),
   update: (id, data) => updateDocument(COLLECTIONS.PRODUCTS, id, data),
   delete: (id) => deleteDocument(COLLECTIONS.PRODUCTS, id),
