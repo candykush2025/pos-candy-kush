@@ -475,6 +475,38 @@ function ItemListTab() {
                 >
                   <div className="flex-1">
                     <div className="flex items-center space-x-3">
+                      {/* Product image or color */}
+                      <div className="flex-shrink-0">
+                        {product.imageUrl ||
+                        product.image ||
+                        product.image_url ||
+                        (Array.isArray(product.images) &&
+                          product.images[0]?.url) ? (
+                          <img
+                            src={
+                              product.imageUrl ||
+                              product.image ||
+                              product.image_url ||
+                              (Array.isArray(product.images) &&
+                                product.images[0]?.url)
+                            }
+                            alt={product.name}
+                            className="w-10 h-10 object-cover rounded"
+                          />
+                        ) : product.color ? (
+                          <div
+                            className="w-10 h-10 rounded"
+                            style={{ backgroundColor: product.color }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-gray-200 flex items-center justify-center">
+                            <span className="text-sm font-semibold text-gray-700">
+                              {product.name?.charAt(0)?.toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
                       <h3 className="font-semibold text-lg">{product.name}</h3>
                       {product.category && (
                         <Badge variant="secondary">{product.category}</Badge>

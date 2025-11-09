@@ -75,7 +75,8 @@ export default function AdminDashboard() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  // Default automatic sync to disabled in admin dashboard
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(30);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -88,7 +89,8 @@ export default function AdminDashboard() {
     try {
       // Load sync settings
       const settings = await getDocument(COLLECTIONS.SETTINGS, "sync_settings");
-      const autoSyncEnabledSetting = settings?.autoSyncEnabled ?? true;
+      // Default to disabled if the setting is missing
+      const autoSyncEnabledSetting = settings?.autoSyncEnabled ?? false;
       const intervalMinutes = settings?.syncIntervalMinutes ?? 30;
 
       setAutoSyncEnabled(autoSyncEnabledSetting);

@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Trash2, FolderTree } from "lucide-react";
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
+import { categoriesService, productsService } from "@/lib/firebase/firestore";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState([]);
@@ -27,6 +28,8 @@ export default function CategoriesPage() {
     name: "",
     color: "#3b82f6",
   });
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
   useEffect(() => {
     loadCategories();
@@ -39,15 +42,126 @@ export default function CategoriesPage() {
   const loadCategories = async () => {
     try {
       setLoading(true);
-      const cats = await dbService.getCategories();
-      setCategories(cats);
-      setFilteredCategories(cats);
+      // Always load categories from Firebase (admin must see live data)
+      let cats = [];
+      try {
+        cats = await categoriesService.getAll();
+        console.log(`Loaded ${cats.length} categories from Firebase`);
+      } catch (err) {
+        console.warn(
+          "Failed to load categories from Firebase, falling back to local IndexedDB:",
+          err
+        );
+        cats = await dbService.getCategories();
+      }
+
+      setCategories(cats.filter((c) => !c.deletedAt));
+      setFilteredCategories(cats.filter((c) => !c.deletedAt));
+
+      // Sync categories to IndexedDB for offline use
+      try {
+        if (cats && cats.length > 0) {
+          await dbService.upsertCategories(cats);
+          console.log("✅ Synced categories to IndexedDB");
+        }
+      } catch (err) {
+        console.warn("Failed to upsert categories into IndexedDB:", err);
+      }
     } catch (error) {
       console.error("Error loading categories:", error);
       toast.error("Failed to load categories");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Selection helpers for bulk actions
+  const toggleCategorySelection = (categoryId) => {
+    setSelectedCategories((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const toggleSelectAllCategories = () => {
+    if (selectedCategories.length === filteredCategories.length) {
+      setSelectedCategories([]);
+    } else {
+      setSelectedCategories(filteredCategories.map((c) => c.id));
+    }
+  };
+
+  const handleBulkDeleteCategories = async () => {
+    if (selectedCategories.length === 0) {
+      toast.error("No categories selected");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Are you sure you want to delete ${selectedCategories.length} category(s)?`
+      )
+    )
+      return;
+
+    setIsDeletingBulk(true);
+    const failed = [];
+
+    for (let i = 0; i < selectedCategories.length; i++) {
+      const catId = selectedCategories[i];
+      try {
+        // Check products in category
+        let hasProducts = false;
+        try {
+          const prods = await productsService.getAll({
+            where: ["categoryId", "==", catId],
+          });
+          hasProducts = prods && prods.length > 0;
+        } catch (err) {
+          const localProds = await dbService.getProducts();
+          hasProducts = localProds.some((p) => p.categoryId === catId);
+        }
+
+        if (hasProducts) {
+          failed.push({ id: catId, reason: "has_products" });
+          continue;
+        }
+
+        try {
+          await categoriesService.delete(catId);
+        } catch (err) {
+          // ignore - may not exist remotely
+          console.warn(
+            `Failed to delete category ${catId} from Firebase:`,
+            err
+          );
+        }
+
+        try {
+          await dbService.deleteCategory(catId);
+        } catch (err) {
+          console.warn(
+            `Failed to delete category ${catId} from IndexedDB:`,
+            err
+          );
+        }
+      } catch (err) {
+        failed.push({ id: catId, reason: err.message });
+      }
+    }
+
+    setIsDeletingBulk(false);
+    if (failed.length > 0) {
+      toast.error(
+        `Failed to delete ${failed.length} categories. Remove products from those categories first.`
+      );
+    } else {
+      toast.success(`Deleted ${selectedCategories.length} categories`);
+    }
+
+    setSelectedCategories([]);
+    await loadCategories();
   };
 
   const filterCategories = () => {
@@ -82,9 +196,21 @@ export default function CategoriesPage() {
     if (!confirm(`Delete category "${category.name}"?`)) return;
 
     try {
-      // Check if category has products
-      const products = await dbService.getProducts();
-      const hasProducts = products.some((p) => p.categoryId === category.id);
+      // Check if category has products in Firebase or local
+      let hasProducts = false;
+      try {
+        const prods = await productsService.getAll({
+          where: ["categoryId", "==", category.id],
+        });
+        hasProducts = prods && prods.length > 0;
+      } catch (err) {
+        console.warn(
+          "Failed to query products from Firebase, checking local IndexedDB:",
+          err
+        );
+        const localProds = await dbService.getProducts();
+        hasProducts = localProds.some((p) => p.categoryId === category.id);
+      }
 
       if (hasProducts) {
         toast.error(
@@ -93,9 +219,27 @@ export default function CategoriesPage() {
         return;
       }
 
-      await dbService.deleteCategory(category.id);
+      // Delete from Firebase first
+      try {
+        await categoriesService.delete(category.id);
+        console.log(`Deleted category ${category.id} from Firebase`);
+      } catch (err) {
+        console.warn(
+          "Failed to delete category from Firebase, attempting local delete:",
+          err
+        );
+      }
+
+      // Ensure local IndexedDB is cleaned
+      try {
+        await dbService.deleteCategory(category.id);
+        console.log(`Deleted category ${category.id} from IndexedDB`);
+      } catch (err) {
+        console.warn("Failed to delete category from IndexedDB:", err);
+      }
+
       toast.success("Category deleted successfully");
-      loadCategories();
+      await loadCategories();
     } catch (error) {
       console.error("Error deleting category:", error);
       toast.error("Failed to delete category");
@@ -118,21 +262,43 @@ export default function CategoriesPage() {
       };
 
       if (editingCategory) {
-        // Update existing
-        await dbService.updateCategory(editingCategory.id, categoryData);
+        // Update existing in Firebase
+        try {
+          await categoriesService.update(editingCategory.id, categoryData);
+          console.log(`Updated category ${editingCategory.id} in Firebase`);
+        } catch (err) {
+          console.warn(
+            "Failed to update category in Firebase, updating local only:",
+            err
+          );
+          await dbService.updateCategory(editingCategory.id, categoryData);
+        }
         toast.success("Category updated successfully");
       } else {
-        // Create new
-        categoryData.id = `cat_${Date.now()}`;
-        categoryData.createdAt = new Date().toISOString();
-        categoryData.source = "local";
-
-        await dbService.upsertCategories([categoryData]);
+        // Create new in Firebase
+        try {
+          const created = await categoriesService.create(categoryData);
+          // categoriesService.create returns { id, ...data }
+          // Upsert into local DB
+          await dbService.upsertCategories([created]);
+          console.log(
+            `Created category ${created.id} in Firebase and synced locally`
+          );
+        } catch (err) {
+          console.warn(
+            "Failed to create category in Firebase, creating local only:",
+            err
+          );
+          categoryData.id = `cat_${Date.now()}`;
+          categoryData.createdAt = new Date().toISOString();
+          categoryData.source = "local";
+          await dbService.upsertCategories([categoryData]);
+        }
         toast.success("Category created successfully");
       }
 
       setIsModalOpen(false);
-      loadCategories();
+      await loadCategories();
     } catch (error) {
       console.error("Error saving category:", error);
       toast.error("Failed to save category");
@@ -200,49 +366,95 @@ export default function CategoriesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredCategories.map((category) => (
-            <Card
-              key={category.id}
-              className="hover:shadow-lg transition-shadow"
-            >
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div
-                    className="h-12 w-12 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: category.color || "#808080" }}
-                  >
-                    <FolderTree className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(category)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(category)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </div>
-                </div>
-                <h3 className="font-semibold text-lg mb-2">{category.name}</h3>
-                <div className="flex items-center gap-2 text-sm text-neutral-500">
-                  {category.source && (
-                    <Badge variant="secondary" className="text-xs">
-                      {category.source}
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <>
+          {/* Bulk Actions */}
+          {selectedCategories.length > 0 && (
+            <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-between">
+              <span className="text-sm font-medium">
+                {selectedCategories.length} category(s) selected
+              </span>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDeleteCategories}
+                disabled={isDeletingBulk}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected
+              </Button>
+            </div>
+          )}
+
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-neutral-50 dark:bg-neutral-800 border-b dark:border-neutral-700">
+                    <tr>
+                      <th className="text-left p-4 font-semibold text-sm">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-neutral-300 cursor-pointer"
+                          checked={
+                            selectedCategories.length ===
+                              filteredCategories.length &&
+                            filteredCategories.length > 0
+                          }
+                          onChange={toggleSelectAllCategories}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </th>
+                      <th className="text-left p-4 font-semibold text-sm">
+                        Name
+                      </th>
+                      <th className="text-left p-4 font-semibold text-sm">
+                        Color
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y dark:divide-neutral-700">
+                    {filteredCategories.map((category) => (
+                      <tr
+                        key={category.id}
+                        className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors cursor-pointer"
+                        onClick={() => handleEdit(category)}
+                      >
+                        <td className="p-4">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded border-neutral-300 cursor-pointer"
+                            checked={selectedCategories.includes(category.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleCategorySelection(category.id);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </td>
+                        <td className="p-4 align-middle">
+                          <div className="font-semibold">{category.name}</div>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="h-8 w-8 rounded border"
+                              style={{
+                                backgroundColor: category.color || "#808080",
+                              }}
+                            />
+                            <div className="text-sm text-neutral-500">
+                              {category.color || "#808080"}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Category Form Modal */}
@@ -320,4 +532,3 @@ export default function CategoriesPage() {
     </div>
   );
 }
-

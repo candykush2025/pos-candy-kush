@@ -9,6 +9,11 @@ import useOnlineStatus from "@/hooks/useOnlineStatus";
 import { useIdleTimeout } from "@/hooks/useIdleTimeout";
 import { syncEngine } from "@/lib/sync/syncEngine";
 import { dbService } from "@/lib/db/dbService";
+import {
+  productsService,
+  categoriesService,
+  customersService,
+} from "@/lib/firebase/firestore";
 import api from "@/lib/api/client";
 import {
   Wifi,
@@ -336,7 +341,92 @@ export default function POSLayout({ children }) {
       return;
     }
     try {
+      // Run the standard sync (push pending, pull deltas)
       await syncEngine.forceSync();
+
+      // Additionally force a full refresh of core collections from Firebase
+      // to ensure we have the absolute latest products, categories and customers.
+      try {
+        const [products, categories, customers] = await Promise.all([
+          productsService.getAll(),
+          categoriesService.getAll(),
+          customersService.getAll({ orderBy: ["name", "asc"] }),
+        ]);
+
+        if (products && products.length > 0) {
+          // Clear local products then rewrite from Firebase so local exactly matches server
+          try {
+            const localProducts = await dbService.getProducts();
+            const localIds = localProducts.map((p) => p.id);
+            if (localIds.length > 0) {
+              await dbService.bulkDeleteProducts(localIds);
+              console.log(
+                `Force-refresh: cleared ${localIds.length} local products before rewrite`
+              );
+            }
+            await dbService.upsertProducts(products);
+            console.log(
+              `Force-refresh: rewrote ${products.length} products from Firebase into local DB`
+            );
+          } catch (err) {
+            console.warn(
+              "Force-refresh: failed to clear-and-rewrite products:",
+              err
+            );
+          }
+        }
+        if (categories && categories.length > 0) {
+          // Clear local categories then rewrite from Firebase
+          try {
+            const localCats = await dbService.getCategories();
+            const localCatIds = localCats.map((c) => c.id);
+            for (const cid of localCatIds) {
+              try {
+                await dbService.deleteCategory(cid);
+              } catch (e) {
+                console.warn(`Failed to delete local category ${cid}:`, e);
+              }
+            }
+            await dbService.upsertCategories(categories);
+            console.log(
+              `Force-refresh: rewrote ${categories.length} categories from Firebase into local DB`
+            );
+          } catch (err) {
+            console.warn(
+              "Force-refresh: failed to clear-and-rewrite categories:",
+              err
+            );
+          }
+        }
+        if (customers && customers.length > 0) {
+          // Clear local customers then rewrite from Firebase
+          try {
+            const localCustomers = await dbService.getCustomers();
+            const localCustIds = localCustomers.map((c) => c.id);
+            for (const uid of localCustIds) {
+              try {
+                await dbService.deleteCustomer(uid);
+              } catch (e) {
+                console.warn(`Failed to delete local customer ${uid}:`, e);
+              }
+            }
+            await dbService.upsertCustomers(customers);
+            console.log(
+              `Force-refresh: rewrote ${customers.length} customers from Firebase into local DB`
+            );
+          } catch (err) {
+            console.warn(
+              "Force-refresh: failed to clear-and-rewrite customers:",
+              err
+            );
+          }
+        }
+
+        // Notify open windows/components to reload from local DB / re-render
+        window.dispatchEvent(new Event("force-refresh-data"));
+      } catch (refreshErr) {
+        console.warn("Force-refresh failed:", refreshErr);
+      }
     } catch (error) {
       console.error("Force sync failed:", error);
     }

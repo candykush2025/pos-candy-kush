@@ -69,7 +69,8 @@ export default function IntegrationPage() {
     receipts: { current: 0, total: 0, percentage: 0 },
     stock: { current: 0, total: 0, percentage: 0, status: "" },
   });
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  // Default automatic sync to disabled in admin unless explicitly enabled in settings
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(30);
   const [isEditingInterval, setIsEditingInterval] = useState(false);
   const [lastAutoSyncCheck, setLastAutoSyncCheck] = useState(null);
@@ -164,7 +165,8 @@ export default function IntegrationPage() {
     try {
       const settings = await getDocument(COLLECTIONS.SETTINGS, "sync_settings");
       if (settings) {
-        setAutoSyncEnabled(settings.autoSyncEnabled ?? true);
+        // If settings don't include the flag, default to disabled for safety
+        setAutoSyncEnabled(settings.autoSyncEnabled ?? false);
         setSyncIntervalMinutes(settings.syncIntervalMinutes ?? 30);
       }
     } catch (error) {

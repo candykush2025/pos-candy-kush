@@ -342,6 +342,18 @@ export default function SalesSection({ cashier }) {
     }
   }, [cashier?.id]);
 
+  // When connection returns online, always refetch fresh data from Firebase
+  useEffect(() => {
+    if (isOnline) {
+      console.log(
+        "Network online: refetching products and categories from Firebase"
+      );
+      loadProducts();
+      loadCustomers();
+    }
+    // Intentionally only listen to isOnline changes
+  }, [isOnline]);
+
   // Listen for cashier-update events from other components
   useEffect(() => {
     const handleCashierUpdate = () => {
@@ -351,9 +363,20 @@ export default function SalesSection({ cashier }) {
       }
     };
 
+    const handleForceRefresh = () => {
+      // Force-reload from IndexedDB (after layout triggers a full refresh)
+      if (cashier?.id) {
+        loadProducts();
+        loadCustomers();
+      }
+    };
+
     window.addEventListener("cashier-update", handleCashierUpdate);
-    return () =>
+    window.addEventListener("force-refresh-data", handleForceRefresh);
+    return () => {
       window.removeEventListener("cashier-update", handleCashierUpdate);
+      window.removeEventListener("force-refresh-data", handleForceRefresh);
+    };
   }, [cashier?.id]);
 
   // Reload custom tabs when user changes (login/logout) or products load
@@ -486,14 +509,88 @@ export default function SalesSection({ cashier }) {
     try {
       setIsLoading(true);
 
-      // Load products and categories from Firebase in parallel
+      // If offline, load from IndexedDB only (fallback)
+      if (!isOnline) {
+        console.log("📱 Offline: loading products from IndexedDB");
+        const productsData = await dbService.getProducts();
+        setProducts(productsData);
+        setFilteredProducts(productsData);
+
+        // Try to load categories from IndexedDB as well
+        try {
+          const cats = await dbService.getCategories();
+          const allCategories = cats.filter(
+            (cat) => cat.name && !cat.deletedAt
+          );
+          setCategoriesData(allCategories);
+          setCategories(allCategories.map((c) => c.name).sort());
+        } catch (catErr) {
+          console.warn("Failed to load categories from IndexedDB:", catErr);
+        }
+
+        setIsLoading(false);
+        return;
+      }
+
+      // Online: Load products and categories from Firebase in parallel (always prefer fresh server data)
       const [productsData, categoriesData] = await Promise.all([
         productsService.getAll(),
         categoriesService.getAll(),
       ]);
 
-      setProducts(productsData);
-      setFilteredProducts(productsData);
+      // Enrich products with latest stock from stock history (so Sales shows correct stock)
+      let finalProducts = productsData;
+      try {
+        const { stockHistoryService } = await import(
+          "@/lib/firebase/stockHistoryService"
+        );
+
+        const enriched = await Promise.all(
+          productsData.map(async (product) => {
+            if (product.trackStock) {
+              try {
+                const history = await stockHistoryService.getProductHistory(
+                  product.id,
+                  1
+                );
+                if (
+                  history &&
+                  history.length > 0 &&
+                  history[0].newStock !== undefined
+                ) {
+                  return {
+                    ...product,
+                    stock: history[0].newStock,
+                    inStock: history[0].newStock,
+                  };
+                }
+              } catch (err) {
+                console.warn(
+                  `Failed to fetch stock history for product ${product.id}:`,
+                  err
+                );
+              }
+            }
+
+            return {
+              ...product,
+              stock: product.stock || product.inStock || 0,
+              inStock: product.inStock || product.stock || 0,
+            };
+          })
+        );
+
+        finalProducts = enriched;
+      } catch (err) {
+        console.warn(
+          "Stock history enrichment failed, using raw products:",
+          err
+        );
+        finalProducts = productsData;
+      }
+
+      setProducts(finalProducts);
+      setFilteredProducts(finalProducts);
 
       // Get ALL categories from Firebase (not filtered by user)
       const allCategories = categoriesData.filter(
@@ -637,9 +734,46 @@ export default function SalesSection({ cashier }) {
         }
       }
 
-      // Sync to IndexedDB for offline access
-      if (productsData.length > 0) {
-        await dbService.upsertProducts(productsData);
+      // Clear local products and rewrite with fresh Firebase data so local exactly matches server
+      try {
+        const localProds = await dbService.getProducts();
+        const localIds = localProds.map((p) => p.id);
+        if (localIds.length > 0) {
+          await dbService.bulkDeleteProducts(localIds);
+          console.log(
+            `Cleared ${localIds.length} local products before rewrite`
+          );
+        }
+
+        if (finalProducts.length > 0) {
+          await dbService.upsertProducts(finalProducts);
+          console.log(
+            `Rewrote ${finalProducts.length} products from Firebase into local DB`
+          );
+        }
+      } catch (syncErr) {
+        console.warn("Failed to clear-and-rewrite products:", syncErr);
+      }
+
+      // Also clear local categories and rewrite to match Firebase finalCategories
+      try {
+        const localCats = await dbService.getCategories();
+        const localCatIds = localCats.map((c) => c.id);
+        for (const cid of localCatIds) {
+          try {
+            await dbService.deleteCategory(cid);
+          } catch (e) {
+            console.warn(`Failed to delete local category ${cid}:`, e);
+          }
+        }
+        if (finalCategories && finalCategories.length > 0) {
+          await dbService.upsertCategories(finalCategories);
+          console.log(
+            `Rewrote ${finalCategories.length} categories from Firebase into local DB`
+          );
+        }
+      } catch (catSyncErr) {
+        console.warn("Failed to clear-and-rewrite categories:", catSyncErr);
       }
 
       // Debug logging removed
@@ -676,10 +810,25 @@ export default function SalesSection({ cashier }) {
           `✅ Loaded ${firebaseCustomers.length} customers from Firebase`
         );
 
-        // Save all customers to IndexedDB for offline use
-        if (firebaseCustomers.length > 0) {
-          await dbService.upsertCustomers(firebaseCustomers);
-          console.log("💾 Synced all customers to IndexedDB");
+        // Replace local customers by clearing local storage first then writing fresh Firebase data
+        try {
+          const localCustomers = await dbService.getCustomers();
+          const localCustIds = localCustomers.map((c) => c.id);
+          for (const uid of localCustIds) {
+            try {
+              await dbService.deleteCustomer(uid);
+            } catch (e) {
+              console.warn(`Failed to delete local customer ${uid}:`, e);
+            }
+          }
+          if (firebaseCustomers.length > 0) {
+            await dbService.upsertCustomers(firebaseCustomers);
+            console.log(
+              `Rewrote ${firebaseCustomers.length} customers from Firebase into local DB`
+            );
+          }
+        } catch (custSyncErr) {
+          console.warn("Failed to clear-and-rewrite customers:", custSyncErr);
         }
 
         setCustomers(firebaseCustomers);
@@ -823,32 +972,64 @@ export default function SalesSection({ cashier }) {
   };
 
   const getProductStock = (product) => {
-    const direct = toNumber(product.stock, Number.NaN);
-    if (!Number.isNaN(direct)) return direct;
+    if (!product) return 0;
 
+    // Try multiple top-level stock-like fields used across integrations
+    const topLevelFields = [
+      "stock",
+      "inStock",
+      "in_stock",
+      "stock_quantity",
+      "quantity",
+      "inventory",
+      "available_stock",
+      "availableStock",
+    ];
+
+    for (const f of topLevelFields) {
+      const v = product[f];
+      const n = toNumber(v, Number.NaN);
+      if (!Number.isNaN(n)) return n;
+    }
+
+    // Check first variant if present (many systems store stock on variants)
     const firstVariant = Array.isArray(product.variants)
       ? product.variants[0]
       : null;
 
     if (firstVariant) {
-      const variantStock = toNumber(
-        firstVariant.stock ??
-          firstVariant.quantity ??
-          firstVariant.inventory ??
-          firstVariant.available_stock,
-        Number.NaN
-      );
-      if (!Number.isNaN(variantStock)) return variantStock;
+      const variantFields = [
+        "stock",
+        "inStock",
+        "stock_quantity",
+        "quantity",
+        "inventory",
+        "available_stock",
+        "availableStock",
+      ];
 
+      for (const f of variantFields) {
+        const v = firstVariant[f];
+        const n = toNumber(v, Number.NaN);
+        if (!Number.isNaN(n)) return n;
+      }
+
+      // Check nested stores on variant
       const firstStore = Array.isArray(firstVariant.stores)
         ? firstVariant.stores[0]
         : null;
       if (firstStore) {
-        const storeStock = toNumber(
-          firstStore.stock ?? firstStore.available_stock,
-          Number.NaN
-        );
-        if (!Number.isNaN(storeStock)) return storeStock;
+        const storeFields = [
+          "stock",
+          "available_stock",
+          "availableStock",
+          "quantity",
+        ];
+        for (const f of storeFields) {
+          const v = firstStore[f];
+          const n = toNumber(v, Number.NaN);
+          if (!Number.isNaN(n)) return n;
+        }
       }
     }
 

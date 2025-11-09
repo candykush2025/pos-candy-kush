@@ -57,11 +57,6 @@ export default function ItemListPage() {
   const [categories, setCategories] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedSources, setSelectedSources] = useState({
-    kiosk: true,
-    local: true,
-    loyverse: true,
-  });
   const [selectedAvailability, setSelectedAvailability] = useState("all");
   const [selectedTrackStock, setSelectedTrackStock] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -122,9 +117,28 @@ export default function ItemListPage() {
   });
 
   useEffect(() => {
-    // FORCE clear products first, then load from Firebase only
-    setProducts([]);
-    loadProducts();
+    // Optionally force clear IndexedDB and always load fresh data from Firebase
+    (async () => {
+      // If URL contains ?forceRefresh=true then clear IndexedDB cache first
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const force = params.get("forceRefresh") === "true";
+        if (force) {
+          console.log(
+            "🔁 forceRefresh=true - clearing IndexedDB before loading Firebase"
+          );
+          await dbService.clearAllData();
+          // Small pause to ensure DB cleared
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      } catch (err) {
+        console.warn("Failed to parse URL params or clear DB:", err);
+      }
+
+      // FORCE clear products first, then load from Firebase only
+      setProducts([]);
+      await loadProducts();
+    })();
     loadCategories();
   }, []);
 
@@ -211,21 +225,68 @@ export default function ItemListPage() {
         data.map((p) => p.id)
       );
 
-      // Force a complete state reset
+      // Force a complete state reset and enrich products with latest stock from stock history
       setProducts([]);
-      setTimeout(() => {
-        setProducts(data);
-        setRefreshKey((prev) => prev + 1); // Force re-render
-        console.log("✅ Products state updated with", data.length, "products");
-        console.log(
-          "🎯 Products in state:",
-          data.length === 0 ? "EMPTY" : `${data.length} products from Firebase`
-        );
-        if (data.length > 0) {
-          console.log(
-            "First 5 product IDs:",
-            data.slice(0, 5).map((p) => p.id)
+      setTimeout(async () => {
+        try {
+          const enriched = await Promise.all(
+            data.map(async (product) => {
+              // If product tracks stock, try to get latest stock from history (most recent entry)
+              if (product.trackStock) {
+                try {
+                  const history = await stockHistoryService.getProductHistory(
+                    product.id,
+                    1
+                  );
+                  if (
+                    history &&
+                    history.length > 0 &&
+                    history[0].newStock !== undefined
+                  ) {
+                    return {
+                      ...product,
+                      stock: history[0].newStock,
+                      inStock: history[0].newStock,
+                    };
+                  }
+                } catch (err) {
+                  console.warn(
+                    `Failed to fetch stock history for ${product.id}:`,
+                    err
+                  );
+                }
+              }
+
+              // Fallback to existing stock fields
+              return {
+                ...product,
+                stock: product.stock || product.inStock || 0,
+                inStock: product.inStock || product.stock || 0,
+              };
+            })
           );
+
+          setProducts(enriched);
+          setRefreshKey((prev) => prev + 1); // Force re-render
+          console.log(
+            "✅ Products state updated with",
+            enriched.length,
+            "products (enriched from stock history)"
+          );
+          if (enriched.length > 0) {
+            console.log(
+              "First 5 product IDs:",
+              enriched.slice(0, 5).map((p) => p.id)
+            );
+          }
+        } catch (enrichErr) {
+          console.error(
+            "Error enriching products with stock history:",
+            enrichErr
+          );
+          // Fallback to raw data
+          setProducts(data);
+          setRefreshKey((prev) => prev + 1);
         }
       }, 0);
     } catch (error) {
@@ -239,52 +300,64 @@ export default function ItemListPage() {
   const handleClearAndRefetch = async () => {
     if (
       !confirm(
-        "⚠️ This will clear ALL products from both Firebase and IndexedDB, then refetch from Kiosk. Continue?"
+        "This will refresh local cache to match Firebase (no deletions in Firebase). Continue?"
       )
     )
       return;
 
     try {
-      toast.info("🗑️ Clearing all products...");
+      toast.info("🔄 Refreshing local data from Firebase...");
 
-      // Step 1: Get all products from Firebase
-      const allProducts = await productsService.getAll();
-      console.log(`Found ${allProducts.length} products in Firebase to delete`);
+      // Step 1: Fetch all products from Firebase
+      const firebaseProducts = await productsService.getAll({
+        orderBy: ["name", "asc"],
+      });
+      console.log(`Fetched ${firebaseProducts.length} products from Firebase`);
 
-      // Step 2: Delete all from Firebase
-      for (const product of allProducts) {
-        try {
-          await productsService.delete(product.id);
-          console.log(`Deleted from Firebase: ${product.id}`);
-        } catch (error) {
-          console.warn(`Failed to delete from Firebase: ${product.id}`, error);
-        }
-      }
-
-      // Step 3: Clear IndexedDB
+      // Step 2: Upsert into IndexedDB for offline use
       try {
-        const dbProducts = await dbService.getProducts();
-        const dbProductIds = dbProducts.map((p) => p.id);
-        if (dbProductIds.length > 0) {
-          await dbService.bulkDeleteProducts(dbProductIds);
-          console.log(`Cleared ${dbProductIds.length} products from IndexedDB`);
+        if (firebaseProducts.length > 0) {
+          await dbService.upsertProducts(firebaseProducts);
+          console.log(
+            `Upserted ${firebaseProducts.length} products into IndexedDB`
+          );
+        } else {
+          console.warn(
+            "No products returned from Firebase to upsert into IndexedDB"
+          );
         }
-      } catch (error) {
-        console.warn("Failed to clear IndexedDB:", error);
+      } catch (err) {
+        console.warn("Failed to upsert products into IndexedDB:", err);
       }
 
-      toast.success("✅ All products cleared!");
+      // Step 3: Remove any local IndexedDB products that are not present in Firebase
+      try {
+        const localProducts = await dbService.getProducts();
+        const firebaseIds = new Set(firebaseProducts.map((p) => p.id));
+        const idsToDelete = localProducts
+          .map((p) => p.id)
+          .filter((id) => !firebaseIds.has(id));
 
-      // Step 4: Reload to show empty state
-      await loadProducts();
-
-      // Step 5: Ask to refetch from Kiosk
-      if (confirm("Products cleared. Fetch fresh data from Kiosk now?")) {
-        await handleFetchFromKiosk();
+        if (idsToDelete.length > 0) {
+          await dbService.bulkDeleteProducts(idsToDelete);
+          console.log(
+            `Deleted ${idsToDelete.length} local products not present in Firebase`
+          );
+        }
+      } catch (err) {
+        console.warn("Failed to clean local IndexedDB products:", err);
       }
+
+      // Step 4: Update UI state from Firebase
+      setProducts(firebaseProducts);
+      setRefreshKey((prev) => prev + 1);
+
+      toast.success(
+        `✅ Refreshed ${firebaseProducts.length} products from Firebase`
+      );
     } catch (error) {
-      console.error("Error clearing products:", error);
-      toast.error("Failed to clear products: " + error.message);
+      console.error("Error refreshing products:", error);
+      toast.error("Failed to refresh products: " + error.message);
     }
   };
 
@@ -1152,13 +1225,8 @@ export default function ItemListPage() {
       p.categoryId === selectedCategory ||
       (!p.categoryId && selectedCategory === "uncategorized");
 
-    // Source filter - check if product source matches any selected source
-    const productSource = p.source || "local";
-    const matchesSource =
-      (productSource === "kiosk" && selectedSources.kiosk) ||
-      (productSource === "local" && selectedSources.local) ||
-      (productSource === "loyverse" && selectedSources.loyverse) ||
-      (!p.source && selectedSources.local); // Products without source are considered local
+    // No source filtering for admin items - always include
+    const matchesSource = true;
 
     // Availability filter
     const matchesAvailability =
@@ -1257,9 +1325,12 @@ export default function ItemListPage() {
                         ? "Available"
                         : "Unavailable"}
                     </Badge>
-                    {selectedProduct.source && (
-                      <Badge variant="outline">{selectedProduct.source}</Badge>
-                    )}
+                    {selectedProduct.memberPrice != null &&
+                      selectedProduct.memberPrice !== "" && (
+                        <Badge variant="outline" className="text-amber-600">
+                          {formatCurrency(selectedProduct.memberPrice)}
+                        </Badge>
+                      )}
                   </div>
                 </div>
               </div>
@@ -1556,19 +1627,11 @@ export default function ItemListPage() {
         <div className="flex items-center gap-2 flex-shrink-0">
           <Button
             variant="outline"
-            onClick={handleClearIndexedDBOnly}
-            className="flex-shrink-0 border-orange-500 text-orange-600 hover:bg-orange-50"
-          >
-            <Trash2 className="h-4 w-4 lg:mr-2" />
-            <span className="hidden lg:inline">Clear IndexedDB Cache</span>
-          </Button>
-          <Button
-            variant="destructive"
             onClick={handleClearAndRefetch}
             className="flex-shrink-0"
           >
-            <Trash2 className="h-4 w-4 lg:mr-2" />
-            <span className="hidden lg:inline">Clear All & Refetch</span>
+            <RefreshCw className="h-4 w-4 lg:mr-2" />
+            <span className="hidden lg:inline">Refresh from Firebase</span>
           </Button>
           <Button
             variant="outline"
@@ -1947,37 +2010,31 @@ export default function ItemListPage() {
                       </button>
                     </div>
 
-                    {/* Color Picker */}
-                    {formData.representationType === "color" && (
-                      <div className="grid grid-cols-4 gap-3">
-                        {PRODUCT_COLORS.map((colorOption) => (
-                          <button
-                            key={colorOption.value}
-                            type="button"
-                            onClick={() =>
-                              setFormData({
-                                ...formData,
-                                color: colorOption.value,
-                              })
-                            }
-                            className={cn(
-                              "flex flex-col items-center gap-2 p-3 border-2 rounded-lg transition-all hover:scale-105",
-                              formData.color === colorOption.value
-                                ? "border-primary"
-                                : "border-neutral-200"
-                            )}
-                          >
-                            <div
-                              className="w-12 h-12 rounded-full"
-                              style={{ backgroundColor: colorOption.hex }}
-                            />
-                            <span className="text-xs font-medium">
-                              {colorOption.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {/* Color Choices */}
+                    <div className="grid grid-cols-8 gap-2">
+                      {PRODUCT_COLORS.map((colorOption) => (
+                        <button
+                          key={colorOption.value}
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              color: colorOption.value,
+                            })
+                          }
+                          className={`h-12 w-12 rounded-full border-2 transition-transform ${
+                            formData.color === colorOption.value
+                              ? "ring-2 ring-primary scale-110"
+                              : "border-transparent"
+                          }`}
+                        >
+                          <div
+                            className="w-12 h-12 rounded-full"
+                            style={{ backgroundColor: colorOption.hex }}
+                          />
+                        </button>
+                      ))}
+                    </div>
 
                     {/* Image Upload */}
                     {formData.representationType === "image" && (
@@ -2089,54 +2146,7 @@ export default function ItemListPage() {
                 <option value="uncategorized">Uncategorized</option>
               </select>
 
-              {/* Source Filter */}
-              <div className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md bg-white dark:bg-neutral-800 dark:border-neutral-700">
-                <span className="text-neutral-700 dark:text-neutral-300 font-medium">
-                  Source:
-                </span>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 rounded border-neutral-300"
-                    checked={selectedSources.kiosk}
-                    onChange={(e) =>
-                      setSelectedSources({
-                        ...selectedSources,
-                        kiosk: e.target.checked,
-                      })
-                    }
-                  />
-                  <span className="text-green-600 font-medium">Kiosk</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 rounded border-neutral-300"
-                    checked={selectedSources.local}
-                    onChange={(e) =>
-                      setSelectedSources({
-                        ...selectedSources,
-                        local: e.target.checked,
-                      })
-                    }
-                  />
-                  <span className="text-purple-600 font-medium">Local</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 rounded border-neutral-300"
-                    checked={selectedSources.loyverse}
-                    onChange={(e) =>
-                      setSelectedSources({
-                        ...selectedSources,
-                        loyverse: e.target.checked,
-                      })
-                    }
-                  />
-                  <span className="text-gray-600 font-medium">Loyverse</span>
-                </label>
-              </div>
+              {/* Source filter removed - always show all sources in admin */}
 
               {/* Availability Filter */}
               <select
@@ -2162,9 +2172,6 @@ export default function ItemListPage() {
 
               {/* Clear Filters */}
               {(selectedCategory !== "all" ||
-                !selectedSources.kiosk ||
-                !selectedSources.local ||
-                !selectedSources.loyverse ||
                 selectedAvailability !== "all" ||
                 selectedTrackStock !== "all" ||
                 searchQuery) && (
@@ -2173,11 +2180,6 @@ export default function ItemListPage() {
                   size="sm"
                   onClick={() => {
                     setSelectedCategory("all");
-                    setSelectedSources({
-                      kiosk: true,
-                      local: true,
-                      loyverse: true,
-                    });
                     setSelectedAvailability("all");
                     setSelectedTrackStock("all");
                     setSearchQuery("");
@@ -2237,9 +2239,6 @@ export default function ItemListPage() {
 
               {/* Clear Filters Button - Mobile */}
               {(selectedCategory !== "all" ||
-                !selectedSources.kiosk ||
-                !selectedSources.local ||
-                !selectedSources.loyverse ||
                 selectedAvailability !== "all" ||
                 selectedTrackStock !== "all" ||
                 searchQuery) && (
@@ -2248,11 +2247,6 @@ export default function ItemListPage() {
                   size="sm"
                   onClick={() => {
                     setSelectedCategory("all");
-                    setSelectedSources({
-                      kiosk: true,
-                      local: true,
-                      loyverse: true,
-                    });
                     setSelectedAvailability("all");
                     setSelectedTrackStock("all");
                     setSearchQuery("");
@@ -2328,7 +2322,7 @@ export default function ItemListPage() {
                           Category
                         </th>
                         <th className="text-left p-4 font-semibold text-sm">
-                          Source
+                          Member Price
                         </th>
                         <th className="text-right p-4 font-semibold text-sm">
                           Price
@@ -2438,30 +2432,17 @@ export default function ItemListPage() {
                               </Badge>
                             </td>
 
-                            {/* Source */}
+                            {/* Member Price */}
                             <td
-                              className="p-4 cursor-pointer"
+                              className="p-4 text-right cursor-pointer"
                               onClick={() => handleEdit(product)}
                             >
-                              <Badge
-                                className={cn(
-                                  "text-xs font-medium",
-                                  product.source === "kiosk" &&
-                                    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-                                  product.source === "local" &&
-                                    "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-                                  product.source === "loyverse" &&
-                                    "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
-                                  !product.source &&
-                                    "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                                )}
-                              >
-                                {product.source === "kiosk"
-                                  ? "Kiosk"
-                                  : product.source === "loyverse"
-                                  ? "Loyverse"
-                                  : "Local"}
-                              </Badge>
+                              <div className="font-medium text-amber-600 dark:text-amber-400">
+                                {product.memberPrice != null &&
+                                product.memberPrice !== ""
+                                  ? formatCurrency(product.memberPrice)
+                                  : "—"}
+                              </div>
                             </td>
 
                             {/* Price */}
@@ -2654,11 +2635,15 @@ export default function ItemListPage() {
                               {getCategoryName(product.categoryId)}
                             </Badge>
                           )}
-                          {product.source && (
-                            <Badge variant="outline" className="text-xs">
-                              {product.source}
-                            </Badge>
-                          )}
+                          {product.memberPrice != null &&
+                            product.memberPrice !== "" && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs text-amber-600"
+                              >
+                                {formatCurrency(product.memberPrice)}
+                              </Badge>
+                            )}
                           {product.isComposite && (
                             <Badge variant="outline" className="text-xs">
                               <Layers className="h-3 w-3 mr-1" />

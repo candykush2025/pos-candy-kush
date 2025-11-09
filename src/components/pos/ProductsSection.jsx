@@ -367,21 +367,37 @@ export default function ProductsSection() {
 
   const handleEditProduct = (product) => {
     setEditingProduct(product);
+    // Resolve any existing image from common fields so we don't lose it
+    const existingImage =
+      product.image ||
+      product.imageUrl ||
+      product.image_url ||
+      product.thumbnailUrl ||
+      product.thumbnail ||
+      (Array.isArray(product.images) && product.images[0]?.url) ||
+      null;
+
+    // Prefer SKU from sku field, then fall back to productId or posItemId if present
+    const initialSku =
+      product.sku || product.productId || product.posItemId || "";
+
     setProductFormData({
       name: product.name || "",
       categoryId: product.categoryId || "",
       soldBy: product.soldBy || "each",
       price: product.price || "",
       cost: product.cost || "",
-      sku: product.sku || "",
+      sku: initialSku,
       barcode: product.barcode || "",
       trackStock: product.trackStock || false,
       inStock: product.stock || product.inStock || "",
       lowStock: product.lowStock || "",
-      representationType: product.image ? "image" : "color",
+      // If there's any existing image, prefer image representation
+      representationType: existingImage ? "image" : "color",
       color: product.color || "GREY",
       image: null,
-      imagePreview: product.image || null,
+      // prefill preview with resolved existing image so modal shows it
+      imagePreview: existingImage,
     });
     setIsProductModalOpen(true);
   };
@@ -447,7 +463,13 @@ export default function ProductsSection() {
         soldBy: productFormData.soldBy,
         price: parseFloat(productFormData.price) || 0,
         cost: productFormData.cost ? parseFloat(productFormData.cost) : 0,
-        sku: productFormData.sku || "",
+        // Preserve existing SKU when editing if field left empty; otherwise use provided SKU
+        sku:
+          productFormData.sku ||
+          editingProduct?.sku ||
+          editingProduct?.productId ||
+          editingProduct?.posItemId ||
+          "",
         barcode: productFormData.barcode || "",
         trackStock: productFormData.trackStock,
         source: editingProduct?.source || "local", // Mark locally created products
@@ -464,12 +486,27 @@ export default function ProductsSection() {
         productData.color = productFormData.color || "GREY";
       }
 
-      // Add image if using image representation
-      if (
-        productFormData.representationType === "image" &&
-        productFormData.imagePreview
-      ) {
-        productData.image = productFormData.imagePreview;
+      // Add image if using image representation. Preserve existing image fields
+      // (product.image, imageUrl, image_url, thumbnail, images[0].url) when
+      // the user didn't upload a new image but modal had a preview from existing data.
+      if (productFormData.representationType === "image") {
+        if (productFormData.imagePreview) {
+          productData.image = productFormData.imagePreview;
+        } else if (editingProduct) {
+          // Fall back to any existing image on the product
+          const existingImage =
+            editingProduct.image ||
+            editingProduct.imageUrl ||
+            editingProduct.image_url ||
+            editingProduct.thumbnailUrl ||
+            editingProduct.thumbnail ||
+            (Array.isArray(editingProduct.images) &&
+              editingProduct.images[0]?.url) ||
+            null;
+          if (existingImage) {
+            productData.image = existingImage;
+          }
+        }
       }
 
       if (editingProduct) {
@@ -638,30 +675,42 @@ export default function ProductsSection() {
   };
 
   const getProductDisplay = (product) => {
-    if (product.image_url) {
+    // Prefer common image fields: imageUrl, image, image_url, thumbnailUrl, thumbnail, images[0].url
+    const imageUrl =
+      product.imageUrl ||
+      product.image ||
+      product.image_url ||
+      product.thumbnailUrl ||
+      product.thumbnail ||
+      (Array.isArray(product.images) && product.images[0]?.url) ||
+      null;
+
+    if (imageUrl) {
       return (
         <img
-          src={product.image_url}
+          src={imageUrl}
           alt={product.name}
           className="w-12 h-12 object-cover rounded"
         />
       );
-    } else if (product.color) {
+    }
+
+    if (product.color) {
       return (
         <div
           className="w-12 h-12 rounded"
           style={{ backgroundColor: product.color }}
         />
       );
-    } else {
-      return (
-        <div className="w-12 h-12 rounded bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 flex items-center justify-center">
-          <span className="text-white font-semibold text-lg">
-            {product.name?.charAt(0).toUpperCase()}
-          </span>
-        </div>
-      );
     }
+
+    return (
+      <div className="w-12 h-12 rounded bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 flex items-center justify-center">
+        <span className="text-white font-semibold text-lg">
+          {product.name?.charAt(0).toUpperCase()}
+        </span>
+      </div>
+    );
   };
 
   const menuItems = [
