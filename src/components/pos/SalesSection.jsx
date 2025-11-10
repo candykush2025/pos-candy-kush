@@ -379,27 +379,32 @@ export default function SalesSection({ cashier }) {
     };
   }, [cashier?.id]);
 
-  // Reload custom tabs when user changes (login/logout) or products load
+  // Reload custom tabs when user changes (login/logout) - only once when products are ready
   useEffect(() => {
-    if (userId && products.length > 0) {
+    if (userId && products.length > 0 && categoriesData.length > 0) {
       loadCustomTabsFromUser();
     }
-  }, [userId, products.length]);
+  }, [userId]); // Only reload when userId changes, not on every product change
 
   const loadCustomTabsFromUser = async () => {
     if (!userId || products.length === 0) return;
+
+    console.log("📥 loadCustomTabsFromUser called");
+
+    // CLEAR OLD localStorage data FIRST!
+    console.log("🗑️ Clearing old localStorage custom tabs data...");
+    localStorage.removeItem("custom_category_products");
+    localStorage.removeItem("category_slot_colors");
+    localStorage.removeItem("custom_categories");
 
     try {
       // Load ALL custom tabs from all users in Firebase (shared across all users)
       const firebaseTabs = await customTabsService.getAllCustomTabs();
 
+      console.log("📦 Firebase tabs received:", firebaseTabs);
+
       if (firebaseTabs && firebaseTabs.categories) {
         setCustomCategories(firebaseTabs.categories || []);
-
-        // Load category slot colors if available
-        if (firebaseTabs.categorySlotColors) {
-          setCategorySlotColors(firebaseTabs.categorySlotColors);
-        }
 
         // Convert slot IDs back to full objects
         const productMap = {};
@@ -409,10 +414,24 @@ export default function SalesSection({ cashier }) {
         categoriesData.forEach((c) => (categoryMap[c.id] = c));
 
         const resolvedSlots = {};
+        const loadedColors = {}; // Still extract for backward compatibility with old color picker
+
         Object.keys(firebaseTabs.categoryProducts || {}).forEach((category) => {
           const slots = firebaseTabs.categoryProducts[category];
-          resolvedSlots[category] = slots.map((slot) => {
+          const resolvedArray = slots.map((slot, index) => {
             if (!slot) return null;
+
+            // Debug: Show what we got from Firebase
+            if (index === 2) {
+              console.log(`📦 Raw slot 2 from Firebase:`, slot);
+            }
+
+            // Extract color for state (needed for color picker)
+            if (slot.color) {
+              const slotKey = `${category}-${index}-${slot.id}`;
+              loadedColors[slotKey] = slot.color;
+              console.log(`🎨 Loaded color for ${slotKey}: ${slot.color}`);
+            }
 
             if (slot.type === "product") {
               const product = productMap[slot.id];
@@ -426,6 +445,7 @@ export default function SalesSection({ cashier }) {
                 return {
                   type: "category",
                   id: slot.id,
+                  color: slot.color, // ✅ KEEP COLOR IN SLOT!
                   data: {
                     name: categoryData.name,
                     categoryId: slot.id,
@@ -436,6 +456,7 @@ export default function SalesSection({ cashier }) {
                 return {
                   type: "category",
                   id: slot.id,
+                  color: slot.color, // ✅ KEEP COLOR IN SLOT!
                   data: {
                     name: slot.id,
                     categoryId: slot.id,
@@ -445,7 +466,21 @@ export default function SalesSection({ cashier }) {
             }
             return null;
           });
+
+          // Ensure array is always 20 slots (pad with null if shorter)
+          resolvedSlots[category] = Array.from({ length: 20 }, (_, i) =>
+            resolvedArray[i] !== undefined ? resolvedArray[i] : null
+          );
         });
+
+        // Set colors state (for color picker)
+        console.log("🎨 Setting colors state:", loadedColors);
+        setCategorySlotColors(loadedColors);
+        localStorage.setItem(
+          "category_slot_colors",
+          JSON.stringify(loadedColors)
+        );
+
         setCustomCategoryProducts(resolvedSlots);
 
         // Also save to localStorage as backup
@@ -663,6 +698,7 @@ export default function SalesSection({ cashier }) {
                       ? {
                           type: "category",
                           id: slot.id,
+                          color: slot.color, // ✅ KEEP COLOR IN SLOT!
                           data: {
                             name: categoryData.name,
                             categoryId: slot.id,
@@ -1071,54 +1107,76 @@ export default function SalesSection({ cashier }) {
     addItem(product, 1);
   };
 
+  // Helper to ALWAYS ensure array is exactly 20 slots
+  const ensureTwentySlots = (slots) => {
+    if (!slots) return Array(20).fill(null);
+    return Array.from({ length: 20 }, (_, i) =>
+      slots[i] !== undefined ? slots[i] : null
+    );
+  };
+
   // Helper function to save custom tabs to Firebase
   const saveCustomTabsToFirebase = async (categories, categoryProducts) => {
+    // Always save to localStorage immediately as backup
+    localStorage.setItem("custom_categories", JSON.stringify(categories));
+    localStorage.setItem(
+      "custom_category_products",
+      JSON.stringify(categoryProducts)
+    );
+
     if (!userId) {
-      localStorage.setItem("custom_categories", JSON.stringify(categories));
-      localStorage.setItem(
-        "custom_category_products",
-        JSON.stringify(categoryProducts)
+      console.log("No userId, saved to localStorage only");
+      return;
+    }
+
+    // If online, save to Firebase immediately
+    if (!isOnline) {
+      console.log(
+        "Offline - saved to localStorage only, will sync when online"
       );
+      toast.warning("Offline - changes saved locally");
       return;
     }
 
     try {
-      // Convert slots to minimal structure (type and id only)
+      // Convert slots to minimal structure (type, id, and color) - ALWAYS 20 slots
       const slotIds = {};
       Object.keys(categoryProducts).forEach((category) => {
-        slotIds[category] = categoryProducts[category].map((slot) => {
+        const slots = ensureTwentySlots(categoryProducts[category]);
+        slotIds[category] = slots.map((slot, index) => {
           if (!slot) return null;
+
+          // Include color if this is a category slot and has a custom color
+          const slotKey = `${category}-${index}-${slot.id}`;
+          const color = categorySlotColors[slotKey];
+
           return {
             type: slot.type,
             id: slot.id,
+            ...(color && { color }), // Only include color if it exists
           };
         });
       });
 
-      // Save to this user's document - will be merged with others when loading
+      console.log("💾 Saving custom tabs to Firebase:", {
+        userId,
+        categories,
+        categoryCount: categories.length,
+        slotsCount: Object.keys(slotIds).length,
+      });
+
+      // Save to Firebase immediately (no separate categorySlotColors needed!)
       await customTabsService.saveUserTabs(userId, {
         categories,
         categoryProducts: slotIds,
-        categorySlotColors: categorySlotColors, // Save category slot box colors
       });
 
-      toast.success("Custom tabs synced to cloud (shared with all users)");
-
-      // Also save to localStorage as backup
-      localStorage.setItem("custom_categories", JSON.stringify(categories));
-      localStorage.setItem(
-        "custom_category_products",
-        JSON.stringify(categoryProducts)
-      );
+      console.log("✅ Custom tabs saved to Firebase successfully");
+      toast.success("Changes synced to cloud");
     } catch (error) {
-      console.error("Error saving to Firebase:", error);
+      console.error("❌ Error saving to Firebase:", error);
+      console.error("Error details:", error.message, error.stack);
       toast.error("Failed to sync to cloud, saved locally only");
-      // Fallback to localStorage only
-      localStorage.setItem("custom_categories", JSON.stringify(categories));
-      localStorage.setItem(
-        "custom_category_products",
-        JSON.stringify(categoryProducts)
-      );
     }
   };
 
@@ -1131,8 +1189,18 @@ export default function SalesSection({ cashier }) {
     const updatedCategories = [...customCategories, newCategoryName.trim()];
     setCustomCategories(updatedCategories);
 
+    // Initialize with 20 empty slots for the new category
+    const updatedCategoryProducts = {
+      ...customCategoryProducts,
+      [newCategoryName.trim()]: Array(20).fill(null),
+    };
+    setCustomCategoryProducts(updatedCategoryProducts);
+
     try {
-      await saveCustomTabsToFirebase(updatedCategories, customCategoryProducts);
+      await saveCustomTabsToFirebase(
+        updatedCategories,
+        updatedCategoryProducts
+      );
       toast.success(
         `Category "${newCategoryName.trim()}" added and synced to cloud`
       );
@@ -1186,7 +1254,9 @@ export default function SalesSection({ cashier }) {
 
     slotLongPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
-      const currentSlots = customCategoryProducts[selectedCategory] || [];
+      const currentSlots = ensureTwentySlots(
+        customCategoryProducts[selectedCategory]
+      );
       const currentSlot = currentSlots[index];
 
       // Show product select modal for all slots
@@ -1215,9 +1285,10 @@ export default function SalesSection({ cashier }) {
       selectedSlotIndex !== null &&
       customCategories.includes(selectedCategory)
     ) {
-      const currentSlots =
-        customCategoryProducts[selectedCategory] || Array(20).fill(null);
-      const updatedSlots = [...currentSlots];
+      // ALWAYS ensure array is exactly 20 slots
+      const updatedSlots = ensureTwentySlots(
+        customCategoryProducts[selectedCategory]
+      );
 
       // Store as object with type and data
       if (selectionType === "product") {
@@ -1255,9 +1326,10 @@ export default function SalesSection({ cashier }) {
   const handleRemoveFromSlot = async (index, e) => {
     e.stopPropagation();
     if (customCategories.includes(selectedCategory)) {
-      const currentSlots =
-        customCategoryProducts[selectedCategory] || Array(20).fill(null);
-      const updatedSlots = [...currentSlots];
+      // ALWAYS ensure array is exactly 20 slots
+      const updatedSlots = ensureTwentySlots(
+        customCategoryProducts[selectedCategory]
+      );
       updatedSlots[index] = null;
 
       const updatedCategories = {
@@ -1344,11 +1416,15 @@ export default function SalesSection({ cashier }) {
     setCustomCategories(newOrder);
     setActiveId(null);
 
+    // Save immediately to Firebase (saveCustomTabsToFirebase already handles online check)
     saveCustomTabsToFirebase(newOrder, customCategoryProducts)
-      .then(() => toast.success("Tab order updated"))
+      .then(() => {
+        console.log("✅ Tab order saved to Firebase");
+        toast.success("Tab order synced to cloud");
+      })
       .catch((error) => {
-        console.error("Failed to save order:", error);
-        toast.error("Failed to save tab order");
+        console.error("❌ Failed to save tab order:", error);
+        toast.error("Failed to sync tab order");
       });
   };
 
@@ -1448,35 +1524,63 @@ export default function SalesSection({ cashier }) {
     };
     setCategorySlotColors(updatedColors);
 
+    // Save to localStorage immediately
+    localStorage.setItem("category_slot_colors", JSON.stringify(updatedColors));
+
     // Save to Firebase with updated colors
     if (!userId) {
+      console.log("No userId, color saved to localStorage only");
+      setShowSlotColorPicker(false);
+      setSelectedSlotForColor(null);
+      return;
+    }
+
+    if (!isOnline) {
+      console.log("Offline - color saved to localStorage only");
+      toast.warning("Offline - color saved locally");
+      setShowSlotColorPicker(false);
+      setSelectedSlotForColor(null);
       return;
     }
 
     try {
-      // Convert slots to minimal structure (type and id only)
+      // Convert slots to minimal structure (type, id, and color) - ALWAYS 20 slots
       const slotIds = {};
       Object.keys(customCategoryProducts).forEach((category) => {
-        slotIds[category] = customCategoryProducts[category].map((slot) => {
+        const slots = ensureTwentySlots(customCategoryProducts[category]);
+        slotIds[category] = slots.map((slot, index) => {
           if (!slot) return null;
+
+          // Include color if this slot has a custom color (use updatedColors!)
+          const slotKey = `${category}-${index}-${slot.id}`;
+          const color = updatedColors[slotKey];
+
           return {
             type: slot.type,
             id: slot.id,
+            ...(color && { color }), // Only include color if it exists
           };
         });
       });
 
-      // Save to Firebase with the UPDATED colors
+      console.log(
+        "💾 Saving color to Firebase (NEW SIMPLE WAY - inside slot):"
+      );
+      console.log("   Slots with colors:", slotIds);
+      console.log("   Total colors:", Object.keys(updatedColors).length);
+
+      // Save to Firebase with colors INSIDE slots
       await customTabsService.saveUserTabs(userId, {
         categories: customCategories,
         categoryProducts: slotIds,
-        categorySlotColors: updatedColors, // Use the updatedColors, not the old state
       });
 
-      toast.success("Category box color updated");
+      console.log("✅ Category box color saved to Firebase successfully");
+      toast.success("Color synced to cloud");
     } catch (error) {
-      console.error("Error saving color to Firebase:", error);
-      toast.error("Failed to save color");
+      console.error("❌ Error saving color to Firebase:", error);
+      console.error("Error details:", error.message, error.stack);
+      toast.error("Failed to sync color, saved locally only");
     }
 
     setShowSlotColorPicker(false);
@@ -2394,7 +2498,14 @@ export default function SalesSection({ cashier }) {
               /* Category Products View - Regular Grid of Products from Category */
               <div className="grid gap-4 grid-cols-5 auto-rows-fr">
                 {products
-                  .filter((product) => product.categoryId === viewingCategoryId)
+                  .filter((product) => {
+                    // Smart category matching: match by ID first, then by name
+                    if (product.categoryId === viewingCategoryId) return true;
+
+                    // Also match by name if categoryId doesn't match
+                    const productCategory = getProductCategory(product);
+                    return productCategory === viewingCategoryName;
+                  })
                   .map((product) => {
                     const availableForSale =
                       product.available_for_sale !== false;
@@ -2530,9 +2641,8 @@ export default function SalesSection({ cashier }) {
             ) : customCategories.includes(selectedCategory) ? (
               /* Custom Category - 5x4 Grid of Product Slots */
               <div className="grid gap-4 grid-cols-5 grid-rows-4">
-                {(
-                  customCategoryProducts[selectedCategory] ||
-                  Array(20).fill(null)
+                {ensureTwentySlots(
+                  customCategoryProducts[selectedCategory]
                 ).map((slot, index) => (
                   <Card
                     key={index}
@@ -2575,9 +2685,18 @@ export default function SalesSection({ cashier }) {
                             {slot.type === "category" ? (
                               /* Category Slot */
                               (() => {
-                                // Create unique key for this category slot
-                                const slotKey = `${selectedCategory}-${index}-${slot.data.categoryId}`;
-                                const customColor = categorySlotColors[slotKey];
+                                // NEW SIMPLE WAY: Read color directly from slot data!
+                                const customColor = slot.color;
+
+                                // Debug logging (only for slot 2 to avoid spam)
+                                if (index === 2) {
+                                  console.log("🎨 Rendering slot 2 (NEW WAY):");
+                                  console.log("  - Slot data:", slot);
+                                  console.log(
+                                    "  - Color from slot:",
+                                    customColor
+                                  );
+                                }
 
                                 // Generate gradient colors from custom color or use default blue
                                 const baseColor = customColor || "#3b82f6";
@@ -3975,8 +4094,9 @@ export default function SalesSection({ cashier }) {
               {/* Current slot info and actions */}
               {selectedSlotIndex !== null &&
                 (() => {
-                  const currentSlots =
-                    customCategoryProducts[selectedCategory] || [];
+                  const currentSlots = ensureTwentySlots(
+                    customCategoryProducts[selectedCategory]
+                  );
                   const currentSlot = currentSlots[selectedSlotIndex];
 
                   if (currentSlot && currentSlot.type === "category") {
@@ -4174,10 +4294,9 @@ export default function SalesSection({ cashier }) {
                     variant="destructive"
                     className="flex-1"
                     onClick={async () => {
-                      const currentSlots =
-                        customCategoryProducts[selectedCategory] ||
-                        Array(20).fill(null);
-                      const updatedSlots = [...currentSlots];
+                      const updatedSlots = ensureTwentySlots(
+                        customCategoryProducts[selectedCategory]
+                      );
                       updatedSlots[selectedSlotIndex] = null;
 
                       const updatedCategories = {

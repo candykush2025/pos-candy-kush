@@ -326,6 +326,7 @@ export const customersService = {
 // Categories
 export const categoriesService = {
   create: (data) => createDocument(COLLECTIONS.CATEGORIES, data),
+  set: (id, data) => setDocument(COLLECTIONS.CATEGORIES, id, data),
   get: (id) => getDocument(COLLECTIONS.CATEGORIES, id),
   getAll: (options) => getDocuments(COLLECTIONS.CATEGORIES, options),
   update: (id, data) => updateDocument(COLLECTIONS.CATEGORIES, id, data),
@@ -346,28 +347,59 @@ export const receiptsService = {
 
 // Custom Tabs - store per user
 export const customTabsService = {
-  // Save user's custom tabs configuration
+  // Save custom tabs to SHARED document (all users use same tabs)
   saveUserTabs: async (userId, tabsData) => {
     try {
-      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, userId);
-      await setDoc(docRef, {
+      console.log("📤 saveUserTabs called with:", {
         userId,
+        categoriesCount: tabsData.categories?.length || 0,
+        categoryProductsKeys: Object.keys(tabsData.categoryProducts || {}),
+      });
+
+      // Use a fixed document ID "shared" instead of userId
+      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, "shared");
+
+      const dataToSave = {
         categories: tabsData.categories || [],
         categoryProducts: tabsData.categoryProducts || {},
-        categorySlotColors: tabsData.categorySlotColors || {},
         updatedAt: serverTimestamp(),
-      });
+        lastUpdatedBy: userId, // Track who made the last change
+      };
+
+      console.log(
+        "💾 Writing to Firestore (colors are inside slots now!):",
+        dataToSave
+      );
+
+      await setDoc(docRef, dataToSave);
+
+      console.log("✅ setDoc completed, verifying write...");
+
+      // Verify the write by reading back immediately
+      const verifySnap = await getDoc(docRef);
+      if (verifySnap.exists()) {
+        const writtenData = verifySnap.data();
+        console.log("✅ Verified data in Firestore:");
+        console.log("  📁 Document ID: shared");
+        console.log("  📊 Categories:", writtenData.categories);
+        console.log("  📦 Category Products:", writtenData.categoryProducts);
+      } else {
+        console.error("❌ Document doesn't exist after write!");
+      }
+
+      console.log("✅ Custom tabs saved to shared document successfully");
       return true;
     } catch (error) {
-      console.error("Error saving custom tabs:", error);
+      console.error("❌ Error saving custom tabs:", error);
+      console.error("Error details:", error.message, error.stack);
       throw error;
     }
   },
 
-  // Get user's custom tabs configuration
+  // Get user's custom tabs configuration (now reads from shared document)
   getUserTabs: async (userId) => {
     try {
-      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, userId);
+      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, "shared");
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         return docSnap.data();
@@ -379,50 +411,27 @@ export const customTabsService = {
     }
   },
 
-  // Get ALL custom tabs from all users (merged)
+  // Get ALL custom tabs (now just reads the shared document)
   getAllCustomTabs: async () => {
     try {
-      const querySnapshot = await getDocs(
-        collection(db, COLLECTIONS.CUSTOM_TABS)
-      );
+      const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, "shared");
+      const docSnap = await getDoc(docRef);
 
-      // Merge all categories and products from all documents
-      const allCategories = [];
-      const allCategoryProducts = {};
-      const allCategorySlotColors = {};
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        console.log("📖 getAllCustomTabs - Raw data from Firebase:", data);
+        console.log("📖 categoryProducts:", data.categoryProducts);
 
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.categories && Array.isArray(data.categories)) {
-          // Add categories that don't already exist
-          data.categories.forEach((cat) => {
-            if (!allCategories.includes(cat)) {
-              allCategories.push(cat);
-            }
-          });
-        }
-        if (data.categoryProducts) {
-          // Merge category products
-          Object.keys(data.categoryProducts).forEach((catName) => {
-            if (!allCategoryProducts[catName]) {
-              allCategoryProducts[catName] = data.categoryProducts[catName];
-            }
-          });
-        }
-        if (data.categorySlotColors) {
-          // Merge category slot colors
-          Object.keys(data.categorySlotColors).forEach((slotKey) => {
-            if (!allCategorySlotColors[slotKey]) {
-              allCategorySlotColors[slotKey] = data.categorySlotColors[slotKey];
-            }
-          });
-        }
-      });
+        return {
+          categories: data.categories || [],
+          categoryProducts: data.categoryProducts || {},
+        };
+      }
 
+      // Return empty structure if document doesn't exist
       return {
-        categories: allCategories,
-        categoryProducts: allCategoryProducts,
-        categorySlotColors: allCategorySlotColors,
+        categories: [],
+        categoryProducts: {},
       };
     } catch (error) {
       console.error("Error getting all custom tabs:", error);

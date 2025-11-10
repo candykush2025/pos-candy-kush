@@ -184,11 +184,23 @@ export default function ProductsSection() {
 
     let filtered = products;
 
-    // Filter by category (comparing categoryId UUID)
+    // Filter by category (comparing by ID first, then by name)
     if (selectedCategory !== "all") {
-      filtered = filtered.filter(
-        (product) => product.categoryId === selectedCategory
-      );
+      filtered = filtered.filter((product) => {
+        // Match by ID first
+        if (product.categoryId === selectedCategory) return true;
+        // Match by name
+        const category = categories.find((c) => c.id === selectedCategory);
+        if (category) {
+          const productCategoryName =
+            product.categoryName ||
+            product.category ||
+            product.categoryLabel ||
+            product.category_name;
+          return productCategoryName === category.name;
+        }
+        return false;
+      });
     }
 
     // Filter by search query
@@ -212,13 +224,33 @@ export default function ProductsSection() {
   }, [categories, searchQuery]);
 
   const getCategoryProductCount = (categoryId) => {
-    return products.filter((p) => p.categoryId === categoryId).length;
+    // Match by ID first, then by name
+    const category = categories.find((c) => c.id === categoryId);
+    return products.filter((p) => {
+      // Match by ID first
+      if (p.categoryId === categoryId) return true;
+      // Match by name if category found
+      if (category) {
+        const productCategoryName =
+          p.categoryName || p.category || p.categoryLabel || p.category_name;
+        return productCategoryName === category.name;
+      }
+      return false;
+    }).length;
   };
 
-  const getCategoryName = (categoryId) => {
-    if (!categoryId) return "Uncategorized";
-    const category = categories.find((c) => c.id === categoryId);
-    return category?.name || "Uncategorized";
+  const getCategoryName = (categoryId, categoryName = null) => {
+    if (!categoryId && !categoryName) return "Uncategorized";
+
+    // Try to find by ID first
+    let category = categories.find((c) => c.id === categoryId);
+
+    // If not found by ID, try matching by name
+    if (!category && categoryName) {
+      category = categories.find((c) => c.name === categoryName);
+    }
+
+    return category?.name || categoryName || "Uncategorized";
   };
 
   // Discount handlers
@@ -899,8 +931,13 @@ export default function ProductsSection() {
                             </h3>
                             <p className="text-sm text-neutral-500">
                               {product.sku && `SKU: ${product.sku}`}
-                              {product.sku && product.categoryId && " • "}
-                              {getCategoryName(product.categoryId)}
+                              {product.sku &&
+                                (product.categoryId || product.categoryName) &&
+                                " • "}
+                              {getCategoryName(
+                                product.categoryId,
+                                product.categoryName
+                              )}
                             </p>
                             {product.trackStock && (
                               <p className="text-xs text-neutral-400 mt-1">

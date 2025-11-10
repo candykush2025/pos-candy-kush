@@ -111,7 +111,7 @@ export default function CategoriesPage() {
     for (let i = 0; i < selectedCategories.length; i++) {
       const catId = selectedCategories[i];
       try {
-        // Check products in category
+        // Check products in category (check by ID and name)
         let hasProducts = false;
         try {
           const prods = await productsService.getAll({
@@ -120,7 +120,21 @@ export default function CategoriesPage() {
           hasProducts = prods && prods.length > 0;
         } catch (err) {
           const localProds = await dbService.getProducts();
-          hasProducts = localProds.some((p) => p.categoryId === catId);
+          const category = categories.find((c) => c.id === catId);
+          hasProducts = localProds.some((p) => {
+            // Match by ID first
+            if (p.categoryId === catId) return true;
+            // Match by name if category exists
+            if (category) {
+              const productCategoryName =
+                p.categoryName ||
+                p.category ||
+                p.categoryLabel ||
+                p.category_name;
+              return productCategoryName === category.name;
+            }
+            return false;
+          });
         }
 
         if (hasProducts) {
@@ -196,7 +210,7 @@ export default function CategoriesPage() {
     if (!confirm(`Delete category "${category.name}"?`)) return;
 
     try {
-      // Check if category has products in Firebase or local
+      // Check if category has products in Firebase or local (check by ID and name)
       let hasProducts = false;
       try {
         const prods = await productsService.getAll({
@@ -209,7 +223,14 @@ export default function CategoriesPage() {
           err
         );
         const localProds = await dbService.getProducts();
-        hasProducts = localProds.some((p) => p.categoryId === category.id);
+        hasProducts = localProds.some((p) => {
+          // Match by ID first
+          if (p.categoryId === category.id) return true;
+          // Match by name
+          const productCategoryName =
+            p.categoryName || p.category || p.categoryLabel || p.category_name;
+          return productCategoryName === category.name;
+        });
       }
 
       if (hasProducts) {

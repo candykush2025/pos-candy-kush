@@ -77,6 +77,15 @@ export default function ItemListPage() {
     failed: [],
   });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isFetchingCategories, setIsFetchingCategories] = useState(false);
+  const [categoryFetchProgress, setCategoryFetchProgress] = useState({
+    status: "idle", // idle, fetching, completed
+    current: 0,
+    total: 0,
+    created: [],
+    skipped: [],
+    failed: [],
+  });
 
   const [formData, setFormData] = useState({
     name: "",
@@ -886,6 +895,184 @@ export default function ItemListPage() {
     }
   };
 
+  const handleFetchAllCategoriesFromKiosk = async () => {
+    if (
+      !confirm(
+        "Fetch all categories from Kiosk API?\n\nThis will create new categories from your product data if they don't exist in Firebase."
+      )
+    ) {
+      return;
+    }
+
+    setIsFetchingCategories(true);
+    setCategoryFetchProgress({
+      status: "fetching",
+      current: 0,
+      total: 0,
+      created: [],
+      skipped: [],
+      failed: [],
+    });
+
+    try {
+      // Step 1: Get all unique category IDs from products
+      const productCategoryIds = new Set();
+      products.forEach((product) => {
+        if (product.categoryId) {
+          productCategoryIds.add(product.categoryId);
+        }
+      });
+
+      console.log(
+        `Found ${productCategoryIds.size} unique category IDs in products`
+      );
+
+      // Step 2: Check which categories already exist in Firebase
+      const existingCategoryIds = new Set(categories.map((c) => c.id));
+      console.log(
+        `Existing categories in Firebase (${existingCategoryIds.size}):`,
+        Array.from(existingCategoryIds)
+      );
+
+      // Step 3: Find missing category IDs
+      const missingCategoryIds = Array.from(productCategoryIds).filter(
+        (id) => !existingCategoryIds.has(id)
+      );
+
+      const skippedCount = productCategoryIds.size - missingCategoryIds.length;
+
+      if (missingCategoryIds.length === 0) {
+        setCategoryFetchProgress((prev) => ({
+          ...prev,
+          status: "completed",
+          skipped: skippedCount,
+        }));
+        toast.success("✅ All product categories already exist in Firebase");
+        return;
+      }
+
+      console.log(
+        `Found ${missingCategoryIds.length} missing categories to fetch`
+      );
+
+      // Step 4: Set up progress tracking
+      setCategoryFetchProgress((prev) => ({
+        ...prev,
+        total: missingCategoryIds.length,
+      }));
+
+      // Step 5: Fetch each missing category from Kiosk API
+      for (let i = 0; i < missingCategoryIds.length; i++) {
+        const categoryId = missingCategoryIds[i];
+
+        setCategoryFetchProgress((prev) => ({
+          ...prev,
+          current: i + 1,
+        }));
+
+        try {
+          const response = await fetch(
+            `https://kiosk-api.cysavvy.dev/api/categories?id=${categoryId}`,
+            {
+              method: "GET",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+
+          if (!response.ok) {
+            if (response.status === 404) {
+              console.warn(`Category ${categoryId} not found in Kiosk (404)`);
+              setCategoryFetchProgress((prev) => ({
+                ...prev,
+                skipped: [
+                  ...prev.skipped,
+                  { id: categoryId, reason: "Not found (404)" },
+                ],
+              }));
+              continue;
+            }
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const kioskCategory = await response.json();
+
+          if (!kioskCategory || !kioskCategory.id) {
+            console.warn(
+              `Invalid category response for ${categoryId}:`,
+              kioskCategory
+            );
+            setCategoryFetchProgress((prev) => ({
+              ...prev,
+              skipped: [
+                ...prev.skipped,
+                { id: categoryId, reason: "Invalid response" },
+              ],
+            }));
+            continue;
+          }
+
+          // Create category in Firebase
+          const categoryData = {
+            id: kioskCategory.id,
+            name: kioskCategory.name || `Category ${categoryId}`,
+            description: kioskCategory.description || "",
+            color: kioskCategory.color || "#6b7280",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          await categoriesService.create(categoryData);
+          console.log(
+            `✅ Created category: ${categoryData.name} (${categoryId})`
+          );
+
+          setCategoryFetchProgress((prev) => ({
+            ...prev,
+            created: [
+              ...prev.created,
+              { id: categoryId, name: categoryData.name },
+            ],
+          }));
+        } catch (error) {
+          console.error(`Failed to fetch category ${categoryId}:`, error);
+          setCategoryFetchProgress((prev) => ({
+            ...prev,
+            failed: [...prev.failed, { id: categoryId, reason: error.message }],
+          }));
+        }
+      }
+
+      // Step 6: Complete and reload categories
+      setCategoryFetchProgress((prev) => {
+        const finalProgress = {
+          ...prev,
+          status: "completed",
+        };
+
+        // Show success toast with final counts
+        toast.success(
+          `✅ Category fetch complete!\n` +
+            `Created: ${finalProgress.created.length} | Skipped: ${
+              skippedCount + finalProgress.skipped.length
+            } | Failed: ${finalProgress.failed.length}`
+        );
+
+        return finalProgress;
+      });
+
+      await loadCategories();
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      toast.error("Failed to fetch categories from Kiosk");
+      setCategoryFetchProgress((prev) => ({
+        ...prev,
+        status: "completed",
+      }));
+    } finally {
+      setIsFetchingCategories(false);
+    }
+  };
+
   const handleEdit = (product) => {
     console.log("🔍 Editing product:", {
       name: product.name,
@@ -893,13 +1080,31 @@ export default function ItemListPage() {
       availableCategories: categories.map((c) => ({ id: c.id, name: c.name })),
     });
 
+    // Smart category matching: try ID first, then name fallback
+    let matchedCategoryId = product.categoryId || "";
+    if (
+      matchedCategoryId &&
+      !categories.find((c) => c.id === matchedCategoryId)
+    ) {
+      // ID doesn't exist, try matching by name
+      const categoryByName = categories.find(
+        (c) => c.name === product.categoryName
+      );
+      if (categoryByName) {
+        matchedCategoryId = categoryByName.id;
+        console.log(
+          `📝 Matched category by name: "${product.categoryName}" → ID: ${categoryByName.id}`
+        );
+      }
+    }
+
     setEditingProduct(product);
     setFormData({
       name: product.name || "",
       handle: product.handle || "",
       description: product.description || "",
       referenceId: product.referenceId || "",
-      categoryId: product.categoryId || "",
+      categoryId: matchedCategoryId,
       sku: product.sku || "",
       barcode: product.barcode || "",
       price: product.price?.toString() || "",
@@ -1250,23 +1455,32 @@ export default function ItemListPage() {
   });
 
   // Get category name by ID
-  const getCategoryName = (categoryId) => {
-    if (!categoryId) {
+  const getCategoryName = (categoryId, categoryName = null) => {
+    if (!categoryId && !categoryName) {
       return "Uncategorized";
     }
 
-    const category = categories.find((c) => c.id === categoryId);
+    // Try to find by ID first
+    let category = categories.find((c) => c.id === categoryId);
+
+    // If not found by ID, try to match by name
+    if (!category && categoryName) {
+      category = categories.find((c) => c.name === categoryName);
+    }
 
     if (!category) {
       console.warn(
-        "⚠️ Category not found for ID:",
+        "⚠️ Category not found - ID:",
         categoryId,
+        "Name:",
+        categoryName,
         "Available:",
-        categories.map((c) => c.id)
+        categories.map((c) => ({ id: c.id, name: c.name }))
       );
+      return categoryName || `Missing: ${categoryId?.substring(0, 8)}...`;
     }
 
-    return category?.name || "Uncategorized";
+    return category.name || "Unnamed Category";
   };
 
   return (
@@ -1311,7 +1525,10 @@ export default function ItemListPage() {
                   <div className="flex flex-wrap gap-2">
                     {selectedProduct.categoryId && (
                       <Badge variant="secondary">
-                        {getCategoryName(selectedProduct.categoryId)}
+                        {getCategoryName(
+                          selectedProduct.categoryId,
+                          selectedProduct.categoryName
+                        )}
                       </Badge>
                     )}
                     <Badge
@@ -1616,6 +1833,103 @@ export default function ItemListPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Category Fetch Progress Modal */}
+      <Dialog open={isFetchingCategories} onOpenChange={() => {}}>
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Fetching Categories from Kiosk</DialogTitle>
+            <DialogDescription>
+              Please wait while we fetch categories...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Progress Bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-neutral-600 dark:text-neutral-400">
+                  Progress
+                </span>
+                <span className="font-medium">
+                  {categoryFetchProgress.current} /{" "}
+                  {categoryFetchProgress.total}
+                </span>
+              </div>
+              <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-blue-600 h-2.5 transition-all duration-300 ease-out"
+                  style={{
+                    width:
+                      categoryFetchProgress.total > 0
+                        ? `${
+                            (categoryFetchProgress.current /
+                              categoryFetchProgress.total) *
+                            100
+                          }%`
+                        : "0%",
+                  }}
+                />
+              </div>
+              <p className="text-xs text-neutral-500">
+                {categoryFetchProgress.status === "completed"
+                  ? "Completed!"
+                  : `Fetching category ${categoryFetchProgress.current} of ${categoryFetchProgress.total}...`}
+              </p>
+            </div>
+
+            {/* Created Categories */}
+            {categoryFetchProgress.created.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-green-600">
+                  Created ({categoryFetchProgress.created.length}):
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {categoryFetchProgress.created.map((cat, idx) => (
+                    <p
+                      key={idx}
+                      className="text-xs text-neutral-600 dark:text-neutral-400"
+                    >
+                      • {cat.name} ({cat.id.substring(0, 8)}...)
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Skipped Categories */}
+            {categoryFetchProgress.skipped.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-amber-600">
+                  Skipped (already exist):{" "}
+                  {categoryFetchProgress.skipped.length}
+                </p>
+              </div>
+            )}
+
+            {/* Failed Categories */}
+            {categoryFetchProgress.failed.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-red-600">
+                  Failed ({categoryFetchProgress.failed.length}):
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {categoryFetchProgress.failed.map((cat, idx) => (
+                    <p
+                      key={idx}
+                      className="text-xs text-neutral-600 dark:text-neutral-400"
+                    >
+                      • {cat.id.substring(0, 8)}... - {cat.reason}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
@@ -1646,6 +1960,23 @@ export default function ItemListPage() {
             />
             <span className="hidden lg:inline">
               {isFetchingFromKiosk ? "Importing..." : "Import from Kiosk"}
+            </span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleFetchAllCategoriesFromKiosk}
+            disabled={isFetchingCategories}
+            className="flex-shrink-0"
+          >
+            <Download
+              className={`h-4 w-4 lg:mr-2 ${
+                isFetchingCategories ? "animate-bounce" : ""
+              }`}
+            />
+            <span className="hidden lg:inline">
+              {isFetchingCategories
+                ? "Fetching..."
+                : "Fetch Categories (Kiosk)"}
             </span>
           </Button>
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -2428,7 +2759,10 @@ export default function ItemListPage() {
                                   color: product.color || undefined,
                                 }}
                               >
-                                {getCategoryName(product.categoryId)}
+                                {getCategoryName(
+                                  product.categoryId,
+                                  product.categoryName
+                                )}
                               </Badge>
                             </td>
 
@@ -2568,7 +2902,10 @@ export default function ItemListPage() {
                           <span>Stock: {product.stock}</span>
                           <span>•</span>
                           <span className="truncate">
-                            {getCategoryName(product.categoryId)}
+                            {getCategoryName(
+                              product.categoryId,
+                              product.categoryName
+                            )}
                           </span>
                         </div>
                       </div>
@@ -2632,7 +2969,10 @@ export default function ItemListPage() {
                         <div className="flex flex-wrap gap-2">
                           {product.categoryId && (
                             <Badge variant="secondary" className="text-xs">
-                              {getCategoryName(product.categoryId)}
+                              {getCategoryName(
+                                product.categoryId,
+                                product.categoryName
+                              )}
                             </Badge>
                           )}
                           {product.memberPrice != null &&
