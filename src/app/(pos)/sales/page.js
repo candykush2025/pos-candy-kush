@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -448,6 +449,35 @@ export default function SalesPage() {
   const [activeShift, setActiveShift] = useState(null);
   const { user } = useAuthStore();
   const { activeTab, setActiveTab } = usePosTabStore();
+  const searchParams = useSearchParams();
+
+  // Initialize active tab from URL parameter on mount
+  useEffect(() => {
+    const menuParam = searchParams.get("menu");
+    if (menuParam) {
+      // Valid menu tabs: sales, tickets, customers, history, shifts, products, settings, kiosk-orders
+      const validTabs = [
+        "sales",
+        "tickets",
+        "customers",
+        "history",
+        "shifts",
+        "products",
+        "settings",
+        "kiosk-orders",
+      ];
+      if (validTabs.includes(menuParam)) {
+        setActiveTab(menuParam);
+      }
+    }
+  }, []); // Only run on mount
+
+  // Sync activeTab with URL parameter
+  useEffect(() => {
+    const url = new URL(window.location);
+    url.searchParams.set("menu", activeTab);
+    window.history.replaceState({}, "", url);
+  }, [activeTab]);
 
   // Listen for cashier updates from layout logout button
   useEffect(() => {
