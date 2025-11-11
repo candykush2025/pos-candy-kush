@@ -63,6 +63,7 @@ export const useCartStore = create((set, get) => ({
         barcode: product.barcode,
         sku: product.sku,
         cost: product.cost || 0, // For Loyverse sync
+        soldBy: product.soldBy || "unit", // Track if sold by weight or unit
       };
       set({ items: [...items, newItem] });
     }

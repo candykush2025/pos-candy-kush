@@ -430,12 +430,26 @@ function CashierLogin({ onLogin }) {
 }
 
 export default function SalesPage() {
-  const [cashier, setCashier] = useState(null);
+  // Initialize cashier from localStorage immediately (no null state)
+  const [cashier, setCashier] = useState(() => {
+    if (typeof window !== "undefined") {
+      const savedCashier = localStorage.getItem("pos_cashier");
+      if (savedCashier) {
+        try {
+          return JSON.parse(savedCashier);
+        } catch (error) {
+          console.error("Error loading cashier session:", error);
+        }
+      }
+    }
+    return null;
+  });
+
   const [activeShift, setActiveShift] = useState(null);
   const { user } = useAuthStore();
   const { activeTab, setActiveTab } = usePosTabStore();
 
-  // Check if there's a logged-in cashier on mount and listen for logout events
+  // Listen for cashier updates from layout logout button
   useEffect(() => {
     const loadCashier = () => {
       const savedCashier = localStorage.getItem("pos_cashier");
@@ -458,9 +472,6 @@ export default function SalesPage() {
         setCashier(null);
       }
     };
-
-    // Load cashier on mount
-    loadCashier();
 
     // Listen for cashier updates from layout logout button
     window.addEventListener("cashier-update", loadCashier);

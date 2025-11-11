@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
   closestCenter,
@@ -165,6 +166,8 @@ export default function SalesSection({ cashier }) {
   const { createTicket } = useTicketStore();
   const { pendingCount } = useSyncStore();
   const isOnline = useOnlineStatus();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -174,7 +177,9 @@ export default function SalesSection({ cashier }) {
   const [hasActiveShift, setHasActiveShift] = useState(false);
   const [categories, setCategories] = useState([]); // category names for tabs
   const [categoriesData, setCategoriesData] = useState([]); // full category objects from Firebase
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState(
+    searchParams.get("tab") || "all"
+  );
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [customCategories, setCustomCategories] = useState([]);
@@ -216,6 +221,11 @@ export default function SalesSection({ cashier }) {
     "#06b6d4", // Cyan
     "#84cc16", // Lime
   ];
+
+  // Weight input modal state
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [selectedWeightProduct, setSelectedWeightProduct] = useState(null);
+  const [weightInput, setWeightInput] = useState("");
 
   // Prevent mobile pull-to-refresh on iOS (fallback for browsers that don't support overscroll-behavior)
   useEffect(() => {
@@ -301,6 +311,22 @@ export default function SalesSection({ cashier }) {
     }
   }, []);
 
+  // Sync selectedCategory with URL parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (selectedCategory === "all") {
+      // Remove tab parameter if "all" is selected
+      params.delete("tab");
+    } else {
+      // Set tab parameter
+      params.set("tab", selectedCategory);
+    }
+    const newUrl = params.toString()
+      ? `${window.location.pathname}?${params.toString()}`
+      : window.location.pathname;
+    router.replace(newUrl, { scroll: false });
+  }, [selectedCategory, router]);
+
   // Load products and customers
   useEffect(() => {
     loadProducts();
@@ -385,6 +411,21 @@ export default function SalesSection({ cashier }) {
       loadCustomTabsFromUser();
     }
   }, [userId]); // Only reload when userId changes, not on every product change
+
+  // Sync selectedCategory with URL parameter
+  useEffect(() => {
+    if (selectedCategory && selectedCategory !== "all") {
+      // Update URL without reloading the page
+      const url = new URL(window.location);
+      url.searchParams.set("tab", selectedCategory);
+      window.history.replaceState({}, "", url);
+    } else {
+      // Remove tab parameter when "all" is selected
+      const url = new URL(window.location);
+      url.searchParams.delete("tab");
+      window.history.replaceState({}, "", url);
+    }
+  }, [selectedCategory]);
 
   const loadCustomTabsFromUser = async () => {
     if (!userId || products.length === 0) return;
@@ -1104,7 +1145,65 @@ export default function SalesSection({ cashier }) {
       return;
     }
 
+    // Check if product is sold by weight
+    if (product.soldBy === "weight") {
+      setSelectedWeightProduct(product);
+      setWeightInput("");
+      setShowWeightModal(true);
+      return;
+    }
+
     addItem(product, 1);
+  };
+
+  const handleWeightKeypad = (value) => {
+    if (value === "clear") {
+      setWeightInput("");
+    } else if (value === "backspace") {
+      setWeightInput((prev) => prev.slice(0, -1));
+    } else if (value === ",") {
+      // Only allow one comma
+      if (!weightInput.includes(",")) {
+        setWeightInput((prev) => prev + ",");
+      }
+    } else {
+      // Number button
+      setWeightInput((prev) => prev + value);
+    }
+  };
+
+  const handleConfirmWeight = () => {
+    if (!weightInput || weightInput === "" || weightInput === ",") {
+      toast.error("Please enter weight");
+      return;
+    }
+
+    // Convert comma to dot for decimal
+    const weight = parseFloat(weightInput.replace(",", "."));
+
+    if (isNaN(weight) || weight <= 0) {
+      toast.error("Please enter valid weight");
+      return;
+    }
+
+    // Check if we're editing an existing item or adding new
+    const existingItem = items.find(
+      (item) => item.id === selectedWeightProduct.id
+    );
+
+    if (existingItem) {
+      // Update existing item quantity
+      updateQuantity(selectedWeightProduct.id, weight);
+      toast.success(`Updated to ${weight} kg`);
+    } else {
+      // Add to cart with weight as quantity
+      addItem(selectedWeightProduct, weight);
+      toast.success(`Added ${weight} kg to cart`);
+    }
+
+    setShowWeightModal(false);
+    setSelectedWeightProduct(null);
+    setWeightInput("");
   };
 
   // Helper to ALWAYS ensure array is exactly 20 slots
@@ -3109,10 +3208,11 @@ export default function SalesSection({ cashier }) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm text-gray-400 line-through">
                               {formatCurrency(item.originalPrice || item.price)}{" "}
-                              each
+                              {item.soldBy === "weight" ? "/kg" : "each"}
                             </p>
                             <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                              {formatCurrency(displayPrice)} each
+                              {formatCurrency(displayPrice)}{" "}
+                              {item.soldBy === "weight" ? "/kg" : "each"}
                             </p>
                             <Badge
                               variant="secondary"
@@ -3123,7 +3223,8 @@ export default function SalesSection({ cashier }) {
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500">
-                            {formatCurrency(item.price)} each
+                            {formatCurrency(item.price)}{" "}
+                            {item.soldBy === "weight" ? "/kg" : "each"}
                           </p>
                         )}
                       </div>
@@ -3138,29 +3239,55 @@ export default function SalesSection({ cashier }) {
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() =>
-                            updateQuantity(item.id, item.quantity - 1)
-                          }
-                          className="h-8 w-8"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                        <span className="w-12 text-center font-semibold">
-                          {item.quantity}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() =>
-                            updateQuantity(item.id, item.quantity + 1)
-                          }
-                          className="h-8 w-8"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
+                        {item.soldBy === "weight" ? (
+                          // For weight products, show text with kg
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedWeightProduct(item);
+                                setWeightInput(
+                                  item.quantity.toString().replace(".", ",")
+                                );
+                                setShowWeightModal(true);
+                              }}
+                              className="h-8"
+                            >
+                              Edit
+                            </Button>
+                            <span className="font-semibold">
+                              {item.quantity} kg
+                            </span>
+                          </div>
+                        ) : (
+                          // For regular products, show +/- buttons
+                          <>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() =>
+                                updateQuantity(item.id, item.quantity - 1)
+                              }
+                              className="h-8 w-8"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <span className="w-12 text-center font-semibold">
+                              {item.quantity}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() =>
+                                updateQuantity(item.id, item.quantity + 1)
+                              }
+                              className="h-8 w-8"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                       <p className="font-bold text-lg">
                         {formatCurrency(item.total)}
@@ -3277,6 +3404,96 @@ export default function SalesSection({ cashier }) {
             </div>
           </div>
         </div>
+
+        {/* Weight Input Modal */}
+        <Dialog open={showWeightModal} onOpenChange={setShowWeightModal}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Enter Weight</DialogTitle>
+              <DialogDescription>
+                {selectedWeightProduct?.name} - How many kg?
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* Weight Display */}
+              <div className="bg-gray-100 dark:bg-gray-800 p-6 rounded-lg">
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-2 text-center">
+                  Weight (kg)
+                </div>
+                <div className="text-4xl font-bold text-gray-900 dark:text-gray-100 text-center min-h-[3rem] flex items-center justify-center">
+                  {weightInput || "0"}
+                </div>
+              </div>
+
+              {/* Keypad */}
+              <div className="grid grid-cols-3 gap-3">
+                {[7, 8, 9, 4, 5, 6, 1, 2, 3].map((num) => (
+                  <Button
+                    key={num}
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    className="h-16 text-2xl font-semibold"
+                    onClick={() => handleWeightKeypad(num.toString())}
+                  >
+                    {num}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-16 text-2xl font-semibold"
+                  onClick={() => handleWeightKeypad(",")}
+                >
+                  ,
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-16 text-2xl font-semibold"
+                  onClick={() => handleWeightKeypad("0")}
+                >
+                  0
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-16"
+                  onClick={() => handleWeightKeypad("backspace")}
+                >
+                  ←
+                </Button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => handleWeightKeypad("clear")}
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  className="flex-1"
+                  onClick={handleConfirmWeight}
+                  disabled={
+                    !weightInput || weightInput === "" || weightInput === ","
+                  }
+                >
+                  Add to Cart
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Payment Modal */}
         <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>

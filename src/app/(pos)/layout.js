@@ -191,11 +191,9 @@ export default function POSLayout({ children }) {
   }, []);
 
   useEffect(() => {
-    // Check authentication
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
+    // POS uses cashier-based authentication (PIN login), not admin authentication
+    // Skip the isAuthenticated check - cashier session is managed separately via localStorage
+    // This allows URL parameters to persist through page refreshes
 
     // Start sync engine for offline queue processing
     // Firebase handles real-time sync when online
@@ -205,7 +203,7 @@ export default function POSLayout({ children }) {
     return () => {
       syncEngine.stop();
     };
-  }, [isAuthenticated, router]);
+  }, []);
 
   // Update online status in sync store
   useEffect(() => {

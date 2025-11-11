@@ -364,56 +364,6 @@ export const dbService = {
   async setLastSyncTime(timestamp) {
     return await this.setSetting("last_sync_time", timestamp);
   },
-
-  // Custom Tabs (for offline fallback)
-  async saveCustomTabs(userId, tabsData) {
-    try {
-      const data = {
-        userId,
-        categories: tabsData.categories || [],
-        categoryProducts: tabsData.categoryProducts || {},
-        categorySlotColors: tabsData.categorySlotColors || {},
-        updatedAt: new Date().toISOString(),
-      };
-      
-      // Use settings table to store custom tabs data
-      await this.setSetting(`custom_tabs_${userId}`, data);
-      console.log("✅ [IndexedDB] Custom tabs saved offline");
-      return true;
-    } catch (error) {
-      console.error("❌ [IndexedDB] Error saving custom tabs:", error);
-      throw error;
-    }
-  },
-
-  async getCustomTabs(userId) {
-    try {
-      const data = await this.getSetting(`custom_tabs_${userId}`);
-      return data || {
-        categories: [],
-        categoryProducts: {},
-        categorySlotColors: {},
-      };
-    } catch (error) {
-      console.error("❌ [IndexedDB] Error getting custom tabs:", error);
-      return {
-        categories: [],
-        categoryProducts: {},
-        categorySlotColors: {},
-      };
-    }
-  },
-
-  async deleteCustomTabs(userId) {
-    try {
-      await this.deleteSetting(`custom_tabs_${userId}`);
-      console.log("✅ [IndexedDB] Custom tabs deleted");
-      return true;
-    } catch (error) {
-      console.error("❌ [IndexedDB] Error deleting custom tabs:", error);
-      throw error;
-    }
-  },
 };
 
 export default dbService;
