@@ -4,6 +4,15 @@ import { useState, useEffect } from "react";
 import { shiftsService } from "@/lib/firebase/shiftsService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Clock,
   DollarSign,
@@ -13,13 +22,22 @@ import {
   AlertTriangle,
   User,
   Receipt,
+  Plus,
+  XCircle,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
+import { toast } from "sonner";
 
 export default function ShiftsSection({ cashier }) {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statistics, setStatistics] = useState(null);
+  const [showStartShiftModal, setShowStartShiftModal] = useState(false);
+  const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
+  const [selectedShift, setSelectedShift] = useState(null);
+  const [startingCash, setStartingCash] = useState("");
+  const [closingCash, setClosingCash] = useState("");
+  const [closeNotes, setCloseNotes] = useState("");
 
   useEffect(() => {
     if (cashier?.id) {
@@ -71,6 +89,78 @@ export default function ShiftsSection({ cashier }) {
     return `${hours}h ${minutes}m`;
   };
 
+  const handleStartShift = async () => {
+    try {
+      if (!startingCash || parseFloat(startingCash) < 0) {
+        toast.error("Please enter a valid starting cash amount");
+        return;
+      }
+
+      const shift = await shiftsService.createShift(
+        { startingCash: parseFloat(startingCash) },
+        cashier.id,
+        cashier.name
+      );
+
+      // Update localStorage
+      localStorage.setItem("active_shift", JSON.stringify(shift));
+      window.dispatchEvent(new Event("cashier-update"));
+
+      setShowStartShiftModal(false);
+      setStartingCash("");
+      loadShifts();
+      toast.success("Shift started successfully!");
+    } catch (error) {
+      console.error("Error starting shift:", error);
+      toast.error("Failed to start shift");
+    }
+  };
+
+  const handleCloseShift = async () => {
+    try {
+      if (!closingCash || parseFloat(closingCash) < 0) {
+        toast.error("Please enter a valid closing cash amount");
+        return;
+      }
+
+      await shiftsService.endShift(selectedShift.id, {
+        actualCash: parseFloat(closingCash),
+        notes: closeNotes,
+      });
+
+      // Clear localStorage
+      localStorage.removeItem("active_shift");
+      window.dispatchEvent(new Event("cashier-update"));
+
+      setShowCloseShiftModal(false);
+      setSelectedShift(null);
+      setClosingCash("");
+      setCloseNotes("");
+      loadShifts();
+      toast.success("Shift closed successfully!");
+    } catch (error) {
+      console.error("Error closing shift:", error);
+      toast.error("Failed to close shift");
+    }
+  };
+
+  const handleCashKeypad = (value, isClosing = false) => {
+    const setter = isClosing ? setClosingCash : setStartingCash;
+    const currentValue = isClosing ? closingCash : startingCash;
+
+    if (value === "backspace") {
+      setter((prev) => prev.slice(0, -1));
+    } else if (value === "clear") {
+      setter("");
+    } else if (value === ".") {
+      if (!currentValue.includes(".")) {
+        setter((prev) => prev + ".");
+      }
+    } else {
+      setter((prev) => prev + value);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-950 dark:bg-gray-950">
@@ -88,13 +178,22 @@ export default function ShiftsSection({ cashier }) {
     <div className="h-full overflow-auto bg-gray-50 dark:bg-gray-950">
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            My Shifts
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            View your shift history and cash handling records
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              My Shifts
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              View your shift history and cash handling records
+            </p>
+          </div>
+          <Button
+            onClick={() => setShowStartShiftModal(true)}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Open Shift
+          </Button>
         </div>
 
         {/* Statistics Cards */}
@@ -212,10 +311,10 @@ export default function ShiftsSection({ cashier }) {
                   className={`${
                     hasDiscrepancy && !isActive
                       ? isShort
-                        ? "border-red-200 bg-red-50/50"
-                        : "border-yellow-200 bg-yellow-50/50"
+                        ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20"
+                        : "border-yellow-200 bg-yellow-50/50 dark:border-yellow-900 dark:bg-yellow-950/20"
                       : isActive
-                      ? "border-green-200 bg-green-50/50"
+                      ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30"
                       : ""
                   }`}
                 >
@@ -242,25 +341,40 @@ export default function ShiftsSection({ cashier }) {
                           </div>
                         </div>
 
-                        <Badge
-                          className={
-                            isActive
-                              ? "bg-green-900/30 text-green-400"
-                              : "bg-gray-800 text-gray-400"
-                          }
-                        >
-                          {isActive ? (
-                            <>
-                              <div className="h-2 w-2 rounded-full bg-green-500 mr-1 animate-pulse" />
-                              Active
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Completed
-                            </>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            className={
+                              isActive
+                                ? "bg-green-600 text-white dark:bg-green-700"
+                                : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                            }
+                          >
+                            {isActive ? (
+                              <>
+                                <div className="h-2 w-2 rounded-full bg-white mr-1 animate-pulse" />
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Completed
+                              </>
+                            )}
+                          </Badge>
+                          {isActive && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => {
+                                setSelectedShift(shift);
+                                setShowCloseShiftModal(true);
+                              }}
+                            >
+                              <XCircle className="mr-1 h-3 w-3" />
+                              Close Shift
+                            </Button>
                           )}
-                        </Badge>
+                        </div>
                       </div>
 
                       {/* Time Info */}
@@ -469,6 +583,231 @@ export default function ShiftsSection({ cashier }) {
           </div>
         )}
       </div>
+
+      {/* Start Shift Modal */}
+      <Dialog open={showStartShiftModal} onOpenChange={setShowStartShiftModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start New Shift</DialogTitle>
+            <DialogDescription>
+              Enter the starting cash amount in the register
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Starting Cash Amount
+              </label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  readOnly
+                  placeholder="0.00"
+                  value={startingCash}
+                  className="pl-10 text-lg text-center pointer-events-none"
+                  inputMode="none"
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Numeric Keypad */}
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <Button
+                    key={num}
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    onClick={() => handleCashKeypad(num.toString(), false)}
+                    className="h-14 text-xl font-semibold"
+                  >
+                    {num}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypad("clear", false)}
+                  className="h-14 text-sm"
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypad("0", false)}
+                  className="h-14 text-xl font-semibold"
+                >
+                  0
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypad(".", false)}
+                  className="h-14 text-xl font-semibold"
+                >
+                  .
+                </Button>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowStartShiftModal(false);
+                  setStartingCash("");
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleStartShift}
+                disabled={!startingCash}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                Start Shift
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Shift Modal */}
+      <Dialog open={showCloseShiftModal} onOpenChange={setShowCloseShiftModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Close Shift</DialogTitle>
+            <DialogDescription>
+              Count the cash in the register and enter the closing amount
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedShift && (
+              <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Expected Cash:
+                  </span>
+                  <span className="font-semibold">
+                    {formatCurrency(
+                      selectedShift.expectedCash ||
+                        selectedShift.startingCash ||
+                        0
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Total Sales:
+                  </span>
+                  <span className="font-semibold">
+                    {formatCurrency(selectedShift.totalSales || 0)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Closing Cash Amount</label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  readOnly
+                  placeholder="0.00"
+                  value={closingCash}
+                  className="pl-10 text-lg text-center pointer-events-none"
+                  inputMode="none"
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Numeric Keypad */}
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <Button
+                    key={num}
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    onClick={() => handleCashKeypad(num.toString(), true)}
+                    className="h-14 text-xl font-semibold"
+                  >
+                    {num}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypad("clear", true)}
+                  className="h-14 text-sm"
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypad("0", true)}
+                  className="h-14 text-xl font-semibold"
+                >
+                  0
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => handleCashKeypad(".", true)}
+                  className="h-14 text-xl font-semibold"
+                >
+                  .
+                </Button>
+              </div>
+
+              <div className="mt-4">
+                <label className="text-sm font-medium">Notes (Optional)</label>
+                <Input
+                  value={closeNotes}
+                  onChange={(e) => setCloseNotes(e.target.value)}
+                  placeholder="Any notes about this shift..."
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCloseShiftModal(false);
+                  setSelectedShift(null);
+                  setClosingCash("");
+                  setCloseNotes("");
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCloseShift}
+                disabled={!closingCash}
+                variant="destructive"
+                className="flex-1"
+              >
+                Close Shift
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
