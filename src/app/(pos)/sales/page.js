@@ -310,6 +310,16 @@ function CashierLogin({ onLogin }) {
                 💡 Enter any employee's PIN to switch users
               </p>
             </div>
+
+            {/* Secondary Screen Debug Button */}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => window.open("/secondscreen", "_blank")}
+            >
+              🖥️ Secondary Screen Debug
+            </Button>
           </form>
         </CardContent>
       </Card>

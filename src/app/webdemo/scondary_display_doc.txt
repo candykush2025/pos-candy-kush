@@ -1,0 +1,16 @@
+10.Secondary Display
+10.1 Overview
+ The secondary display used to display a wide variety of content(such as:
+Video, Photo, provider password and account input for customers). Demo
+include a sample for secondary display.
+Note: The single display device has only one LCD, you can implement
+secondary display via HDMI. The dual display device have double LCD.
+Now we have two ways to show something on secondary display:
+1. Presentation (Added in API level 17, Android 4.2)
+2. Launching activity on secondary display (Added in API level 26, Android
+8.0)
+10.2 FAQ
+Presentation:
+https://developer.android.com/reference/android/app/Presentation.html
+Launching activity on secondary display:
+https://developer.android.com/about/versions/oreo/android-8.0?#mds

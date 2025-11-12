@@ -1,0 +1,39 @@
+{
+  "name": "POS Candy Kush - Secondary Display",
+  "short_name": "POS Secondary",
+  "description": "Secondary display for POS Candy Kush system",
+  "start_url": "/secondscreen",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#3b82f6",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Debug Screen",
+      "short_name": "Debug",
+      "description": "Open secondary screen debug interface",
+      "url": "/secondscreen",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
