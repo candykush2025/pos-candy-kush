@@ -1,0 +1,182 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSmartPosDemo</title>
+
+    <script type="text/javascript" charset="utf-8" src="./js/demo.js"></script>
+    <script type="text/javascript" charset="utf-8" src="./js/cashdrawer.js"></script>
+    <script type="text/javascript" charset="utf-8" src="./js/printer.js"></script>
+    <script type="text/javascript" charset="utf-8" src="./js/camera.js"></script>
+    <script type="text/javascript" charset="utf-8" src="./js/nfc.js"></script>
+    <script type="text/javascript" charset="utf-8" src="./js/js_printer.js"></script>
+    <script type="text/javascript" charset="utf-8" src="./js/hid.js"></script>
+    <link rel="stylesheet" type="text/css" href="./css/main.css">
+
+</head>
+<body>
+    <div class="container">
+        <div class="section">
+            <h2>Printer</h2>
+            <ul>
+                <li>
+                    <a href="http://paydevice.xyz/webdemo/logo/logo.bmp" class="link-card" download="logo.bmp">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Download logo</span>
+                            <span class="link-description">Download standard size logo file</span>
+                        </div>
+                    </a>
+                </li>
+                <li>
+                    <a href="http://paydevice.xyz/webdemo/logo/logo_large.bmp" class="link-card" download="logo_large.bmp">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Download logo large</span>
+                            <span class="link-description">Download large size logo file</span>
+                        </div>
+                    </a>
+                </li>
+                <li>
+                    <a href="javascript:print_save_logo_to_nvram()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Save logos to NVRAM</span>
+                            <span class="link-description">Store logo files in printer memory</span>
+                        </div>
+                    </a>
+                </li>
+                <li>
+                    <a href="javascript:print_delete_logo_from_nvram()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Delete logos from NVRAM</span>
+                            <span class="link-description">Remove stored logos from printer memory</span>
+                        </div>
+                    </a>
+                </li>
+                <li>
+                    <a href="javascript:print_demo()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Serial Printer</span>
+                            <span class="link-description">Test serial printer connection</span>
+                        </div>
+                    </a>
+                </li>
+                <!-- <li>
+                    <a href="javascript:testUsbPrinter()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2-1.21 0-2.2.99-2.2 2.2 0 .85.5 1.56 1.2 1.93V13c0 1.11.89 2 2 2h3v3.05c-.71.37-1.2 1.1-1.2 1.95 0 1.22.99 2.2 2.2 2.2 1.21 0 2.2-.98 2.2-2.2 0-.85-.49-1.58-1.2-1.95V15h3c1.11 0 2-.89 2-2v-2h1V7h-4z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">USB Printer</span>
+                            <span class="link-description">Test USB printer connection</span>
+                        </div>
+                    </a>
+                </li>
+                <li>
+                    <a href="javascript:testBluetoothPrinter()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Bluetooth Printer</span>
+                            <span class="link-description">Test Bluetooth printer connection</span>
+                        </div>
+                    </a>
+                </li> -->
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>CashDrawer</h2>
+            <ul>
+                <li>
+                    <a href="javascript:cashdrawer_open()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M4 8h16v8H4z M2 6v12h20V6H2z M12 17h4v1h-4v-1z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Open</span>
+                            <span class="link-description">Open cash drawer</span>
+                        </div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="section">
+            <h2>Camera</h2>
+            <ul>
+                <li>
+                    <a href="javascript:testCamera()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M9 3L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2h-3.17L15 3H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                            <circle cx="12" cy="13" r="3"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Test Camera Connection</span>
+                            <span class="link-description">Check and test available camera devices</span>
+                        </div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>NFC</h2>
+            <ul>
+                <li>
+                    <a href="javascript:testNFC()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 18H4V4h16v16zM18 6h-5c-1.1 0-2 .9-2 2v2.28c-.6.35-1 .98-1 1.72 0 1.1.9 2 2 2s2-.9 2-2c0-.74-.4-1.38-1-1.72V8h3v8H8V8h2V6H6v12h12V6z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Test NFC Connection</span>
+                            <span class="link-description">Check and test available NFC devices</span>
+                        </div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- <div class="section">
+            <h2>HID Devices</h2>
+            <ul>
+                <li>
+                    <a href="javascript:testHIDDevices()" class="link-card">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>
+                        </svg>
+                        <div class="link-content">
+                            <span class="link-title">Test HID Devices</span>
+                            <span class="link-description">Check and test available HID devices</span>
+                        </div>
+                    </a>
+                </li>
+            </ul>
+        </div> -->
+
+
+        <!-- <a href="#" id="printLink">Print this content</a>
+        <script>
+            document.getElementById('printLink').onclick = function() {
+                window.print();
+            }
+        </script> -->
+    
+    </div>
+</body>
+</html>
+
