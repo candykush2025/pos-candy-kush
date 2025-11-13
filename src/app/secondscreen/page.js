@@ -22,8 +22,121 @@ export default function SecondScreenDebug() {
   const [logs, setLogs] = useState([]);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [isPWAMode, setIsPWAMode] = useState(false);
+  const [scanning, setScanning] = useState(false);
+
+  const checkPWAMode = () => {
+    // Check if running as PWA (standalone mode)
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true ||
+      document.referrer.includes("android-app://");
+
+    setIsPWAMode(isStandalone);
+    return isStandalone;
+  };
+
+  const scanDisplays = async () => {
+    setScanning(true);
+    addLog("🔍 Scanning for displays...");
+
+    try {
+      // Check PWA mode
+      const pwaMode = checkPWAMode();
+      addLog(
+        pwaMode
+          ? "✅ Running in PWA mode (standalone)"
+          : "⚠️ Running in browser mode (not PWA)"
+      );
+
+      // Check Presentation API
+      if ("presentation" in navigator && "PresentationRequest" in window) {
+        setIsSupported(true);
+        addLog("✅ Presentation API is supported");
+
+        // Try to detect available displays
+        const presentationUrl = `${window.location.origin}/secondscreen/display`;
+        try {
+          const request = new PresentationRequest([presentationUrl]);
+
+          // Check availability
+          if (request.availability) {
+            const availability = await request.availability;
+            addLog(
+              `📺 Display availability: ${
+                availability.value ? "Available" : "None detected"
+              }`
+            );
+
+            availability.addEventListener("change", () => {
+              addLog(
+                `📺 Display availability changed: ${
+                  availability.value ? "Available" : "Unavailable"
+                }`
+              );
+            });
+          } else {
+            addLog("⚠️ Display availability API not supported");
+          }
+        } catch (availError) {
+          addLog(
+            `⚠️ Could not check display availability: ${availError.message}`
+          );
+        }
+      } else {
+        setIsSupported(false);
+        addLog("❌ Presentation API is NOT supported in this browser");
+      }
+
+      // Check screen capture API
+      if ("getDisplayMedia" in navigator.mediaDevices) {
+        addLog("✅ Screen Capture API available");
+      } else {
+        addLog("❌ Screen Capture API not available");
+      }
+
+      // Check screen details API (for multi-screen info)
+      if ("getScreenDetails" in window) {
+        try {
+          const screenDetails = await window.getScreenDetails();
+          addLog(`📊 Detected ${screenDetails.screens.length} screen(s)`);
+          screenDetails.screens.forEach((screen, index) => {
+            addLog(
+              `  Screen ${index + 1}: ${screen.width}x${screen.height} ${
+                screen.isPrimary ? "(Primary)" : "(Secondary)"
+              }`
+            );
+          });
+        } catch (screenError) {
+          addLog(`⚠️ Could not get screen details: ${screenError.message}`);
+        }
+      } else {
+        addLog("⚠️ Screen Details API not available");
+      }
+
+      // Check window placement API
+      if ("getScreens" in window) {
+        try {
+          const screens = await window.getScreens();
+          addLog(`🖥️ Window Placement API: ${screens.length} screen(s)`);
+        } catch (placementError) {
+          addLog(`⚠️ Window Placement API error: ${placementError.message}`);
+        }
+      }
+
+      toast.success("Display scan completed");
+    } catch (error) {
+      addLog(`❌ Scan error: ${error.message}`);
+      toast.error("Failed to scan displays");
+    } finally {
+      setScanning(false);
+    }
+  };
 
   useEffect(() => {
+    // Initial check
+    checkPWAMode();
+
     // Check if Presentation API is supported
     if ("presentation" in navigator && "PresentationRequest" in window) {
       setIsSupported(true);
@@ -270,18 +383,18 @@ export default function SecondScreenDebug() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-gray-500">
-                PWA Install
+                PWA Mode
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                {isInstallable ? (
+                {isPWAMode ? (
                   <CheckCircle className="h-8 w-8 text-purple-500" />
                 ) : (
-                  <XCircle className="h-8 w-8 text-gray-400" />
+                  <XCircle className="h-8 w-8 text-orange-400" />
                 )}
                 <span className="text-2xl font-bold">
-                  {isInstallable ? "Ready" : "Not Available"}
+                  {isPWAMode ? "Standalone" : "Browser"}
                 </span>
               </div>
             </CardContent>
@@ -296,8 +409,24 @@ export default function SecondScreenDebug() {
           <CardContent className="space-y-4">
             <div className="flex gap-3 flex-wrap">
               <Button
+                onClick={scanDisplays}
+                disabled={scanning}
+                className="bg-blue-600 hover:bg-blue-700"
+                size="lg"
+              >
+                {scanning ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                    Scanning...
+                  </>
+                ) : (
+                  <>🔍 Rescan Displays</>
+                )}
+              </Button>
+
+              <Button
                 onClick={installPWA}
-                disabled={!isInstallable}
+                disabled={!isInstallable || isPWAMode}
                 className="bg-purple-600 hover:bg-purple-700"
                 size="lg"
               >
@@ -332,6 +461,28 @@ export default function SecondScreenDebug() {
                 Close Display
               </Button>
             </div>
+
+            {!isPWAMode && (
+              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-orange-800 dark:text-orange-200">
+                      Not Running in PWA Mode
+                    </h4>
+                    <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                      For best secondary display support, install this app as a
+                      PWA:
+                    </p>
+                    <ul className="list-disc list-inside text-sm text-orange-700 dark:text-orange-300 mt-2 space-y-1">
+                      <li>Click the "📱 Install PWA" button above</li>
+                      <li>Or use browser menu → "Install app"</li>
+                      <li>Then reopen from your installed apps</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {!isSupported && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
