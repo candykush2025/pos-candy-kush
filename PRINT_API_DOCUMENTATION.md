@@ -183,9 +183,31 @@ printService.getPrintJob { printData, error ->
 }
 ```
 
-## Important Notes
+## Integration with Payment Flow
 
-- Each print job can only be retrieved once. After GET, it's automatically deleted.
-- The API uses CORS headers to allow cross-origin requests from mobile apps.
-- In production, consider using a proper database instead of in-memory storage.
-- Handle network errors and timeouts appropriately in your Android app.
+The thermal print API is automatically called when a payment is successfully processed. Here's how it works:
+
+### Payment Success Flow
+1. User completes payment in the POS system
+2. `processPayment()` function in `useCartStore.js` is called
+3. Payment is processed via `/api/cart` with action "process_payment"
+4. On success, `generateReceiptData()` creates formatted receipt text
+5. Receipt data is sent to `/api/print` via POST request
+6. Cart is cleared locally
+7. Android app can poll `/api/print` via GET to retrieve and print the receipt
+
+### Receipt Data Format
+The receipt includes:
+- Store header ("CANDY KUSH POS")
+- Date/time
+- Customer information (if attached)
+- Itemized list with quantities, prices, and discounts
+- Subtotal, tax, and total calculations
+- Payment method and transaction ID
+- Notes (if any)
+- Thank you message
+
+### Error Handling
+- If printing fails, payment still succeeds (printing errors don't block sales)
+- Print errors are logged but don't affect the transaction
+- Android app should handle cases where no print job is available

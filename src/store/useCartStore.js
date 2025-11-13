@@ -239,6 +239,74 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
+  // Generate receipt data for thermal printing
+  generateReceiptData: (paymentData) => {
+    const { items, discount, tax, customer, notes } = get();
+
+    // Calculate totals
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = discount.type === "percentage"
+      ? subtotal * (discount.value / 100)
+      : discount.value;
+    const discountedSubtotal = subtotal - discountAmount;
+    const taxAmount = tax.rate > 0 ? discountedSubtotal * (tax.rate / 100) : tax.amount;
+    const total = discountedSubtotal + taxAmount;
+
+    // Format receipt data
+    let receipt = "CANDY KUSH POS\n";
+    receipt += "================\n";
+    receipt += new Date().toLocaleString() + "\n\n";
+
+    if (customer) {
+      receipt += `Customer: ${customer.name}\n`;
+      if (customer.phone) receipt += `Phone: ${customer.phone}\n`;
+      receipt += "\n";
+    }
+
+    receipt += "ITEMS:\n";
+    receipt += "----------------\n";
+
+    items.forEach(item => {
+      receipt += `${item.name}\n`;
+      receipt += `  ${item.quantity} x $${item.price.toFixed(2)}`;
+      if (item.discount > 0) {
+        receipt += ` -$${item.discount.toFixed(2)}`;
+      }
+      receipt += ` = $${item.total.toFixed(2)}\n`;
+      if (item.barcode) {
+        receipt += `  SKU: ${item.barcode}\n`;
+      }
+      receipt += "\n";
+    });
+
+    receipt += "----------------\n";
+    receipt += `Subtotal: $${subtotal.toFixed(2)}\n`;
+
+    if (discountAmount > 0) {
+      receipt += `Discount: -$${discountAmount.toFixed(2)}\n`;
+    }
+
+    if (taxAmount > 0) {
+      receipt += `Tax: $${taxAmount.toFixed(2)}\n`;
+    }
+
+    receipt += `TOTAL: $${total.toFixed(2)}\n\n`;
+
+    receipt += `Payment: ${paymentData.method}\n`;
+    if (paymentData.transactionId) {
+      receipt += `Transaction ID: ${paymentData.transactionId}\n`;
+    }
+
+    if (notes) {
+      receipt += `\nNotes: ${notes}\n`;
+    }
+
+    receipt += "\nThank you for your business!\n";
+    receipt += "================\n";
+
+    return receipt;
+  },
+
   // Process payment and clear cart
   processPayment: async (paymentData) => {
     try {
@@ -251,6 +319,24 @@ export const useCartStore = create((set, get) => ({
         }),
       });
       if (response.ok) {
+        // Generate receipt data before clearing cart
+        const receiptData = get().generateReceiptData(paymentData);
+
+        // Send receipt to thermal print API
+        try {
+          await fetch("/api/print", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              data: receiptData,
+            }),
+          });
+          console.log("Receipt sent to thermal printer");
+        } catch (printError) {
+          console.error("Failed to send receipt to printer:", printError);
+          // Don't fail the payment if printing fails
+        }
+
         // Clear cart locally after successful API call
         set({
           items: [],
