@@ -1,0 +1,2127 @@
+Date	Item	Employee	Reason	Adjustment	Stock After
+13 Nov 2025
+15:01
+orange tree
+SKU: PRD-0038
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020895600
++58
+58
+(was 0)
+13 Nov 2025
+15:01
+Tropicana Cherry
+SKU: PRD-0030
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020884168
++29
+29
+(was 0)
+13 Nov 2025
+15:01
+Tea Time
+SKU: 10168
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020870150
++19
+19
+(was 0)
+13 Nov 2025
+15:00
+Super Lemon Haze
+SKU: PRD-0041
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020857460
++136
+136
+(was 0)
+13 Nov 2025
+15:00
+Super Boof
+SKU: PRD-0040
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020842556
++50
+50
+(was 0)
+13 Nov 2025
+14:59
+GMO x G41
+SKU: PRD-0036
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020774122
++69
+69
+(was 0)
+13 Nov 2025
+14:52
+Super Boof
+nico
+Sale
+Ref: O-251113-1452-278
+-1
+0
+(was 0)
+13 Nov 2025
+14:52
+Pure Michigan
+SKU: PRD-0039
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020322484
++36
+36
+(was 0)
+13 Nov 2025
+14:51
+Super Boof
+SKU: PRD-0040
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763020307358
++50
+50
+(was 0)
+13 Nov 2025
+12:42
+orange tree
+win
+Sale
+Ref: O-251113-1242-199
+-3.5
+0
+(was 0)
+13 Nov 2025
+10:04
+GMO x G41
+win
+Sale
+Ref: O-251113-1003-425
+-1
+0
+(was 0)
+13 Nov 2025
+10:04
+Tropicana Cherry
+win
+Sale
+Ref: O-251113-1003-425
+-1
+0
+(was 0)
+13 Nov 2025
+10:04
+Plastic Grinder
+win
+Sale
+Ref: O-251113-1003-425
+-1
+0
+(was 0)
+13 Nov 2025
+10:01
+GMO x G41
+SKU: PRD-0036
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1763002907978
++69
+69
+(was 0)
+13 Nov 2025
+03:04
+Pure Michigan
+Kylo
+Sale
+Ref: O-251112-0304-162
+-1
+0
+(was 0)
+13 Nov 2025
+03:01
+Pure Michigan
+SKU: PRD-0039
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762977703792
++36
+36
+(was 0)
+13 Nov 2025
+02:40
+Herban Bud(orange)
+SKU: 10174
+Cashier
+adjustment_decrease
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762976451974
++1
+1
+(was 2)
+13 Nov 2025
+02:40
+Herban Bud(orange)
+SKU: 10174
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762976430847
++2
+2
+(was 0)
+13 Nov 2025
+02:40
+Herban Bud(cherry)
+SKU: 10173
+Cashier
+adjustment_decrease
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762976407657
++2
+0
+(was 2)
+13 Nov 2025
+02:38
+Herban Bud(cherry)
+SKU: 10173
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762976287599
++2
+2
+(was 0)
+13 Nov 2025
+02:37
+Herban Bud(cherry)
+Kylo
+Sale
+Ref: O-251112-0237-183
+-2
+0
+(was 0)
+13 Nov 2025
+02:37
+Herban Bud(orange)
+Kylo
+Sale
+Ref: O-251112-0237-183
+-1
+0
+(was 0)
+13 Nov 2025
+02:33
+Jungle Yai 🌴
+SKU: PRD-0049
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762975982855
++20
+20
+(was 0)
+13 Nov 2025
+02:32
+Jungle Yai 🌴
+Kylo
+Sale
+Ref: O-251112-0232-816
+-2
+0
+(was 0)
+13 Nov 2025
+01:42
+Emergen C
+SKU: 10167
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762972973797
++18
+18
+(was 0)
+13 Nov 2025
+01:39
+Stash Sabai
+Kylo
+Sale
+Ref: O-251112-0139-854
+-2
+0
+(was 0)
+13 Nov 2025
+01:39
+Tea Time
+Kylo
+Sale
+Ref: O-251112-0139-854
+-3
+0
+(was 0)
+13 Nov 2025
+01:36
+Tea Time
+SKU: 10168
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762972589223
++19
+19
+(was 0)
+13 Nov 2025
+01:33
+Pure Michigan
+Kylo
+Sale
+Ref: O-251112-0133-411
+-1
+0
+(was 0)
+13 Nov 2025
+01:33
+Tea Time
+Kylo
+Sale
+Ref: O-251112-0133-411
+-1
+0
+(was 0)
+13 Nov 2025
+01:33
+Emergen C
+Kylo
+Sale
+Ref: O-251112-0133-411
+-1
+0
+(was 0)
+12 Nov 2025
+22:15
+Tea Time
+SKU: 10168
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762960531510
++19
+19
+(was 0)
+12 Nov 2025
+21:03
+Super Boof
+David
+Sale
+Ref: O-251112-2103-297
+-3.5
+0
+(was 0)
+12 Nov 2025
+20:51
+Auntie Aloha
+David
+Sale
+Ref: O-251112-2051-928
+-3
+0
+(was 0)
+12 Nov 2025
+20:51
+Tea Time
+David
+Sale
+Ref: O-251112-2051-928
+-1
+0
+(was 0)
+12 Nov 2025
+20:49
+Auntie Aloha
+SKU: 10216
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762955382181
++22
+22
+(was 0)
+12 Nov 2025
+20:18
+Super Lemon Haze
+David
+Sale
+Ref: O-251112-2018-066
+-1
+0
+(was 0)
+12 Nov 2025
+16:53
+GMO x G41
+David
+Sale
+Ref: O-251112-1653-627
+-1
+0
+(was 0)
+12 Nov 2025
+15:42
+Tropicana Cherry
+SKU: PRD-0030
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762936965426
++29
+29
+(was 0)
+12 Nov 2025
+15:42
+Tea Time
+SKU: 10168
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762936931303
++19
+19
+(was 0)
+12 Nov 2025
+15:37
+GMO x G41
+SKU: PRD-0036
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762936658354
++69
+69
+(was 0)
+12 Nov 2025
+15:37
+Super Lemon Haze
+SKU: PRD-0041
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762936634899
++50
+136
+(was 86)
+12 Nov 2025
+15:35
+Cookie And Cream V.2
+SKU: 10222
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762936557867
++50
+50
+(was 0)
+12 Nov 2025
+15:31
+Ace Vape
+SKU: 10211
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762936271341
++9
+9
+(was 0)
+12 Nov 2025
+15:30
+Gary Payton
+SKU: PRD-0034
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762936203626
++35
+35
+(was 0)
+12 Nov 2025
+15:27
+orange tree
+SKU: PRD-0038
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762936078870
++30
+58
+(was 28)
+12 Nov 2025
+15:24
+Super Boof
+SKU: PRD-0040
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762935860246
++50
+50
+(was 0)
+12 Nov 2025
+14:54
+Tropicana Cherry
+David
+Sale
+Ref: O-251112-1454-171
+-1
+0
+(was 0)
+12 Nov 2025
+14:53
+Tropicana Cherry
+SKU: PRD-0030
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762934014742
++29
+29
+(was 0)
+12 Nov 2025
+11:47
+Ace Vape
+win
+Sale
+Ref: O-251112-1147-807
+-1
+0
+(was 0)
+12 Nov 2025
+07:08
+Super Lemon Haze
+SKU: PRD-0041
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762906120889
++86
+86
+(was 0)
+12 Nov 2025
+00:53
+Tea Time
+Kylo
+Sale
+Ref: O-251111-0053-823
+-1
+0
+(was 0)
+11 Nov 2025
+23:47
+Emergen C
+SKU: 10167
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762879642556
++18
+18
+(was 0)
+11 Nov 2025
+23:45
+Tea Time
+SKU: 10168
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762879550126
++19
+19
+(was 0)
+11 Nov 2025
+23:42
+Super Lemon Haze
+Kylo
+Sale
+Ref: O-251111-2342-527
+-0.5
+0
+(was 0)
+11 Nov 2025
+22:13
+GMO x G41
+nico
+Sale
+Ref: O-251111-2213-512
+-4
+0
+(was 0)
+11 Nov 2025
+22:13
+Gary Payton
+nico
+Sale
+Ref: O-251111-2213-512
+-2.5
+0
+(was 0)
+11 Nov 2025
+22:13
+Tropicana Cherry
+nico
+Sale
+Ref: O-251111-2213-512
+-2.5
+0
+(was 0)
+11 Nov 2025
+22:09
+GMO x G41
+SKU: PRD-0036
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762873772129
++19
+19
+(was 0)
+11 Nov 2025
+20:15
+GMO x G41
+nico
+Sale
+Ref: O-251111-2015-387
+-1
+0
+(was 0)
+11 Nov 2025
+20:13
+Super Boof
+nico
+Sale
+Ref: O-251111-2013-885
+-1.5
+0
+(was 0)
+11 Nov 2025
+20:13
+90u Forbidden Fruit 🍉
+nico
+Sale
+Ref: O-251111-2013-885
+-1
+4
+(was 5)
+11 Nov 2025
+20:04
+Auntie Aloha
+nico
+Sale
+Ref: O-251111-2004-781
+-1
+0
+(was 0)
+11 Nov 2025
+20:03
+Tea Time
+nico
+Sale
+Ref: O-251111-2003-990
+-1
+0
+(was 0)
+11 Nov 2025
+20:02
+Emergen C
+nico
+Sale
+Ref: O-251111-2002-766
+-1
+0
+(was 0)
+11 Nov 2025
+19:55
+Runtz Layer Cake
+SKU: 10220
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865747219
++209
+209
+(was 0)
+11 Nov 2025
+19:55
+Mandarins Sunset
+SKU: 10219
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865706624
++204
+204
+(was 0)
+11 Nov 2025
+19:54
+L.C.G
+SKU: 10218
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865646073
++450
+450
+(was 0)
+11 Nov 2025
+19:52
+Kiefez
+SKU: 10217
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865560549
++17
+17
+(was 0)
+11 Nov 2025
+19:51
+Auntie Aloha
+SKU: 10216
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865486414
++22
+22
+(was 0)
+11 Nov 2025
+19:45
+Slurricane FF
+SKU: 10215
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865158758
++9
+9
+(was 0)
+11 Nov 2025
+19:45
+Slurricane BB
+SKU: 10215
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865116967
++17
+17
+(was 0)
+11 Nov 2025
+19:44
+Queen Sang
+SKU: 10214
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762865047568
++18
+18
+(was 0)
+11 Nov 2025
+19:43
+Strawana 🍇
+SKU: PRD-0052
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762864983386
++17
+17
+(was 0)
+11 Nov 2025
+19:42
+Papaya Punch 🥊
+SKU: PRD-0051
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762864950721
++3
+3
+(was 0)
+11 Nov 2025
+19:40
+Mango Dark
+SKU: 10213
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762864857745
++50
+50
+(was 0)
+11 Nov 2025
+19:40
+Mango
+SKU: 10213
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762864833085
++40
+40
+(was 0)
+11 Nov 2025
+19:39
+Manali 🟤
+SKU: PRD-0050
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762864789401
++7
+7
+(was 0)
+11 Nov 2025
+19:39
+Jungle Yai 🌴
+SKU: PRD-0049
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762864755328
++20
+20
+(was 0)
+11 Nov 2025
+19:38
+Juicy Wine 🍷
+SKU: PRD-0048
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762864724142
++10
+10
+(was 0)
+11 Nov 2025
+19:38
+Hulkberry (nector)
+SKU: PRD-0071
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762864692104
++5
+5
+(was 0)
+11 Nov 2025
+19:37
+Grape EX 🍇
+SKU: PRD-0044
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762864645817
++2
+2
+(was 0)
+11 Nov 2025
+19:14
+Bubble Hash
+SKU: 10212
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762863261425
++22
+22
+(was 0)
+11 Nov 2025
+19:11
+Fanta 🥤
+SKU: PRD-0046
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762863111858
++16
+16
+(was 0)
+11 Nov 2025
+19:11
+Cheese Cake 🧀
+SKU: PRD-0043
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762863066096
++10
+10
+(was 0)
+11 Nov 2025
+19:09
+Ace Vape
+SKU: 10211
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762862987384
++1
+1
+(was 0)
+11 Nov 2025
+18:37
+Weed TH Hitter
+SKU: 10210
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762861053100
++473
+473
+(was 0)
+11 Nov 2025
+18:34
+Stash pro Container
+SKU: 10209
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860878107
++6
+6
+(was 0)
+11 Nov 2025
+18:33
+Stash Yuki
+SKU: 10208
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860808928
++25
+25
+(was 0)
+11 Nov 2025
+18:32
+Stash Tao
+SKU: 10207
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860774192
++24
+24
+(was 0)
+11 Nov 2025
+18:32
+Stash Sabai
+SKU: 10206
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860750322
++24
+24
+(was 0)
+11 Nov 2025
+18:31
+Space Grinder
+SKU: 10205
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860711999
++3
+3
+(was 0)
+11 Nov 2025
+18:28
+Raw Grinder
+SKU: 10204
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860508912
++3
+3
+(was 0)
+11 Nov 2025
+18:27
+Octopus Bowl
+SKU: 10203
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860452106
++1
+1
+(was 0)
+11 Nov 2025
+18:26
+Metal Grinder(small)
+SKU: 10202
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860398168
++3
+3
+(was 0)
+11 Nov 2025
+18:24
+Bong pipe (long)
+SKU: 10201
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860243183
++1
+1
+(was 0)
+11 Nov 2025
+18:21
+Kush Warps
+SKU: 10199
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860107185
++29
+29
+(was 0)
+11 Nov 2025
+18:21
+Joint Case
+SKU: 10198
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860063462
++1
+1
+(was 0)
+11 Nov 2025
+18:20
+High Bowl
+SKU: 10197
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762860034772
++3
+3
+(was 0)
+11 Nov 2025
+18:17
+Plastic Grinder
+SKU: 10196
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762859868094
++19
+19
+(was 0)
+11 Nov 2025
+17:47
+Glass pipe
+SKU: 10195
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762858047927
++2
+2
+(was 0)
+11 Nov 2025
+17:47
+Get Stoked
+SKU: 10194
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762858021793
++42
+42
+(was 0)
+11 Nov 2025
+17:44
+Element 5m rolls
+SKU: 10193
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857884616
++8
+8
+(was 0)
+11 Nov 2025
+17:44
+Double shot
+SKU: 10192
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857847431
++1
+1
+(was 0)
+11 Nov 2025
+17:43
+Dab Bong
+SKU: 10191
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857804789
++1
+1
+(was 0)
+11 Nov 2025
+17:42
+Crop kings(Tribal Spirit)
+SKU: 10190
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857769049
++8
+8
+(was 0)
+11 Nov 2025
+17:36
+Crop king ( Irish Cream)
+SKU: 10189
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857414463
++12
+12
+(was 0)
+11 Nov 2025
+17:35
+Crops king
+SKU: 10188
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857341255
++13
+13
+(was 0)
+11 Nov 2025
+17:34
+Colour pipe
+SKU: 10187
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857278459
++3
+3
+(was 0)
+11 Nov 2025
+17:33
+Classic Bowl
+SKU: 10185
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857212184
++1
+1
+(was 0)
+11 Nov 2025
+17:33
+Choco paper
+SKU: 10184
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857185571
++20
+20
+(was 0)
+11 Nov 2025
+17:32
+Bong short
+SKU: 10001
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857150774
++1
+1
+(was 0)
+11 Nov 2025
+17:30
+Bong LG7
+SKU: 10183
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762857013669
++1
+1
+(was 0)
+11 Nov 2025
+17:29
+Bong L61
+SKU: 10182
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762856981709
++1
+1
+(was 0)
+11 Nov 2025
+17:28
+Bong AA2
+SKU: 10181
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762856903873
++1
+1
+(was 0)
+11 Nov 2025
+17:27
+Bong AA1
+SKU: 10181
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762856874939
++1
+1
+(was 0)
+11 Nov 2025
+17:27
+Bong 213
+SKU: 10180
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762856841942
++1
+1
+(was 0)
+11 Nov 2025
+17:26
+Big Bowl
+SKU: 10179
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762856812287
++2
+2
+(was 0)
+11 Nov 2025
+17:13
+Tyson Watermelon
+SKU: 10178
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762856033164
++3
+3
+(was 0)
+11 Nov 2025
+17:13
+Tyson Guava
+SKU: 10177
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762856000918
++5
+5
+(was 0)
+11 Nov 2025
+17:12
+Tyson Blueberry
+SKU: 10176
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855973331
++4
+4
+(was 0)
+11 Nov 2025
+17:11
+Tyson Apple
+SKU: 10175
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855900052
++5
+5
+(was 0)
+11 Nov 2025
+17:07
+Herban Bud(orange)
+SKU: 10174
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855631338
++2
+2
+(was 0)
+11 Nov 2025
+17:06
+Herban Bud(cherry)
+SKU: 10173
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855589050
++2
+2
+(was 0)
+11 Nov 2025
+17:05
+Extra strong Violet
+SKU: 10172
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855528997
++5
+5
+(was 0)
+11 Nov 2025
+17:04
+Extra strong Cola
+SKU: 10171
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855485910
++7
+7
+(was 0)
+11 Nov 2025
+17:03
+Extra strong Apple
+SKU: 10170
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855409191
++8
+8
+(was 0)
+11 Nov 2025
+17:00
+Death by edibles
+SKU: 10169
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762855247689
++1
+1
+(was 0)
+11 Nov 2025
+16:46
+Tea Time
+SKU: 10168
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762854399531
++19
+19
+(was 0)
+11 Nov 2025
+16:45
+Emergen C
+SKU: 10167
+Cashier
+Initial Stock
+Initial stock created from POS by Cashier
+Ref: POS-CREATE-1762854354065
++18
+18
+(was 0)
+11 Nov 2025
+16:44
+orange tree
+SKU: PRD-0038
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762854278281
++28
+28
+(was 0)
+11 Nov 2025
+16:41
+Tropicana Cherry
+SKU: PRD-0030
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762854067309
++29
+29
+(was 0)
+11 Nov 2025
+16:40
+Super Lemon Haze
+SKU: PRD-0041
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762854037970
++86
+86
+(was 0)
+11 Nov 2025
+16:38
+Super Boof
+SKU: PRD-0040
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762853892152
++1
+1
+(was 0)
+11 Nov 2025
+16:35
+Pure Michigan
+SKU: PRD-0039
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762853729700
++36
+36
+(was 0)
+11 Nov 2025
+16:33
+Gary Payton
+SKU: PRD-0034
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762853626951
++19
+19
+(was 0)
+11 Nov 2025
+16:24
+GMO x G41
+SKU: PRD-0036
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762853090403
++19
+19
+(was 0)
+10 Nov 2025
+16:15
+pocky
+nico
+Sale
+Ref: O-251110-1615-327
+-2
+0
+(was 0)
+10 Nov 2025
+16:14
+pocky
+SKU: PRD-0064
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762766045377
++5
+5
+(was 0)
+10 Nov 2025
+00:16
+Coca Cola
+SKU: PRD-0059
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762708615038
++5
+5
+(was 0)
+09 Nov 2025
+17:40
+Tropicana Cherry
+SKU: 10144
+Cashier
+adjustment_decrease
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762684809811
++0.29999999999999716
+45
+(was 45.3)
+09 Nov 2025
+17:39
+Super Boof
+SKU: 10145
+Cashier
+adjustment_decrease
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762684763480
++0.10000000000000142
+30
+(was 30.1)
+09 Nov 2025
+17:38
+Pure Michigan
+SKU: 10118
+Cashier
+adjustment_decrease
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762684735731
++0.5
+51
+(was 51.5)
+09 Nov 2025
+17:35
+Cherry Lemon OG
+SKU: 10122
+Cashier
+adjustment_decrease
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762684554647
++16
+0
+(was 16)
+09 Nov 2025
+14:47
+Caribbean Breeze
+admin@candykush.com
+Purchase Order
+Purchase Order from cali distribution test
+Ref: qW2g5uCzdE4k2e4Xe1CS
++37
+37
+(was 0)
+09 Nov 2025
+14:28
+Caribbean breeze
+SKU: 10038
+Cashier
+adjustment_decrease
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762673327823
++0.7000000000000028
+50
+(was 50.7)
+06 Nov 2025
+23:49
+90u Forbidden Fruit 🍉
+SKU: 10166
+admin@candykush.com
+Manual Adjustment
+Stock increased by 5 via product edit
++5
+5
+(was 0)
+05 Nov 2025
+23:10
+GMO x G41
+Kylo
+Sale
+Ref: O-251105-2310-477
+-1
+37
+(was 38)
+04 Nov 2025
+02:12
+Shot paper
+SKU: 10044
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197126499
+-1
+14
+(was 15)
+04 Nov 2025
+02:12
+Black Trip
+SKU: 10045
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197125929
++16
+16
+(was 0)
+04 Nov 2025
+02:12
+Brown trip
+SKU: 10046
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197125360
++17
+17
+(was 0)
+04 Nov 2025
+02:12
+Coconut paper
+SKU: 10047
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197124821
+-1
+8
+(was 9)
+04 Nov 2025
+02:12
+Grinder plastic
+SKU: 10116
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197124252
+-1
+22
+(was 23)
+04 Nov 2025
+02:12
+Fresh frozen hulkberry
+SKU: 10134
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197123690
+-10
+224.3
+(was 234.3)
+04 Nov 2025
+02:12
+Bubble Hash
+SKU: 10028
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197123130
+-4
+28.5
+(was 32.5)
+04 Nov 2025
+02:12
+Super Lemon Haze
+SKU: 10032
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197122526
+-1.5
+98
+(was 99.5)
+04 Nov 2025
+02:12
+Gold dust
+SKU: 10024
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197121926
+-1
+63.3
+(was 64.3)
+04 Nov 2025
+02:12
+Extra Strong Apple
+SKU: 10127
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197121184
+-1
+2
+(was 3)
+04 Nov 2025
+02:12
+Crop Kingz (Brass Monkey)(4 pieces inside)
+SKU: 10136
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197120568
+-1
+13
+(was 14)
+04 Nov 2025
+02:11
+Georgia Pie
+SKU: 10138
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197119975
++14.5
+14.5
+(was 0)
+04 Nov 2025
+02:11
+GMO x G41
+SKU: 10143
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197119114
+-2.5
+38
+(was 40.5)
+04 Nov 2025
+02:11
+Cherry Lemon OG
+SKU: 10122
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197118452
+-1
+16
+(was 17)
+04 Nov 2025
+02:11
+Tropicana Cherry
+SKU: 10144
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197117776
+-1
+45.3
+(was 46.3)
+04 Nov 2025
+02:11
+Super Boof
+SKU: 10145
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197117109
+-1
+30.1
+(was 31.1)
+04 Nov 2025
+02:11
+Forbidden fruit
+SKU: 10060
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197116447
+-3.3
+-3.3
+(was 0)
+04 Nov 2025
+02:11
+Gary Payton
+SKU: 10039
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197115765
+-0.5
+41
+(was 41.5)
+04 Nov 2025
+02:11
+ACE Vape
+SKU: 10089
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197115109
+-2
+1
+(was 3)
+04 Nov 2025
+02:11
+Baked Cookies
+SKU: 10128
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197114373
+-2
+49
+(was 51)
+04 Nov 2025
+02:11
+Pepper runtz
+SKU: 10059
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197113666
+-1
+4
+(was 5)
+04 Nov 2025
+02:11
+Apple cream
+SKU: 10142
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197112984
+-0.9000000000000004
+5.1
+(was 6)
+04 Nov 2025
+02:11
+Buddha
+SKU: 10156
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197112315
++3.5
+3.5
+(was 0)
+04 Nov 2025
+02:11
+Yoyo
+SKU: 10027
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197111626
+-2
+0
+(was 2)
+04 Nov 2025
+02:11
+Slurricane BB
+SKU: 10072
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197110928
+-1
+19
+(was 20)
+04 Nov 2025
+02:11
+Partagas
+SKU: 10161
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197110232
++5
+5
+(was 0)
+04 Nov 2025
+02:11
+Rangda
+SKU: 10162
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197109247
++3
+3
+(was 0)
+04 Nov 2025
+02:11
+Rangda XXL
+SKU: 10163
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197108291
++5
+5
+(was 0)
+04 Nov 2025
+02:11
+Antonio
+SKU: 10164
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762197107387
++9
+9
+(was 0)
+04 Nov 2025
+01:18
+Testing Prod
+SKU: 10161
+Cashier
+adjustment_increase
+Stock adjusted from POS by Cashier
+Ref: POS-EDIT-1762193914135
++2
+6
+(was 4)
+03 Nov 2025
+16:34
+Super Boof
+nico
+Sale
+Ref: O-251103-1633-260
+-1
+31.1
+(was 32.1)
+03 Nov 2025
+16:34
+Super Lemon Haze
+nico
+Sale
+Ref: O-251103-1633-260
+-1
+99.5
+(was 100.5)
+02 Nov 2025
+22:36
+Caribbean breeze
+SKU: 10038
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762097771531
+-1
+50.7
+(was 51.7)
+02 Nov 2025
+22:36
+GMO x G41
+SKU: 10143
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762097770917
+-1
+40.5
+(was 41.5)
+02 Nov 2025
+22:36
+Tropicana Cherry
+SKU: 10144
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762097770300
+-1
+46.3
+(was 47.3)
+02 Nov 2025
+21:51
+Slim Jim normal
+SKU: 10041
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095066487
++13
+13
+(was 0)
+02 Nov 2025
+21:51
+Shot paper
+SKU: 10044
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095065907
++15
+15
+(was 0)
+02 Nov 2025
+21:51
+Black Trip
+SKU: 10045
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095065303
++16
+16
+(was 0)
+02 Nov 2025
+21:51
+Brown trip
+SKU: 10046
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095064710
++17
+17
+(was 0)
+02 Nov 2025
+21:51
+Coconut paper
+SKU: 10047
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095064111
++9
+9
+(was 0)
+02 Nov 2025
+21:51
+Chocolate paper
+SKU: 10048
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095063485
++20
+20
+(was 0)
+02 Nov 2025
+21:51
+Watermelon paper
+SKU: 10049
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095062897
++21
+21
+(was 0)
+02 Nov 2025
+21:51
+Vanilla paper
+SKU: 10050
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095062287
++18
+18
+(was 0)
+02 Nov 2025
+21:51
+Polaroid
+SKU: 10065
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095061707
++11
+11
+(was 0)
+02 Nov 2025
+21:51
+Grinder plastic
+SKU: 10116
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095061133
++23
+23
+(was 0)
+02 Nov 2025
+21:51
+Fresh frozen hulkberry
+SKU: 10134
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095060572
++234.3
+234.3
+(was 0)
+02 Nov 2025
+21:50
+Krush Soda
+SKU: 10056
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095059957
++3
+3
+(was 0)
+02 Nov 2025
+21:50
+Smoking Blue
+SKU: 10071
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095059393
++6
+6
+(was 0)
+02 Nov 2025
+21:50
+Sticky Lips
+SKU: 10083
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095058805
+-35
+-35
+(was 0)
+02 Nov 2025
+21:50
+Raw tips
+SKU: 10084
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095058182
+-4
+-4
+(was 0)
+02 Nov 2025
+21:50
+Mascotte 5m rolls
+SKU: 10085
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095057580
++3
+3
+(was 0)
+02 Nov 2025
+21:50
+Bubble Hash
+SKU: 10028
+Auto Sync
+Manual Adjustment
+Stock sync from Loyverse
+Ref: loyverse-sync-1762095057007
++32.5
+32.5
+(was 0)

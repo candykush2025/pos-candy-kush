@@ -1186,14 +1186,14 @@ export default function SalesSection({ cashier }) {
       return;
     }
 
-    // Check if we're editing an existing item or adding new
-    const existingItem = items.find(
-      (item) => item.id === selectedWeightProduct.id
+    // Find cart item by productId (cart item.id !== product.id)
+    const cartItem = items.find(
+      (it) => it.productId === selectedWeightProduct.id
     );
 
-    if (existingItem) {
-      // Update existing item quantity
-      updateQuantity(selectedWeightProduct.id, weight);
+    if (cartItem) {
+      // Update the cart item using the cart item's id
+      updateQuantity(cartItem.id, weight);
       toast.success(`Updated to ${weight} kg`);
     } else {
       // Add to cart with weight as quantity
@@ -1822,99 +1822,22 @@ export default function SalesSection({ cashier }) {
       const cartData = getCartData();
       const { receiptsService } = await import("@/lib/firebase/firestore");
       const { generateOrderNumber } = await import("@/lib/utils/format");
-      const { loyverseService } = await import("@/lib/api/loyverse");
-      const { LOYVERSE_CONFIG, FEATURES } = await import("@/config/constants");
 
       const orderNumber = generateOrderNumber();
       const now = new Date();
 
-      // Get payment type details based on selected payment method
-      const { LOYVERSE_PAYMENT_TYPES } = await import("@/config/constants");
-      let selectedPaymentType;
-      switch (paymentMethod) {
-        case "cash":
-          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CASH;
-          break;
-        case "card":
-          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CARD;
-          break;
-        case "crypto":
-          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CRYPTO;
-          break;
-        case "transfer":
-          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.TRANSFER;
-          break;
-        default:
-          selectedPaymentType = LOYVERSE_PAYMENT_TYPES.CASH;
-      }
+      // Map payment method to payment type
+      const paymentTypeMap = {
+        cash: { id: "cash", name: "Cash", type: "CASH" },
+        card: { id: "card", name: "Card", type: "CARD" },
+        crypto: { id: "crypto", name: "Crypto", type: "CUSTOM" },
+        transfer: { id: "transfer", name: "Transfer", type: "CUSTOM" },
+      };
 
-      // Prepare line items for Loyverse format
-      // According to Loyverse API: ONLY variant_id and quantity are REQUIRED
-      // Optional fields: price, cost, line_note, line_discounts, line_taxes, line_modifiers
-      const lineItems = items.map((item) => {
-        const lineItem = {
-          variant_id: item.variantId || item.variant_id || item.productId,
-          quantity: item.quantity,
-        };
+      const selectedPaymentType =
+        paymentTypeMap[paymentMethod] || paymentTypeMap.cash;
 
-        // Only add optional fields if you want to override Loyverse defaults
-        if (item.price !== undefined) {
-          lineItem.price = item.price;
-        }
-        if (item.cost !== undefined) {
-          lineItem.cost = item.cost;
-        }
-
-        return lineItem;
-      });
-
-      // Prepare payment data with correct payment type ID
-      const payments = [
-        {
-          payment_type_id: selectedPaymentType.id,
-          paid_at: now.toISOString(),
-        },
-      ];
-
-      // Sync status tracking
-      let loyverseReceipt = null;
-      let syncStatus = "pending";
-      let syncError = null;
-
-      // Try to sync to Loyverse if feature is enabled and online
-      if (FEATURES.LOYVERSE_SYNC && navigator.onLine) {
-        try {
-          // Create receipt in Loyverse
-          const loyverseData = {
-            store_id: LOYVERSE_CONFIG.STORE_ID,
-            employee_id: cashier?.loyverseId || null,
-            order: orderNumber,
-            customer_id: cartCustomer?.loyverseId || null,
-            source: LOYVERSE_CONFIG.SOURCE_NAME,
-            receipt_date: now.toISOString(),
-            note: `Transaction from ${LOYVERSE_CONFIG.SOURCE_NAME}`,
-            line_items: lineItems,
-            payments: payments,
-          };
-
-          loyverseReceipt = await loyverseService.createReceipt(loyverseData);
-          syncStatus = "synced";
-
-          toast.success("Transaction synced to Loyverse!");
-        } catch (error) {
-          console.error("Loyverse sync error:", error);
-          syncStatus = "failed";
-          syncError = error.message;
-          toast.warning(
-            "Transaction saved locally. Sync failed: " + error.message
-          );
-        }
-      } else if (!navigator.onLine) {
-        syncStatus = "offline";
-        toast.info("Offline mode: Transaction will sync when online");
-      }
-
-      // Create receipt data for Firebase (in Loyverse-compatible format)
+      // Create receipt data for Firebase
       const receiptData = {
         // Local identifiers
         orderNumber: orderNumber,
@@ -1924,11 +1847,11 @@ export default function SalesSection({ cashier }) {
             : "unknown",
         fromThisDevice: true,
 
-        // Loyverse format
-        receipt_number: loyverseReceipt?.receipt_number || null,
+        // Receipt info
+        receipt_number: orderNumber,
         receipt_type: "SALE",
         order: orderNumber,
-        source: LOYVERSE_CONFIG.SOURCE_NAME,
+        source: "POS System",
 
         // Dates
         created_at: now.toISOString(),
@@ -1937,7 +1860,7 @@ export default function SalesSection({ cashier }) {
 
         // Money amounts
         total_money: cartData.total,
-        total_tax: 0, // Add tax calculation if needed
+        total_tax: 0,
         total_discount: cartData.discountAmount,
         subtotal: cartData.subtotal,
         tip: 0,
@@ -1950,12 +1873,6 @@ export default function SalesSection({ cashier }) {
           ? (cartCustomer.points || 0) + Math.floor(total)
           : 0,
 
-        // IDs
-        store_id: LOYVERSE_CONFIG.STORE_ID,
-        employee_id: cashier?.loyverseId || null,
-        customer_id: cartCustomer?.loyverseId || null,
-        pos_device_id: null,
-
         // Additional info
         cashierId: cashier?.id || null,
         cashierName: cashier?.name || "Unknown Cashier",
@@ -1963,18 +1880,11 @@ export default function SalesSection({ cashier }) {
         customerId: cartCustomer?.id || null,
         customerName: cartCustomer?.name || null,
 
-        // Status and sync
+        // Status
         status: "completed",
         cancelled_at: null,
 
-        // Sync tracking
-        syncStatus: syncStatus,
-        syncError: syncError,
-        syncedAt: syncStatus === "synced" ? now.toISOString() : null,
-        loyverseReceiptNumber: loyverseReceipt?.receipt_number || null,
-        loyverseResponse: loyverseReceipt || null,
-
-        // Line items in Loyverse format
+        // Line items
         line_items: items.map((item) => ({
           id: item.id || null,
           item_id: item.itemId || item.productId,
@@ -2022,40 +1932,102 @@ export default function SalesSection({ cashier }) {
           "@/lib/firebase/stockHistoryService"
         );
 
+        console.log("🔄 Starting stock update for", items.length, "items");
+
         for (const item of items) {
+          console.log("📦 Processing item:", {
+            name: item.name,
+            productId: item.productId,
+            quantity: item.quantity,
+          });
+
           // Fetch full product details to check if it tracks stock
-          const product = await productsService.get(
-            item.productId || item.itemId
-          );
+          const product = await productsService.get(item.productId);
 
-          if (product && product.trackStock) {
-            const currentStock = product.stock || 0;
-            const newStock = Math.max(0, currentStock - item.quantity);
+          console.log("📦 Product fetched:", {
+            id: product?.id,
+            name: product?.name,
+            trackStock: product?.trackStock,
+            stock: product?.stock,
+            stockType: typeof product?.stock,
+            fullProduct: product,
+          });
 
-            // Update product stock
-            await productsService.update(product.id, {
-              stock: newStock,
-            });
+          if (!product) {
+            console.warn("⚠️ Product not found:", item.productId);
+            continue;
+          }
 
-            // Log stock history
-            await stockHistoryService.logStockMovement({
-              productId: product.id,
-              productName: product.name,
-              sku: product.sku || null,
-              type: "sale",
-              quantity: -item.quantity, // Negative for sale
-              previousStock: currentStock,
-              newStock: newStock,
-              referenceId: orderNumber,
-              referenceType: "receipt",
-              userId: cashier?.id || null,
-              userName: cashier?.name || "Unknown",
-              notes: `Sale: ${item.quantity}x ${product.name}`,
+          if (!product.trackStock) {
+            console.log("⏭️ Product doesn't track stock:", product.name);
+            continue;
+          }
+
+          // Check both stock and inStock fields (for compatibility)
+          const currentStock = product.stock ?? product.inStock ?? 0;
+
+          console.log("📊 Current stock check:", {
+            product: product.name,
+            stockField: product.stock,
+            inStockField: product.inStock,
+            currentStock: currentStock,
+          });
+
+          // Warn if stock is 0 or would go negative
+          if (currentStock === 0) {
+            console.warn("⚠️ WARNING: Selling from 0 stock!", {
+              product: product.name,
+              sellQuantity: item.quantity,
             });
           }
+
+          if (currentStock < item.quantity) {
+            console.warn("⚠️ WARNING: Selling more than available stock!", {
+              product: product.name,
+              currentStock,
+              sellQuantity: item.quantity,
+              shortage: item.quantity - currentStock,
+            });
+          }
+          const newStock = Math.max(0, currentStock - item.quantity);
+
+          console.log("📊 Stock calculation:", {
+            product: product.name,
+            currentStock,
+            quantity: item.quantity,
+            newStock,
+          });
+
+          // Update product stock
+          await productsService.update(product.id, {
+            stock: newStock,
+          });
+
+          console.log("✅ Stock updated:", product.name);
+
+          // Log stock history
+          await stockHistoryService.logStockMovement({
+            productId: product.id,
+            productName: product.name,
+            sku: product.sku || null,
+            type: "sale",
+            quantity: -item.quantity, // Negative for sale
+            previousStock: currentStock,
+            newStock: newStock,
+            referenceId: orderNumber,
+            referenceType: "receipt",
+            userId: cashier?.id || null,
+            userName: cashier?.name || "Unknown",
+            notes: `Sale: ${item.quantity}x ${product.name}`,
+          });
+
+          console.log("✅ Stock history logged:", product.name);
         }
+
+        console.log("✅ All stock updates completed");
       } catch (error) {
-        console.error("Error updating stock:", error);
+        console.error("❌ Error updating stock:", error);
+        console.error("Error details:", error.message, error.stack);
         // Don't fail the checkout if stock update fails
         toast.warning("Sale completed but stock update failed");
       }
@@ -2092,8 +2064,6 @@ export default function SalesSection({ cashier }) {
             cashReceived: paymentMethod === "cash" ? cashAmount : total,
             change: paymentMethod === "cash" ? cashAmount - total : 0,
             createdAt: now.toISOString(),
-            syncStatus: syncStatus,
-            loyverseReceiptNumber: loyverseReceipt?.receipt_number || null,
           });
 
           const orderItemsWithOrderId = items.map((item) => ({
@@ -2172,11 +2142,7 @@ export default function SalesSection({ cashier }) {
         }
       }
 
-      if (syncStatus === "synced") {
-        toast.success("Payment completed and synced to Loyverse!");
-      } else {
-        toast.success("Payment completed successfully!");
-      }
+      toast.success("Payment completed successfully!");
     } catch (error) {
       console.error("Checkout error:", error);
       toast.error("Failed to complete order");

@@ -327,14 +327,16 @@ export default function AdminOrders() {
 
     // Receipt type filter
     const typeMatch =
-      receiptTypeFilter === "all" || r.receiptType === receiptTypeFilter;
+      receiptTypeFilter === "all" ||
+      (r.receiptType || r.receipt_type) === receiptTypeFilter;
 
     // Source filter
     const sourceMatch = sourceFilter === "all" || r.source === sourceFilter;
 
     // Amount range filter
-    const minAmountMatch = !minAmount || r.totalMoney >= parseFloat(minAmount);
-    const maxAmountMatch = !maxAmount || r.totalMoney <= parseFloat(maxAmount);
+    const totalAmount = r.totalMoney || r.total_money || 0;
+    const minAmountMatch = !minAmount || totalAmount >= parseFloat(minAmount);
+    const maxAmountMatch = !maxAmount || totalAmount <= parseFloat(maxAmount);
 
     return (
       searchMatch &&
@@ -374,11 +376,11 @@ export default function AdminOrders() {
 
   // Calculate stats
   const totalSales = filteredReceipts
-    .filter((r) => r.receiptType === "SALE")
-    .reduce((sum, r) => sum + (r.totalMoney || 0), 0);
+    .filter((r) => (r.receiptType || r.receipt_type) === "SALE")
+    .reduce((sum, r) => sum + (r.totalMoney || r.total_money || 0), 0);
   const totalRefunds = filteredReceipts
-    .filter((r) => r.receiptType === "REFUND")
-    .reduce((sum, r) => sum + (r.totalMoney || 0), 0);
+    .filter((r) => (r.receiptType || r.receipt_type) === "REFUND")
+    .reduce((sum, r) => sum + (r.totalMoney || r.total_money || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -727,9 +729,11 @@ export default function AdminOrders() {
                       {/* Items */}
                       <td className="px-4 py-3">
                         <div className="max-w-xs">
-                          {receipt.lineItems && receipt.lineItems.length > 0 ? (
+                          {(receipt.lineItems || receipt.line_items) &&
+                          (receipt.lineItems || receipt.line_items).length >
+                            0 ? (
                             <div className="space-y-1">
-                              {receipt.lineItems
+                              {(receipt.lineItems || receipt.line_items)
                                 .slice(0, 2)
                                 .map((item, idx) => (
                                   <div key={idx} className="text-sm">
@@ -746,9 +750,13 @@ export default function AdminOrders() {
                                     )}
                                   </div>
                                 ))}
-                              {receipt.lineItems.length > 2 && (
+                              {(receipt.lineItems || receipt.line_items)
+                                .length > 2 && (
                                 <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                                  +{receipt.lineItems.length - 2} more items
+                                  +
+                                  {(receipt.lineItems || receipt.line_items)
+                                    .length - 2}{" "}
+                                  more items
                                 </div>
                               )}
                             </div>
@@ -770,11 +778,17 @@ export default function AdminOrders() {
                                     p.name || p.payment_type?.name || "Cash"
                                 )
                                 .join(", ")
-                            : "N/A"}
+                            : receipt.paymentMethod ||
+                              receipt.paymentTypeName ||
+                              "N/A"}
                         </div>
-                        {receipt.totalDiscount > 0 && (
+                        {(receipt.totalDiscount || receipt.total_discount) >
+                          0 && (
                           <div className="text-xs text-orange-600 dark:text-orange-400">
-                            Discount: {formatCurrency(receipt.totalDiscount)}
+                            Discount:{" "}
+                            {formatCurrency(
+                              receipt.totalDiscount || receipt.total_discount
+                            )}
                           </div>
                         )}
                       </td>
@@ -782,17 +796,23 @@ export default function AdminOrders() {
                       {/* Employee */}
                       <td className="px-4 py-3">
                         <div className="text-sm text-neutral-700 dark:text-neutral-300">
-                          {receipt.employeeId
-                            ? employees[receipt.employeeId]?.name ||
-                              receipt.employeeId.slice(0, 8) + "..."
-                            : "N/A"}
+                          {receipt.cashierName ||
+                            (receipt.employeeId
+                              ? employees[receipt.employeeId]?.name ||
+                                receipt.employeeId.slice(0, 8) + "..."
+                              : receipt.cashierId
+                              ? employees[receipt.cashierId]?.name ||
+                                receipt.cashierId.slice(0, 8) + "..."
+                              : "N/A")}
                         </div>
                       </td>
 
                       {/* Total Amount */}
                       <td className="px-4 py-3 text-right">
                         <div className="text-lg font-bold text-green-600 dark:text-green-500">
-                          {formatCurrency(receipt.totalMoney || 0)}
+                          {formatCurrency(
+                            receipt.totalMoney || receipt.total_money || 0
+                          )}
                         </div>
                       </td>
 
@@ -800,9 +820,13 @@ export default function AdminOrders() {
                       <td className="px-4 py-3 text-center">
                         <div className="flex flex-col items-center gap-1">
                           <Badge
-                            className={getReceiptTypeColor(receipt.receiptType)}
+                            className={getReceiptTypeColor(
+                              receipt.receiptType || receipt.receipt_type
+                            )}
                           >
-                            {receipt.receiptType || "SALE"}
+                            {receipt.receiptType ||
+                              receipt.receipt_type ||
+                              "SALE"}
                           </Badge>
                           {receipt.cancelledAt && (
                             <Badge variant="destructive" className="text-xs">

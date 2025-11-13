@@ -509,7 +509,9 @@ export default function ProductsSection() {
 
       // Only add stock fields if tracking stock
       if (productFormData.trackStock) {
-        productData.inStock = parseFloat(productFormData.inStock) || 0;
+        const stockValue = parseFloat(productFormData.inStock) || 0;
+        productData.stock = stockValue; // Primary stock field
+        productData.inStock = stockValue; // Legacy/compatibility field
         productData.lowStock = parseFloat(productFormData.lowStock) || 0;
       }
 
@@ -545,7 +547,17 @@ export default function ProductsSection() {
         // Check if stock changed for tracked products
         if (productFormData.trackStock) {
           const newStock = parseFloat(productFormData.inStock) || 0;
-          const currentStock = editingProduct.stock || 0;
+          // Check both stock and inStock fields for current value
+          const currentStock =
+            editingProduct.stock ?? editingProduct.inStock ?? 0;
+
+          console.log("📊 Stock adjustment check:", {
+            product: editingProduct.name,
+            currentStock,
+            newStock,
+            stockField: editingProduct.stock,
+            inStockField: editingProduct.inStock,
+          });
 
           // If stock value changed, log it to stock history
           if (newStock !== currentStock) {
