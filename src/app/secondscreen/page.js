@@ -38,57 +38,136 @@ export default function SecondScreenDebug() {
 
   const scanDisplays = async () => {
     setScanning(true);
-    addLog("🔍 Scanning for displays...");
+    addLog("════════════════════════════════════════");
+    addLog("🔍 SCANNING FOR SECONDARY DISPLAYS...");
+    addLog("════════════════════════════════════════");
 
     try {
-      // Check PWA mode
+      // 1. Check PWA mode
       const pwaMode = checkPWAMode();
       addLog(
         pwaMode
-          ? "✅ Running in PWA mode (standalone)"
-          : "⚠️ Running in browser mode (not PWA)"
+          ? "✅ PWA Mode: STANDALONE (Good!)"
+          : "⚠️ PWA Mode: BROWSER (Install as PWA for best results)"
       );
 
-      // Check Presentation API
+      // 2. Check Device & Browser
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      const isChrome = /Chrome/i.test(navigator.userAgent);
+      const isEdge = /Edg/i.test(navigator.userAgent);
+      addLog(`📱 Device: ${isAndroid ? "Android" : "Desktop"}`);
+      addLog(
+        `🌐 Browser: ${
+          isChrome
+            ? "Chrome"
+            : isEdge
+            ? "Edge"
+            : navigator.userAgent.split(" ")[0]
+        }`
+      );
+
+      // 3. Check Screen info
+      addLog(
+        `📊 Primary Screen: ${window.screen.width}x${window.screen.height} @ ${window.devicePixelRatio}x`
+      );
+
+      // 4. Check Presentation API (MAIN CHECK)
       if ("presentation" in navigator && "PresentationRequest" in window) {
         setIsSupported(true);
-        addLog("✅ Presentation API is supported");
+        addLog("✅ Presentation API: SUPPORTED ✓");
 
-        // Try to detect available displays
+        // Create presentation request
         const presentationUrl = `${window.location.origin}/secondscreen/display`;
+        addLog(`🔗 Display URL: ${presentationUrl}`);
+
         try {
           const request = new PresentationRequest([presentationUrl]);
+          addLog("✅ PresentationRequest created");
 
-          // Check availability
-          if (request.availability) {
-            const availability = await request.availability;
-            addLog(
-              `📺 Display availability: ${
-                availability.value ? "Available" : "None detected"
-              }`
+          // Check for available displays with timeout
+          if (request.getAvailability) {
+            addLog("⏳ Checking for secondary displays (5s timeout)...");
+
+            const availabilityPromise = request.getAvailability();
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("timeout")), 5000)
             );
 
-            availability.addEventListener("change", () => {
-              addLog(
-                `📺 Display availability changed: ${
-                  availability.value ? "Available" : "Unavailable"
-                }`
-              );
-            });
+            try {
+              const availability = await Promise.race([
+                availabilityPromise,
+                timeoutPromise,
+              ]);
+
+              if (availability.value) {
+                addLog("════════════════════════════════════════");
+                addLog("✅✅✅ SECONDARY DISPLAY FOUND! ✅✅✅");
+                addLog("════════════════════════════════════════");
+                addLog("📺 Status: Ready to connect");
+                addLog("👉 Click 'Start Secondary Display' button");
+                setAvailableDisplays([
+                  { name: "Secondary Display", available: true },
+                ]);
+                toast.success("🎉 Secondary display detected!");
+              } else {
+                addLog("════════════════════════════════════════");
+                addLog("❌ NO SECONDARY DISPLAY DETECTED");
+                addLog("════════════════════════════════════════");
+                addLog("💡 Troubleshooting:");
+                addLog("  1. Connect HDMI cable to external monitor");
+                addLog("  2. Or enable Chromecast/Wireless Display");
+                addLog("  3. Make sure display is powered on");
+                addLog("  4. Try 'Settings' → 'Display' → 'Cast screen'");
+                setAvailableDisplays([]);
+              }
+
+              // Monitor for display changes
+              availability.addEventListener("change", () => {
+                if (availability.value) {
+                  addLog("🔔 DISPLAY CONNECTED!");
+                  toast.success("✅ Secondary display connected!");
+                  setAvailableDisplays([
+                    { name: "Secondary Display", available: true },
+                  ]);
+                } else {
+                  addLog("🔔 Display disconnected");
+                  toast.info("Secondary display disconnected");
+                  setAvailableDisplays([]);
+                }
+              });
+            } catch (timeoutErr) {
+              if (timeoutErr.message === "timeout") {
+                addLog("⚠️ Availability check timed out");
+                addLog("💡 No display responded within 5 seconds");
+                addLog("💡 Make sure secondary display is connected");
+              } else {
+                throw timeoutErr;
+              }
+            }
           } else {
-            addLog("⚠️ Display availability API not supported");
+            addLog("⚠️ getAvailability() not available");
+            addLog("💡 Try clicking 'Start Secondary Display' anyway");
           }
         } catch (availError) {
-          addLog(
-            `⚠️ Could not check display availability: ${availError.message}`
-          );
+          addLog(`❌ Error: ${availError.message}`);
+          if (availError.name === "NotSupportedError") {
+            addLog("⚠️ Presentation API not fully supported");
+          } else if (availError.name === "NotAllowedError") {
+            addLog("⚠️ Permission denied - enable in browser settings");
+          }
         }
       } else {
         setIsSupported(false);
-        addLog("❌ Presentation API is NOT supported in this browser");
+        addLog("════════════════════════════════════════");
+        addLog("❌ PRESENTATION API NOT SUPPORTED");
+        addLog("════════════════════════════════════════");
+        addLog("💡 Requirements:");
+        addLog("  • Chrome 47+ or Edge 79+");
+        addLog("  • Android device with casting support");
+        addLog("  • Enable: chrome://flags/#enable-presentation-api");
       }
 
-      // Check screen capture API
+      // 5. Check screen capture API
       if ("getDisplayMedia" in navigator.mediaDevices) {
         addLog("✅ Screen Capture API available");
       } else {
@@ -176,55 +255,98 @@ export default function SecondScreenDebug() {
 
   const startPresentation = async () => {
     try {
-      addLog("🚀 Starting presentation request...");
+      addLog("════════════════════════════════════════");
+      addLog("🚀 STARTING SECONDARY DISPLAY...");
+      addLog("════════════════════════════════════════");
 
       // Create presentation request with secondary display URL
       const presentationUrl = `${window.location.origin}/secondscreen/display`;
       const presentationRequest = new PresentationRequest([presentationUrl]);
 
-      addLog(`📡 Requesting: ${presentationUrl}`);
+      addLog(`📡 Display URL: ${presentationUrl}`);
+      addLog(`⏳ Waiting for display selection...`);
+      addLog(`💡 Choose your secondary display from the popup`);
 
-      // Start the presentation
+      // Start the presentation (this will show a picker UI)
       const conn = await presentationRequest.start();
       setConnection(conn);
       setConnectionState(conn.state);
-      addLog(`✅ Presentation started! State: ${conn.state}`);
-      toast.success("Secondary display connected!");
+
+      addLog("════════════════════════════════════════");
+      addLog(`✅ DISPLAY CONNECTED! State: ${conn.state}`);
+      addLog("════════════════════════════════════════");
+      toast.success("🎉 Secondary display connected!");
 
       // Listen for state changes
       conn.addEventListener("connect", () => {
-        addLog("🔗 Connection established");
+        addLog("🔗 Connection fully established");
         setConnectionState("connected");
+        toast.success("Display ready to use!");
       });
 
       conn.addEventListener("close", () => {
-        addLog("🔌 Connection closed");
+        addLog("🔌 Connection closed by user");
         setConnectionState("closed");
         setConnection(null);
+        toast.info("Secondary display disconnected");
       });
 
       conn.addEventListener("terminate", () => {
         addLog("⛔ Connection terminated");
         setConnectionState("terminated");
         setConnection(null);
+        toast.error("Display connection lost");
       });
 
       // Listen for messages from secondary display
       conn.addEventListener("message", (event) => {
-        addLog(`📨 Message from secondary: ${event.data}`);
+        addLog(`📨 Message from display: ${event.data}`);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "ready") {
+            addLog("✅ Secondary display ready to receive data");
+          }
+        } catch (e) {
+          // Not JSON, just log as-is
+        }
       });
 
-      // Send test message to secondary display
+      // Send welcome message to secondary display
+      addLog("📤 Sending welcome message...");
       conn.send(
         JSON.stringify({
           type: "welcome",
-          message: "Hello from main screen!",
+          message: "Connected to POS System",
           timestamp: Date.now(),
         })
       );
+      addLog("✅ Welcome message sent");
     } catch (error) {
-      addLog(`❌ Error: ${error.message}`);
-      toast.error(`Failed to start presentation: ${error.message}`);
+      addLog("════════════════════════════════════════");
+      addLog(`❌ CONNECTION FAILED: ${error.name}`);
+      addLog("════════════════════════════════════════");
+      addLog(`Error: ${error.message}`);
+
+      // Provide specific troubleshooting
+      if (error.name === "NotFoundError") {
+        addLog("💡 No display available:");
+        addLog("  • Connect HDMI cable");
+        addLog("  • Enable Chromecast");
+        addLog("  • Check wireless display settings");
+        toast.error("No display found. Connect a secondary display first.");
+      } else if (error.name === "AbortError") {
+        addLog("💡 User cancelled the display selection");
+        toast.info("Display selection cancelled");
+      } else if (error.name === "NotSupportedError") {
+        addLog("💡 Presentation API not supported on this device");
+        toast.error("Secondary displays not supported");
+      } else if (error.name === "NotAllowedError") {
+        addLog("💡 Permission denied - check browser settings");
+        toast.error("Permission denied. Check browser settings.");
+      } else {
+        toast.error(`Failed: ${error.message}`);
+      }
+
       console.error("Presentation error:", error);
     }
   };
