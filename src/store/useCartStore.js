@@ -245,11 +245,13 @@ export const useCartStore = create((set, get) => ({
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-    const discountAmount = discount.type === "percentage"
-      ? subtotal * (discount.value / 100)
-      : discount.value;
+    const discountAmount =
+      discount.type === "percentage"
+        ? subtotal * (discount.value / 100)
+        : discount.value;
     const discountedSubtotal = subtotal - discountAmount;
-    const taxAmount = tax.rate > 0 ? discountedSubtotal * (tax.rate / 100) : tax.amount;
+    const taxAmount =
+      tax.rate > 0 ? discountedSubtotal * (tax.rate / 100) : tax.amount;
     const total = discountedSubtotal + taxAmount;
 
     // Format receipt data
@@ -266,7 +268,7 @@ export const useCartStore = create((set, get) => ({
     receipt += "ITEMS:\n";
     receipt += "----------------\n";
 
-    items.forEach(item => {
+    items.forEach((item) => {
       receipt += `${item.name}\n`;
       receipt += `  ${item.quantity} x $${item.price.toFixed(2)}`;
       if (item.discount > 0) {

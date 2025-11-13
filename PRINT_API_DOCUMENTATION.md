@@ -4,6 +4,77 @@
 
 This API provides thermal printing functionality for the POS system. The API ensures that each print job is printed only once - after retrieval, the job is automatically deleted to prevent duplicate prints.
 
+## APK Installation
+
+The system now includes an APK install prompt that appears on the login screen for Android users. The prompt:
+
+- Fetches APK metadata from `/api/apk-metadata`
+- Displays app name, version, size, and icon
+- Downloads the APK file when clicked
+- Provides installation instructions via toast notifications
+- Only shows on Android devices and can be dismissed for 7 days
+
+### APK Metadata API
+
+**Endpoint:** `GET /api/apk-metadata`
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "metadata": {
+    "name": "Candy Kush POS",
+    "version": "1.0.0",
+    "versionCode": 1,
+    "packageName": "com.candykush.pos",
+    "minSdkVersion": 21,
+    "targetSdkVersion": 34,
+    "icon": "/icons/icon-192x192.png",
+    "size": 7321375,
+    "sizeFormatted": "6.98 MB",
+    "downloadUrl": "/ck.apk",
+    "lastModified": "2025-11-13T16:15:03.000Z",
+    "description": "Professional Point of Sale System for Android",
+    "permissions": [
+      "android.permission.INTERNET",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.CAMERA",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "features": [
+      "Offline operation",
+      "Thermal receipt printing",
+      "Inventory management",
+      "Payment processing"
+    ],
+    "developer": "Candy Kush Team",
+    "installLocation": "auto",
+    "note": "APK metadata shown is based on app configuration. Full APK parsing requires specialized libraries for binary AndroidManifest.xml decoding."
+  }
+}
+```
+
+**Banner Display:**
+The APK install prompt now shows detailed information including:
+
+- App name and version
+- File size and developer
+- Package name
+- Key features (displayed as tags)
+- Professional description
+
+**Note:** The current implementation provides comprehensive APK metadata including real file size, permissions, and features. For production use with full APK parsing (extracting app name, version, package name from AndroidManifest.xml), consider using specialized libraries or services that can properly decode the binary AndroidManifest.xml format.
+
+### Installation Instructions
+
+For Android users, the APK install prompt provides step-by-step guidance:
+
+1. Click "Install APK" to download the file
+2. Go to Android Settings > Security > Install unknown apps
+3. Enable installation for your browser
+4. Open the downloaded APK file to install
+
 ## Base URL
 
 ```
@@ -188,6 +259,7 @@ printService.getPrintJob { printData, error ->
 The thermal print API is automatically called when a payment is successfully processed. Here's how it works:
 
 ### Payment Success Flow
+
 1. User completes payment in the POS system
 2. `processPayment()` function in `useCartStore.js` is called
 3. Payment is processed via `/api/cart` with action "process_payment"
@@ -197,7 +269,9 @@ The thermal print API is automatically called when a payment is successfully pro
 7. Android app can poll `/api/print` via GET to retrieve and print the receipt
 
 ### Receipt Data Format
+
 The receipt includes:
+
 - Store header ("CANDY KUSH POS")
 - Date/time
 - Customer information (if attached)
@@ -208,6 +282,7 @@ The receipt includes:
 - Thank you message
 
 ### Error Handling
+
 - If printing fails, payment still succeeds (printing errors don't block sales)
 - Print errors are logged but don't affect the transaction
 - Android app should handle cases where no print job is available
