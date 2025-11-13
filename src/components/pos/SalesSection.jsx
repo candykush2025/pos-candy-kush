@@ -152,6 +152,7 @@ export default function SalesSection({ cashier }) {
     updateQuantity,
     removeItem,
     clearCart,
+    processPayment,
     getSubtotal,
     getDiscountAmount,
     getTotal,
@@ -2115,8 +2116,12 @@ export default function SalesSection({ cashier }) {
       setShowPaymentModal(false);
       setShowReceiptModal(true);
 
-      // Clear cart immediately after successful checkout
-      clearCart();
+      // Process payment via API and clear cart
+      await processPayment({
+        amount: total,
+        method: paymentMethod,
+        transactionId: orderNumber,
+      });
       setCashReceived("");
       setPaymentMethod("cash");
 

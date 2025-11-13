@@ -37,6 +37,7 @@ export const useCartStore = create((set, get) => ({
             : item
         ),
       });
+      get().syncCartToAPI();
     } else {
       // Add new item
       // Extract variant_id from product (Loyverse format)
@@ -66,6 +67,7 @@ export const useCartStore = create((set, get) => ({
         soldBy: product.soldBy || "unit", // Track if sold by weight or unit
       };
       set({ items: [...items, newItem] });
+      get().syncCartToAPI();
     }
   },
 
@@ -88,6 +90,7 @@ export const useCartStore = create((set, get) => ({
           : item
       ),
     });
+    get().syncCartToAPI();
   },
 
   // Update item discount
@@ -104,12 +107,14 @@ export const useCartStore = create((set, get) => ({
           : item
       ),
     });
+    get().syncCartToAPI();
   },
 
   // Remove item from cart
   removeItem: (itemId) => {
     const { items } = get();
     set({ items: items.filter((item) => item.id !== itemId) });
+    get().syncCartToAPI();
   },
 
   // Clear cart
@@ -122,11 +127,13 @@ export const useCartStore = create((set, get) => ({
       notes: "",
       kioskOrderId: null,
     });
+    get().syncCartToAPI();
   },
 
   // Set cart discount
   setDiscount: (type, value) => {
     set({ discount: { type, value } });
+    get().syncCartToAPI();
   },
 
   // Set tax
@@ -134,21 +141,25 @@ export const useCartStore = create((set, get) => ({
     const subtotal = get().getSubtotal();
     const amount = (subtotal * rate) / 100;
     set({ tax: { rate, amount } });
+    get().syncCartToAPI();
   },
 
   // Set customer
   setCustomer: (customer) => {
     set({ customer });
+    get().syncCartToAPI();
   },
 
   // Set notes
   setNotes: (notes) => {
     set({ notes });
+    get().syncCartToAPI();
   },
 
   // Set kiosk order ID
   setKioskOrderId: (orderId) => {
     set({ kioskOrderId: orderId });
+    get().syncCartToAPI();
   },
 
   // Calculate subtotal
@@ -192,6 +203,7 @@ export const useCartStore = create((set, get) => ({
       notes: cartData.notes || "",
       kioskOrderId: cartData.kioskOrderId || null,
     });
+    get().syncCartToAPI();
   },
 
   // Get cart data for saving
@@ -208,6 +220,52 @@ export const useCartStore = create((set, get) => ({
       discountAmount: state.getDiscountAmount(),
       total: state.getTotal(),
     };
+  },
+
+  // Sync cart to API
+  syncCartToAPI: async () => {
+    const cartData = get().getCartData();
+    try {
+      const response = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cartData),
+      });
+      if (!response.ok) {
+        console.error("Failed to sync cart to API");
+      }
+    } catch (error) {
+      console.error("Error syncing cart to API:", error);
+    }
+  },
+
+  // Process payment and clear cart
+  processPayment: async (paymentData) => {
+    try {
+      const response = await fetch("/api/cart", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "process_payment",
+          paymentData,
+        }),
+      });
+      if (response.ok) {
+        // Clear cart locally after successful API call
+        set({
+          items: [],
+          discount: { type: "percentage", value: 0 },
+          tax: { rate: 0, amount: 0 },
+          customer: null,
+          notes: "",
+          kioskOrderId: null,
+        });
+      } else {
+        console.error("Failed to process payment via API");
+      }
+    } catch (error) {
+      console.error("Error processing payment:", error);
+    }
   },
 }));
 
