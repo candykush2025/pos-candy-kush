@@ -18,12 +18,12 @@ export function APKInstallPrompt() {
   const isOnLoginRoute = pathname === "/login";
 
   useEffect(() => {
-    // Check if user is on Android device OR in development mode
+    // Check if user is on Android device OR in development mode OR on login page
     const isAndroid = /Android/i.test(navigator.userAgent);
     const isDevelopment = process.env.NODE_ENV === "development";
 
     // For development/testing, show on desktop too (you can remove this in production)
-    const shouldShow = isAndroid || isDevelopment;
+    const shouldShow = isAndroid || isDevelopment || isOnLoginRoute;
 
     if (!shouldShow) {
       console.log(
@@ -50,32 +50,30 @@ export function APKInstallPrompt() {
       }
     }
 
-    console.log("APK Install: Fetching metadata...");
+    console.log("APK Install: Using dummy metadata...");
 
-    // Fetch APK metadata
-    const fetchMetadata = async () => {
-      try {
-        const response = await fetch("/api/apk-metadata");
-        const data = await response.json();
-
-        if (data.success) {
-          setApkMetadata(data.metadata);
-          console.log(
-            "APK Install: Metadata loaded, showing prompt on login page"
-          );
-          // Show prompt instantly on login page
-          if (isOnLoginRoute) {
-            setShowPrompt(true);
-          }
-        } else {
-          console.error("APK Install: Failed to fetch metadata:", data.error);
-        }
-      } catch (error) {
-        console.error("APK Install: Error fetching metadata:", error);
-      }
+    // Use dummy APK metadata instead of fetching
+    const dummyMetadata = {
+      name: "Candy Kush POS",
+      version: "1.0.0",
+      sizeFormatted: "6.98 MB",
+      developer: "Candy Kush",
+      packageName: "com.candykush.pos",
+      icon: "/icon-192x192.png", // Use existing PWA icon
+      features: ["Offline Mode", "Fast Sync", "Secure Payments"],
+      description:
+        "Professional POS system for cannabis dispensaries with offline support",
+      downloadUrl: "/ck.apk", // Point to the APK file in public folder
     };
 
-    fetchMetadata();
+    setApkMetadata(dummyMetadata);
+    console.log(
+      "APK Install: Dummy metadata loaded, showing prompt on login page"
+    );
+    // Show prompt instantly on login page
+    if (isOnLoginRoute) {
+      setShowPrompt(true);
+    }
   }, [isOnLoginRoute]);
 
   const handleInstallClick = async () => {
