@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Lock, Mail, ArrowRight, Sparkles } from "lucide-react";
+import { APKInstallPrompt } from "@/components/APKInstallPrompt";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -386,6 +387,9 @@ export default function LoginPage() {
           animation: float-slow 30s ease-in-out infinite;
         }
       `}</style>
+
+      {/* APK Install Prompt */}
+      <APKInstallPrompt />
     </div>
   );
 }

@@ -21,6 +21,9 @@ import {
   Mail,
   KeyRound,
   AlertTriangle,
+  Download,
+  Star,
+  Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
@@ -31,6 +34,7 @@ export default function SettingsSection() {
   const { mode, setMode } = useThemeStore();
   const [idleTimeout, setIdleTimeout] = useState("300000"); // Default 5 minutes
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isDownloadingApk, setIsDownloadingApk] = useState(false);
 
   // Load idle timeout setting on mount
   useEffect(() => {
@@ -148,6 +152,58 @@ export default function SettingsSection() {
     }
   };
 
+  // APK download functionality
+  const handleApkDownload = async () => {
+    setIsDownloadingApk(true);
+
+    try {
+      // Create a download link that triggers the browser's download
+      const link = document.createElement("a");
+      link.href = "/ck.apk";
+      link.download = "ck.apk";
+      link.style.display = "none";
+
+      // Add to DOM and trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success(
+        "APK download started! Check your downloads folder and tap to install.",
+        {
+          duration: 5000,
+        }
+      );
+
+      // Show installation instructions
+      setTimeout(() => {
+        toast.info(
+          "After download, you may need to enable 'Install unknown apps' in Android settings",
+          {
+            duration: 8000,
+          }
+        );
+      }, 2000);
+    } catch (error) {
+      console.error("Download failed:", error);
+      toast.error(
+        "Failed to download APK. Please try again or download manually from the web version."
+      );
+    } finally {
+      setIsDownloadingApk(false);
+    }
+  };
+
+  const handleApkLearnMore = () => {
+    // Show installation instructions
+    toast.info(
+      "To install APK: 1) Download the file 2) Go to Settings > Security > Install unknown apps 3) Enable for your browser 4) Tap the downloaded APK to install",
+      {
+        duration: 10000,
+      }
+    );
+  };
+
   return (
     <div className="h-full flex flex-col p-6 overflow-auto bg-gray-50 dark:bg-gray-950">
       {/* Header */}
@@ -160,6 +216,78 @@ export default function SettingsSection() {
           Customize your POS experience
         </p>
       </div>
+
+      {/* APK Installation Card */}
+      <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center text-white text-2xl font-bold shadow-lg overflow-hidden">
+                <img
+                  src="/icon-192x192.png"
+                  alt="App Icon"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback to icon if image fails
+                    e.target.style.display = "none";
+                    e.target.parentElement.innerHTML =
+                      '<svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>';
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Smartphone className="h-5 w-5 text-green-600" />
+                <h3 className="font-semibold text-lg">
+                  Install Candy Kush POS
+                </h3>
+                <Star className="w-4 h-4 text-yellow-500 fill-current" />
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                Version 1.0.0 • 6.98 MB • Candy Kush
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Package: com.candykush.pos
+              </p>
+              <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <div className="flex flex-wrap gap-1 mb-2">
+                  <span className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded text-xs">
+                    Offline Mode
+                  </span>
+                  <span className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded text-xs">
+                    Fast Sync
+                  </span>
+                  <span className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded text-xs">
+                    Secure Payments
+                  </span>
+                </div>
+                <p className="text-sm">
+                  Professional POS system for cannabis dispensaries with offline
+                  support
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleApkDownload}
+                  disabled={isDownloadingApk}
+                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {isDownloadingApk ? "Downloading..." : "Download APK"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleApkLearnMore}
+                  className="flex-1"
+                >
+                  Install Guide
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Theme Settings */}
       <Card className="mb-6">

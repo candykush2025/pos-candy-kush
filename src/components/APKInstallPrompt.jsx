@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Download, X, Smartphone, Star } from "lucide-react";
 import { toast } from "sonner";
 
-export function APKInstallPrompt() {
+export function APKInstallPrompt({ forceShow = false }) {
   const pathname = usePathname();
   const [apkMetadata, setApkMetadata] = useState(null);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -70,8 +70,8 @@ export function APKInstallPrompt() {
     console.log(
       "APK Install: Dummy metadata loaded, showing prompt on login page"
     );
-    // Show prompt instantly on login page
-    if (isOnLoginRoute) {
+    // Show prompt instantly on login page or when forced
+    if (isOnLoginRoute || forceShow) {
       setShowPrompt(true);
     }
   }, [isOnLoginRoute]);
@@ -219,14 +219,16 @@ export function APKInstallPrompt() {
               </Button>
             </div>
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={handleDismiss}
-            className="flex-shrink-0 h-6 w-6"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          {!isOnLoginRoute && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={handleDismiss}
+              className="flex-shrink-0 h-6 w-6"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </Card>
     </div>
