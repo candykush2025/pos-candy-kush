@@ -269,4 +269,7 @@ export const useCartStore = create((set, get) => ({
   },
 }));
 
+// Initialize API cart on store creation (e.g., on page load/refresh)
+useCartStore.getState().syncCartToAPI();
+
 export default useCartStore;
