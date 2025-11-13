@@ -301,25 +301,6 @@ function CashierLogin({ onLogin }) {
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
-
-            <div className="space-y-1 landscape:space-y-0">
-              <p className="text-sm text-gray-500 text-center landscape:text-xs">
-                Works offline with synced users
-              </p>
-              <p className="text-xs text-blue-600 text-center landscape:text-[10px]">
-                💡 Enter any employee's PIN to switch users
-              </p>
-            </div>
-
-            {/* Secondary Screen Debug Button */}
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => window.open("/secondscreen", "_blank")}
-            >
-              🖥️ Secondary Screen Debug
-            </Button>
           </form>
         </CardContent>
       </Card>
