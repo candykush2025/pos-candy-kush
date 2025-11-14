@@ -219,22 +219,22 @@ function CashierLogin({ onLogin }) {
 
   return (
     <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 landscape:p-2">
-      <Card className="w-full max-w-lg landscape:max-w-sm landscape:max-h-[95vh] landscape:overflow-y-auto">
-        <CardHeader className="text-center landscape:py-2 landscape:pb-1 landscape:space-y-1">
-          <div className="mx-auto h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-4 landscape:h-8 landscape:w-8 landscape:mb-1">
-            <Lock className="h-10 w-10 text-primary landscape:h-4 landscape:w-4" />
+      <Card className="w-full max-w-4xl landscape:max-w-2xl landscape:max-h-[95vh] landscape:overflow-y-auto">
+        <CardHeader className="text-center landscape:py-6 landscape:pb-4 landscape:space-y-3">
+          <div className="mx-auto h-40 w-40 rounded-full bg-primary/10 flex items-center justify-center mb-8 landscape:h-16 landscape:w-16 landscape:mb-3">
+            <Lock className="h-20 w-20 text-primary landscape:h-8 landscape:w-8" />
           </div>
-          <CardTitle className="text-3xl landscape:text-base landscape:!mb-0">
+          <CardTitle className="text-7xl landscape:text-3xl landscape:!mb-0">
             Cashier Login
           </CardTitle>
-          <p className="text-gray-500 mt-2 landscape:mt-0.5 landscape:text-[10px]">
+          <p className="text-gray-500 mt-6 landscape:mt-2 landscape:text-lg">
             Enter your PIN to access POS
           </p>
         </CardHeader>
-        <CardContent className="landscape:py-2 landscape:pt-1">
+        <CardContent className="landscape:py-6 landscape:pt-3">
           <form
             onSubmit={handleLogin}
-            className="space-y-6 landscape:space-y-3"
+            className="space-y-10 landscape:space-y-6"
           >
             {/* PIN Display (Read-only to prevent keyboard popup) */}
             <div>
@@ -243,7 +243,7 @@ function CashierLogin({ onLogin }) {
                 readOnly
                 placeholder="Enter PIN"
                 value={pin.replace(/./g, "●")}
-                className="text-center text-4xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800 h-16 landscape:text-xl landscape:h-10"
+                className="text-center text-8xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800 h-32 landscape:text-4xl landscape:h-16"
                 inputMode="none"
                 autoComplete="off"
                 onFocus={(e) => e.target.blur()}
@@ -251,7 +251,7 @@ function CashierLogin({ onLogin }) {
             </div>
 
             {/* On-Screen Numeric Keypad */}
-            <div className="grid grid-cols-3 gap-3 landscape:gap-1">
+            <div className="grid grid-cols-3 gap-6 landscape:gap-3">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <Button
                   key={num}
@@ -259,7 +259,7 @@ function CashierLogin({ onLogin }) {
                   variant="outline"
                   size="lg"
                   onClick={() => handleKeypadPress(num.toString())}
-                  className="h-20 text-3xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-10 landscape:text-lg"
+                  className="h-36 text-5xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-16 landscape:text-2xl"
                 >
                   {num}
                 </Button>
@@ -269,7 +269,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("clear")}
-                className="h-20 text-base font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all active:scale-95 landscape:h-10 landscape:text-xs"
+                className="h-36 text-xl font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all active:scale-95 landscape:h-16 landscape:text-base"
               >
                 Clear
               </Button>
@@ -278,7 +278,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("0")}
-                className="h-20 text-3xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-10 landscape:text-lg"
+                className="h-36 text-5xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-16 landscape:text-2xl"
               >
                 0
               </Button>
@@ -287,7 +287,7 @@ function CashierLogin({ onLogin }) {
                 variant="outline"
                 size="lg"
                 onClick={() => handleKeypadPress("backspace")}
-                className="h-20 text-2xl font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950 transition-all active:scale-95 landscape:h-10 landscape:text-xs"
+                className="h-36 text-4xl font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950 transition-all active:scale-95 landscape:h-16 landscape:text-xl"
               >
                 ⌫
               </Button>
@@ -296,7 +296,7 @@ function CashierLogin({ onLogin }) {
             {/* Login Button */}
             <Button
               type="submit"
-              className="w-full h-14 text-xl font-semibold landscape:h-9 landscape:text-sm"
+              className="w-full h-24 text-3xl font-semibold landscape:h-12 landscape:text-lg"
               disabled={loading || pin.length < 4}
             >
               {loading ? "Logging in..." : "Login"}
@@ -310,26 +310,26 @@ function CashierLogin({ onLogin }) {
         open={showStartingCashModal}
         onOpenChange={setShowStartingCashModal}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Start Your Shift</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-3xl">Start Your Shift</DialogTitle>
+            <DialogDescription className="text-lg">
               Enter the starting cash amount in the register
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
+          <div className="space-y-8 py-8">
+            <div className="space-y-6">
+              <label className="text-xl font-medium">
                 Starting Cash Amount (Optional)
               </label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <DollarSign className="absolute left-6 top-1/2 transform -translate-y-1/2 h-8 w-8 text-gray-400" />
                 <Input
                   type="text"
                   readOnly
                   placeholder="0.00"
                   value={startingCash}
-                  className="pl-10 text-lg text-center pointer-events-none"
+                  className="pl-16 text-2xl text-center pointer-events-none h-20"
                   inputMode="none"
                   autoComplete="off"
                   onFocus={(e) => e.target.blur()}
@@ -337,7 +337,7 @@ function CashierLogin({ onLogin }) {
               </div>
 
               {/* Numeric Keypad for Cash Amount */}
-              <div className="grid grid-cols-3 gap-2 mt-4">
+              <div className="grid grid-cols-3 gap-4 mt-8">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                   <Button
                     key={num}
@@ -345,7 +345,7 @@ function CashierLogin({ onLogin }) {
                     variant="outline"
                     size="lg"
                     onClick={() => handleCashKeypadPress(num.toString())}
-                    className="h-14 text-xl font-semibold"
+                    className="h-20 text-3xl font-semibold"
                   >
                     {num}
                   </Button>
@@ -355,7 +355,7 @@ function CashierLogin({ onLogin }) {
                   variant="outline"
                   size="lg"
                   onClick={() => handleCashKeypadPress("clear")}
-                  className="h-14 text-sm font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+                  className="h-20 text-lg font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
                 >
                   Clear
                 </Button>
@@ -364,7 +364,7 @@ function CashierLogin({ onLogin }) {
                   variant="outline"
                   size="lg"
                   onClick={() => handleCashKeypadPress("0")}
-                  className="h-14 text-xl font-semibold"
+                  className="h-20 text-3xl font-semibold"
                 >
                   0
                 </Button>
@@ -373,18 +373,18 @@ function CashierLogin({ onLogin }) {
                   variant="outline"
                   size="lg"
                   onClick={() => handleCashKeypadPress(".")}
-                  className="h-14 text-xl font-semibold"
+                  className="h-20 text-3xl font-semibold"
                 >
                   .
                 </Button>
               </div>
 
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              <p className="text-base text-gray-500 dark:text-gray-400 mt-6">
                 Enter starting cash to start a shift and make transactions. Skip
                 to access view-only mode (history, reports, etc.)
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-4">
               <Button
                 type="button"
                 variant="outline"
@@ -393,7 +393,7 @@ function CashierLogin({ onLogin }) {
                   setPendingCashier(null);
                   setStartingCash("");
                 }}
-                className="flex-1"
+                className="flex-1 h-14 text-xl"
               >
                 Cancel
               </Button>
@@ -402,14 +402,14 @@ function CashierLogin({ onLogin }) {
                 variant="secondary"
                 onClick={handleStartShift}
                 disabled={loading}
-                className="flex-1"
+                className="flex-1 h-14 text-xl"
               >
                 {loading ? "Loading..." : "Skip (View Only)"}
               </Button>
               <Button
                 onClick={handleStartShift}
                 disabled={loading || !startingCash}
-                className="flex-1"
+                className="flex-1 h-14 text-xl"
               >
                 {loading ? "Starting..." : "Start Shift"}
               </Button>
