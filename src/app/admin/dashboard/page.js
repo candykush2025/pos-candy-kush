@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   ordersService,
   receiptsService,
@@ -33,6 +34,7 @@ import {
   ArrowDownRight,
   Filter,
   Tag,
+  RefreshCw,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import {
@@ -79,6 +81,7 @@ export default function AdminDashboard() {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(30);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Auto-sync check on dashboard mount
   useEffect(() => {
@@ -702,8 +705,19 @@ export default function AdminDashboard() {
       );
       setPaymentMethodsData(paymentData);
 
-      // Recent transactions (last 10)
-      setRecentTransactions(monthReceipts.slice(0, 10));
+      // Recent transactions (last 10 most recent across all time)
+      const allRecentTransactions = receipts
+        .sort((a, b) => {
+          const aDate = a.createdAt?.toDate
+            ? a.createdAt.toDate()
+            : new Date(a.createdAt);
+          const bDate = b.createdAt?.toDate
+            ? b.createdAt.toDate()
+            : new Date(b.createdAt);
+          return bDate - aDate; // Most recent first
+        })
+        .slice(0, 10);
+      setRecentTransactions(allRecentTransactions);
 
       // Debug logging (at the end after all variables are defined)
       console.log("📊 Dashboard Debug - Total receipts:", receipts.length);
@@ -943,46 +957,75 @@ export default function AdminDashboard() {
     );
   }
 
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+
+    try {
+      setIsRefreshing(true);
+      await loadDashboardData();
+      toast.success("Dashboard data refreshed");
+    } catch (error) {
+      console.error("Error refreshing dashboard:", error);
+      toast.error("Failed to refresh dashboard");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-6 pb-20 md:pb-8 animate-in fade-in duration-500">
       {/* Header with Month Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-in slide-in-from-top duration-300">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Sales Dashboard</h1>
-          <p className="text-sm md:text-base text-neutral-500 dark:text-neutral-400 mt-1">
-            Candy Kush POS - Sales Analytics
-            {selectedCategory !== "all" && (
-              <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
-                <Tag className="h-3 w-3 mr-1" />
-                {categories.find((c) => c.id === selectedCategory)?.name}
-              </span>
-            )}
-            {isSyncing && (
-              <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 animate-pulse">
-                <svg
-                  className="animate-spin h-3 w-3 mr-1"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                Syncing...
-              </span>
-            )}
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">Sales Dashboard</h1>
+            <p className="text-sm md:text-base text-neutral-500 dark:text-neutral-400 mt-1">
+              Candy Kush POS - Sales Analytics
+              {selectedCategory !== "all" && (
+                <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+                  <Tag className="h-3 w-3 mr-1" />
+                  {categories.find((c) => c.id === selectedCategory)?.name}
+                </span>
+              )}
+              {isSyncing && (
+                <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 animate-pulse">
+                  <svg
+                    className="animate-spin h-3 w-3 mr-1"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Syncing...
+                </span>
+              )}
+            </p>
+          </div>
+          <Button
+            onClick={handleRefresh}
+            disabled={isRefreshing || loading}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            {isRefreshing ? "Refreshing..." : "Refresh"}
+          </Button>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           {/* Category Filter - Full width on mobile */}
@@ -1291,7 +1334,7 @@ export default function AdminDashboard() {
             Latest Transactions
           </CardTitle>
           <CardDescription className="text-xs md:text-sm">
-            Recent sales for {months[selectedMonth]} {selectedYear}
+            Most recent transactions across all time
           </CardDescription>
         </CardHeader>
         <CardContent>

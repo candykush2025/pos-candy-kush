@@ -2156,41 +2156,40 @@ export default function SalesSection({ cashier }) {
     }
   };
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = async () => {
     if (!completedOrder) return;
 
-    // Generate receipt HTML for thermal printer (58mm)
-    const receiptHTML = generateThermalReceipt(completedOrder);
+    try {
+      // Send receipt data to print API for Android printing
+      const response = await fetch("/api/print", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            order: completedOrder,
+            cashier: cashier?.name || completedOrder.cashierName || "Staff",
+            timestamp: new Date().toISOString(),
+            type: "receipt",
+          },
+        }),
+      });
 
-    // Open in new window
-    const printWindow = window.open("", "_blank", "width=300,height=600");
-    if (!printWindow) {
-      toast.error("Please allow pop-ups to print receipt");
-      return;
-    }
+      const result = await response.json();
 
-    printWindow.document.write(receiptHTML);
-    printWindow.document.close();
-
-    // Auto print after content loads
-    printWindow.onload = () => {
-      printWindow.print();
-
-      // Listen for after print event
-      printWindow.onafterprint = () => {
-        printWindow.close();
-        // Start new transaction after printing
+      if (result.success) {
+        toast.success("Receipt sent to printer");
+        // Start new transaction after sending to printer
         handleNewTransaction();
-      };
-
-      // Fallback: close after delay if onafterprint doesn't fire
-      setTimeout(() => {
-        if (!printWindow.closed) {
-          printWindow.close();
-          handleNewTransaction();
-        }
-      }, 2000);
-    };
+      } else {
+        toast.error("Failed to send receipt to printer");
+        console.error("Print API error:", result.error);
+      }
+    } catch (error) {
+      console.error("Error sending receipt to printer:", error);
+      toast.error("Failed to send receipt to printer");
+    }
   };
 
   const handleNewTransaction = () => {
@@ -2284,202 +2283,6 @@ export default function SalesSection({ cashier }) {
   const quickCashAmounts = getQuickCashAmounts();
 
   // Generate thermal receipt HTML (58mm width)
-  const generateThermalReceipt = (order) => {
-    const receiptDate = new Date().toLocaleString();
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Receipt - ${order.orderNumber}</title>
-        <style>
-          @media print {
-            @page {
-              size: 58mm auto;
-              margin: 0;
-            }
-          }
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
-          body {
-            width: 58mm;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            padding: 5mm;
-            background: white;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 10px;
-            border-bottom: 1px dashed #000;
-            padding-bottom: 10px;
-          }
-          .store-name {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 5px;
-          }
-          .order-info {
-            margin: 10px 0;
-            font-size: 9px;
-          }
-          .items {
-            margin: 10px 0;
-            border-top: 1px dashed #000;
-            border-bottom: 1px dashed #000;
-            padding: 10px 0;
-          }
-          .item {
-            margin: 5px 0;
-          }
-          .item-name {
-            font-weight: bold;
-          }
-          .item-detail {
-            display: flex;
-            justify-content: space-between;
-            font-size: 9px;
-          }
-          .totals {
-            margin: 10px 0;
-          }
-          .total-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 3px 0;
-          }
-          .total-row.grand {
-            font-size: 12px;
-            font-weight: bold;
-            border-top: 1px solid #000;
-            padding-top: 5px;
-            margin-top: 5px;
-          }
-          .payment-info {
-            margin: 10px 0;
-            border-top: 1px dashed #000;
-            padding-top: 10px;
-          }
-          .footer {
-            text-align: center;
-            margin-top: 15px;
-            border-top: 1px dashed #000;
-            padding-top: 10px;
-            font-size: 9px;
-          }
-          .change-highlight {
-            background: #000;
-            color: #fff;
-            padding: 5px;
-            text-align: center;
-            font-size: 11px;
-            font-weight: bold;
-            margin: 10px 0;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="store-name">CANDY KUSH POS</div>
-          <div>Thank you for your purchase!</div>
-        </div>
-
-        <div class="order-info">
-          <div>Order: ${order.orderNumber || order.order || "N/A"}</div>
-          <div>Date: ${receiptDate}</div>
-          <div>Cashier: ${cashier?.name || order.cashierName || "Staff"}</div>
-        </div>
-
-        <div class="items">
-          ${(order.line_items || order.items || [])
-            .map(
-              (item) => `
-            <div class="item">
-              <div class="item-name">${item.item_name || item.name}</div>
-              <div class="item-detail">
-                <span>${item.quantity} x ${formatCurrency(item.price)}</span>
-                <span>${formatCurrency(item.total_money || item.total)}</span>
-              </div>
-            </div>
-          `
-            )
-            .join("")}
-        </div>
-
-        <div class="totals">
-          <div class="total-row">
-            <span>Subtotal:</span>
-            <span>${formatCurrency(order.subtotal)}</span>
-          </div>
-          ${
-            (order.total_discount || order.discount || 0) > 0
-              ? `
-            <div class="total-row">
-              <span>Discount:</span>
-              <span>-${formatCurrency(
-                order.total_discount || order.discount
-              )}</span>
-            </div>
-          `
-              : ""
-          }
-          <div class="total-row grand">
-            <span>TOTAL:</span>
-            <span>${formatCurrency(
-              order.total_money || order.total || 0
-            )}</span>
-          </div>
-        </div>
-
-        <div class="payment-info">
-          <div class="total-row">
-            <span>Payment Method:</span>
-            <span>${
-              order.paymentTypeName ||
-              (order.paymentMethod ? order.paymentMethod.toUpperCase() : "N/A")
-            }</span>
-          </div>
-          ${
-            order.paymentMethod === "cash"
-              ? `
-            <div class="total-row">
-              <span>Cash Received:</span>
-              <span>${formatCurrency(order.cashReceived || 0)}</span>
-            </div>
-            ${
-              (order.change || 0) > 0
-                ? `
-              <div class="change-highlight">
-                CHANGE: ${formatCurrency(order.change)}
-              </div>
-            `
-                : ""
-            }
-          `
-              : ""
-          }
-        </div>
-
-        <div class="footer">
-          <div>Thank you for your business!</div>
-          <div>Please come again</div>
-        </div>
-
-        <script>
-          // Auto print on load
-          window.onload = function() {
-            window.print();
-          };
-        </script>
-      </body>
-      </html>
-    `;
-  };
-
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Sync Status Bar */}
