@@ -50,31 +50,61 @@ export function APKInstallPrompt({ forceShow = false }) {
       }
     }
 
-    console.log("APK Install: Using dummy metadata...");
+    // Fetch APK metadata from API
+    const fetchApkMetadata = async () => {
+      try {
+        console.log("APK Install: Fetching metadata from API...");
+        const response = await fetch('/api/apk');
 
-    // Use dummy APK metadata instead of fetching
-    const dummyMetadata = {
-      name: "Candy Kush POS",
-      version: "1.0.0",
-      sizeFormatted: "6.98 MB",
-      developer: "Candy Kush",
-      packageName: "com.candykush.pos",
-      icon: "/icon-192x192.png", // Use existing PWA icon
-      features: ["Offline Mode", "Fast Sync", "Secure Payments"],
-      description:
-        "Professional POS system for cannabis dispensaries with offline support",
-      downloadUrl: "/ck.apk", // Point to the APK file in public folder
+        if (!response.ok) {
+          throw new Error(`API responded with status: ${response.status}`);
+        }
+
+        const metadata = await response.json();
+        console.log("APK Install: Metadata fetched successfully:", metadata);
+
+        setApkMetadata(metadata);
+        console.log(
+          "APK Install: API metadata loaded, showing prompt on login page"
+        );
+
+        // Show prompt instantly on login page or when forced
+        if (isOnLoginRoute || forceShow) {
+          setShowPrompt(true);
+        }
+      } catch (error) {
+        console.error("APK Install: Failed to fetch metadata from API:", error);
+        console.log("APK Install: Using fallback dummy metadata...");
+
+        // Fallback to dummy APK metadata
+        const dummyMetadata = {
+          name: "Candy Kush POS",
+          version: "1.0.1",
+          versionCode: 2,
+          sizeFormatted: "6.98 MB",
+          developer: "Candy Kush",
+          packageName: "com.candykush.pos",
+          icon: "/icon-192x192.png", // Use existing PWA icon
+          features: ["Offline Mode", "Fast Sync", "Secure Payments"],
+          description:
+            "Professional POS system for cannabis dispensaries with offline support",
+          downloadUrl: "/ck.apk", // Point to the APK file in public folder
+        };
+
+        setApkMetadata(dummyMetadata);
+        console.log(
+          "APK Install: Fallback metadata loaded, showing prompt on login page"
+        );
+
+        // Show prompt instantly on login page or when forced
+        if (isOnLoginRoute || forceShow) {
+          setShowPrompt(true);
+        }
+      }
     };
 
-    setApkMetadata(dummyMetadata);
-    console.log(
-      "APK Install: Dummy metadata loaded, showing prompt on login page"
-    );
-    // Show prompt instantly on login page or when forced
-    if (isOnLoginRoute || forceShow) {
-      setShowPrompt(true);
-    }
-  }, [isOnLoginRoute]);
+    fetchApkMetadata();
+  }, [isOnLoginRoute, forceShow]);
 
   const handleInstallClick = async () => {
     if (!apkMetadata) return;
@@ -175,11 +205,11 @@ export function APKInstallPrompt({ forceShow = false }) {
               <Star className="w-3 h-3 text-yellow-500 fill-current" />
             </div>
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-              Version {apkMetadata.version} • {apkMetadata.sizeFormatted} •{" "}
+              Version {apkMetadata.version} ({apkMetadata.versionCode}) • {apkMetadata.sizeFormatted} •{" "}
               {apkMetadata.developer}
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-              Package: {apkMetadata.packageName}
+              Package: {apkMetadata.packageName} • Android {apkMetadata.minAndroidVersion}+ • Updated {new Date(apkMetadata.lastUpdated).toLocaleDateString()}
             </p>
             <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">
               <div className="flex flex-wrap gap-1 mb-1">
