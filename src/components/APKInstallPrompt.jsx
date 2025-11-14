@@ -54,7 +54,7 @@ export function APKInstallPrompt({ forceShow = false }) {
     const fetchApkMetadata = async () => {
       try {
         console.log("APK Install: Fetching metadata from API...");
-        const response = await fetch('/api/apk');
+        const response = await fetch("/api/apk");
 
         if (!response.ok) {
           throw new Error(`API responded with status: ${response.status}`);
@@ -205,11 +205,13 @@ export function APKInstallPrompt({ forceShow = false }) {
               <Star className="w-3 h-3 text-yellow-500 fill-current" />
             </div>
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-              Version {apkMetadata.version} ({apkMetadata.versionCode}) • {apkMetadata.sizeFormatted} •{" "}
-              {apkMetadata.developer}
+              Version {apkMetadata.version} ({apkMetadata.versionCode}) •{" "}
+              {apkMetadata.sizeFormatted} • {apkMetadata.developer}
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-              Package: {apkMetadata.packageName} • Android {apkMetadata.minAndroidVersion}+ • Updated {new Date(apkMetadata.lastUpdated).toLocaleDateString()}
+              Package: {apkMetadata.packageName} • Android{" "}
+              {apkMetadata.minAndroidVersion}+ • Updated{" "}
+              {new Date(apkMetadata.lastUpdated).toLocaleDateString()}
             </p>
             <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">
               <div className="flex flex-wrap gap-1 mb-1">

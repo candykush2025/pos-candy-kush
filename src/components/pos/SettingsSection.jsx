@@ -35,6 +35,7 @@ export default function SettingsSection() {
   const [idleTimeout, setIdleTimeout] = useState("300000"); // Default 5 minutes
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDownloadingApk, setIsDownloadingApk] = useState(false);
+  const [apkMetadata, setApkMetadata] = useState(null);
 
   // Load idle timeout setting on mount
   useEffect(() => {
@@ -42,6 +43,45 @@ export default function SettingsSection() {
     if (saved) {
       setIdleTimeout(saved);
     }
+  }, []);
+
+  // Fetch APK metadata on mount
+  useEffect(() => {
+    const fetchApkMetadata = async () => {
+      try {
+        console.log("Settings: Fetching APK metadata from API...");
+        const response = await fetch("/api/apk");
+
+        if (!response.ok) {
+          throw new Error(`API responded with status: ${response.status}`);
+        }
+
+        const metadata = await response.json();
+        console.log("Settings: APK metadata fetched successfully:", metadata);
+        setApkMetadata(metadata);
+      } catch (error) {
+        console.error("Settings: Failed to fetch APK metadata:", error);
+        // Fallback metadata
+        setApkMetadata({
+          name: "Candy Kush POS",
+          version: "1.0.1",
+          versionCode: 2,
+          sizeFormatted: "6.98 MB",
+          developer: "Candy Kush",
+          packageName: "com.candykush.pos",
+          icon: "/icon-192x192.png",
+          features: ["Offline Mode", "Fast Sync", "Secure Payments"],
+          description:
+            "Professional POS system for cannabis dispensaries with offline support",
+          downloadUrl: "/ck.apk",
+          lastUpdated: new Date().toISOString(),
+          minAndroidVersion: "8.0",
+          permissions: ["Internet", "Storage", "Camera"],
+        });
+      }
+    };
+
+    fetchApkMetadata();
   }, []);
 
   // Save idle timeout setting
@@ -159,7 +199,7 @@ export default function SettingsSection() {
     try {
       // Create a download link that triggers the browser's download
       const link = document.createElement("a");
-      link.href = "/ck.apk";
+      link.href = apkMetadata?.downloadUrl || "/ck.apk";
       link.download = "ck.apk";
       link.style.display = "none";
 
@@ -224,7 +264,7 @@ export default function SettingsSection() {
             <div className="flex-shrink-0">
               <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center text-white text-2xl font-bold shadow-lg overflow-hidden">
                 <img
-                  src="/icon-192x192.png"
+                  src={apkMetadata?.icon || "/icon-192x192.png"}
                   alt="App Icon"
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -240,31 +280,45 @@ export default function SettingsSection() {
               <div className="flex items-center gap-2 mb-2">
                 <Smartphone className="h-5 w-5 text-green-600" />
                 <h3 className="font-semibold text-lg">
-                  Install Candy Kush POS
+                  Install {apkMetadata?.name || "Candy Kush POS"}
                 </h3>
                 <Star className="w-4 h-4 text-yellow-500 fill-current" />
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                Version 1.0.0 • 6.98 MB • Candy Kush
+                Version {apkMetadata?.version || "1.0.1"} (
+                {apkMetadata?.versionCode || 2}) •{" "}
+                {apkMetadata?.sizeFormatted || "6.98 MB"} •{" "}
+                {apkMetadata?.developer || "Candy Kush"}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Package: com.candykush.pos
+                Package: {apkMetadata?.packageName || "com.candykush.pos"} •
+                Android {apkMetadata?.minAndroidVersion || "8.0"}+ • Updated{" "}
+                {apkMetadata?.lastUpdated
+                  ? new Date(apkMetadata.lastUpdated).toLocaleDateString()
+                  : new Date().toLocaleDateString()}
               </p>
               <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 <div className="flex flex-wrap gap-1 mb-2">
-                  <span className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded text-xs">
-                    Offline Mode
-                  </span>
-                  <span className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded text-xs">
-                    Fast Sync
-                  </span>
-                  <span className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded text-xs">
-                    Secure Payments
-                  </span>
+                  {(
+                    apkMetadata?.features || [
+                      "Offline Mode",
+                      "Fast Sync",
+                      "Secure Payments",
+                    ]
+                  )
+                    .slice(0, 3)
+                    .map((feature, index) => (
+                      <span
+                        key={index}
+                        className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded text-xs"
+                      >
+                        {feature}
+                      </span>
+                    ))}
                 </div>
                 <p className="text-sm">
-                  Professional POS system for cannabis dispensaries with offline
-                  support
+                  {apkMetadata?.description ||
+                    "Professional POS system for cannabis dispensaries with offline support"}
                 </p>
               </div>
               <div className="flex gap-3">
