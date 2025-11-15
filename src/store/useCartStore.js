@@ -184,7 +184,16 @@ export const useCartStore = create((set, get) => ({
     const subtotal = get().getSubtotal();
     const discountAmount = get().getDiscountAmount();
     const { tax } = get();
-    return subtotal - discountAmount + tax.amount;
+    const total = subtotal - discountAmount + tax.amount;
+
+    console.log("💰 getTotal calculation:", {
+      subtotal,
+      discountAmount,
+      taxAmount: tax.amount,
+      total,
+    });
+
+    return total;
   },
 
   // Get item count
@@ -209,6 +218,22 @@ export const useCartStore = create((set, get) => ({
   // Get cart data for saving
   getCartData: () => {
     const state = get();
+    const subtotal = state.getSubtotal();
+    const discountAmount = state.getDiscountAmount();
+    const total = state.getTotal();
+
+    console.log("🛒 getCartData called:", {
+      itemsCount: state.items.length,
+      subtotal,
+      discountAmount,
+      total,
+      items: state.items.map((item) => ({
+        name: item.name,
+        total: item.total,
+        quantity: item.quantity,
+      })),
+    });
+
     return {
       items: state.items,
       discount: state.discount,
@@ -216,9 +241,9 @@ export const useCartStore = create((set, get) => ({
       customer: state.customer,
       notes: state.notes,
       kioskOrderId: state.kioskOrderId,
-      subtotal: state.getSubtotal(),
-      discountAmount: state.getDiscountAmount(),
-      total: state.getTotal(),
+      subtotal,
+      discountAmount,
+      total,
     };
   },
 

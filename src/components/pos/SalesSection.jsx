@@ -1839,6 +1839,18 @@ export default function SalesSection({ cashier }) {
         paymentTypeMap[paymentMethod] || paymentTypeMap.cash;
 
       // Create receipt data for Firebase
+      console.log("🧾 Creating receipt with cartData:", {
+        total: cartData.total,
+        subtotal: cartData.subtotal,
+        discountAmount: cartData.discountAmount,
+        itemsCount: items.length,
+        items: items.map((item) => ({
+          name: item.name,
+          total: item.total,
+          quantity: item.quantity,
+        })),
+      });
+
       const receiptData = {
         // Local identifiers
         orderNumber: orderNumber,

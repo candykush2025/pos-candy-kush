@@ -52,6 +52,35 @@ import {
   Cell,
 } from "recharts";
 
+const resolveMoneyValue = (value) => {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (value && typeof value === "object") {
+    if (typeof value.amount === "number") return value.amount;
+    if (typeof value.value === "number") return value.value;
+    if (typeof value.total === "number") return value.total;
+    if (typeof value.unit === "number") return value.unit;
+
+    const nested = [
+      value.amount_money,
+      value.total_money,
+      value.money,
+      value.unit_money,
+    ];
+
+    for (const candidate of nested) {
+      if (candidate && candidate !== value) {
+        const resolved = resolveMoneyValue(candidate);
+        if (resolved) return resolved;
+      }
+    }
+  }
+  return 0;
+};
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -717,6 +746,22 @@ export default function AdminDashboard() {
           return bDate - aDate; // Most recent first
         })
         .slice(0, 10);
+
+      // Debug: Check recent transactions data
+      if (allRecentTransactions.length > 0) {
+        console.log("🔍 Recent transaction sample:", {
+          id: allRecentTransactions[0].id,
+          totalMoney: allRecentTransactions[0].totalMoney,
+          total_money: allRecentTransactions[0].total_money,
+          resolvedAmount: resolveMoneyValue(
+            allRecentTransactions[0].totalMoney ??
+              allRecentTransactions[0].total ??
+              0
+          ),
+          lineItems: allRecentTransactions[0].lineItems?.length || 0,
+        });
+      }
+
       setRecentTransactions(allRecentTransactions);
 
       // Debug logging (at the end after all variables are defined)
@@ -768,7 +813,11 @@ export default function AdminDashboard() {
           createdAt: r.createdAt?.toDate
             ? r.createdAt.toDate()
             : new Date(r.createdAt),
-          total: r.totalMoney,
+          total: r.total_money ?? r.totalMoney ?? r.total,
+          total_money: r.total_money,
+          totalMoney: r.totalMoney,
+          amount: r.amount,
+          money: r.money,
         }));
         console.log(
           "📊 First 10 receipts (receiptDate vs createdAt):",
@@ -776,7 +825,14 @@ export default function AdminDashboard() {
         );
 
         console.log("📊 Sample receipt:", receipts[0]);
+        console.log("📊 Sample receipt all fields:", Object.keys(receipts[0]));
         console.log("📊 Sample receipt totalMoney:", receipts[0].totalMoney);
+        console.log("📊 Sample receipt total_money:", receipts[0].total_money);
+        console.log("📊 Sample receipt total:", receipts[0].total);
+        console.log(
+          "📊 resolveMoneyValue test:",
+          resolveMoneyValue(receipts[0])
+        );
         console.log("📊 Sample receipt lineItems:", receipts[0].lineItems);
         if (receipts[0].lineItems && receipts[0].lineItems.length > 0) {
           console.log("📊 Sample lineItem:", receipts[0].lineItems[0]);
@@ -1376,7 +1432,14 @@ export default function AdminDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">
-                        {formatCurrency(transaction.totalMoney || 0)}
+                        {formatCurrency(
+                          resolveMoneyValue(
+                            transaction.total_money ??
+                              transaction.totalMoney ??
+                              transaction.total ??
+                              0
+                          )
+                        )}
                       </p>
                       {transaction.payments &&
                         transaction.payments.length > 0 && (

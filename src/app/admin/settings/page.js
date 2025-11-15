@@ -15,6 +15,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "sonner";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { APKInstallPrompt } from "@/components/APKInstallPrompt";
 import {
   Database,
   Wifi,
@@ -595,6 +596,9 @@ export default function AdminSettings() {
           </p>
         </CardContent>
       </Card>
+
+      {/* APK Install Prompt */}
+      <APKInstallPrompt forceShow={true} />
     </div>
   );
 }

@@ -18,16 +18,17 @@ export function APKInstallPrompt({ forceShow = false }) {
   const isOnLoginRoute = pathname === "/login";
 
   useEffect(() => {
-    // Check if user is on Android device OR in development mode OR on login page
+    // Check if user is on Android device OR in development mode OR on login page OR forced to show
     const isAndroid = /Android/i.test(navigator.userAgent);
     const isDevelopment = process.env.NODE_ENV === "development";
 
     // For development/testing, show on desktop too (you can remove this in production)
-    const shouldShow = isAndroid || isDevelopment || isOnLoginRoute;
+    const shouldShow =
+      isAndroid || isDevelopment || isOnLoginRoute || forceShow;
 
     if (!shouldShow) {
       console.log(
-        "APK Install: Not showing - not Android and not in development mode"
+        "APK Install: Not showing - not Android and not in development mode and not forced"
       );
       return;
     }
@@ -112,17 +113,32 @@ export function APKInstallPrompt({ forceShow = false }) {
     setIsDownloading(true);
 
     try {
-      // For Android, we need to handle APK installation differently
-      // Create a download link that triggers the browser's download
+      // Use the dedicated download endpoint
+      const response = await fetch(apkMetadata.downloadUrl, {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      // Create download link
       const link = document.createElement("a");
-      link.href = apkMetadata.downloadUrl;
+      link.href = url;
       link.download = "ck.apk";
       link.style.display = "none";
 
-      // Add to DOM and trigger download
+      // Trigger download
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      // Clean up object URL
+      window.URL.revokeObjectURL(url);
 
       toast.success(
         "APK download started! Check your downloads folder and tap to install.",
@@ -184,17 +200,10 @@ export function APKInstallPrompt({ forceShow = false }) {
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0">
             <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center text-white text-xl font-bold shadow-lg overflow-hidden">
-              <img
-                src={apkMetadata.icon}
-                alt="App Icon"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  // Fallback to icon if image fails
-                  e.target.style.display = "none";
-                  e.target.parentElement.innerHTML =
-                    '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>';
-                }}
-              />
+              {/* Custom CK Icon */}
+              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+                <span className="text-green-600 font-bold text-lg">CK</span>
+              </div>
             </div>
           </div>
           <div className="flex-1 min-w-0">
