@@ -78,6 +78,7 @@ export default function ProductsSection() {
     categoryId: "",
     soldBy: "each",
     price: "",
+    memberPrice: "",
     cost: "",
     sku: "",
     barcode: "",
@@ -383,6 +384,7 @@ export default function ProductsSection() {
       categoryId: categories[0]?.id || "",
       soldBy: "each",
       price: "",
+      memberPrice: "",
       cost: "",
       sku: generateNextSKU(),
       barcode: "",
@@ -418,6 +420,7 @@ export default function ProductsSection() {
       categoryId: product.categoryId || "",
       soldBy: product.soldBy || "each",
       price: product.price || "",
+      memberPrice: product.memberPrice || "",
       cost: product.cost || "",
       sku: initialSku,
       barcode: product.barcode || "",
@@ -494,6 +497,9 @@ export default function ProductsSection() {
         categoryId: productFormData.categoryId || null,
         soldBy: productFormData.soldBy,
         price: parseFloat(productFormData.price) || 0,
+        memberPrice: productFormData.memberPrice
+          ? parseFloat(productFormData.memberPrice)
+          : null,
         cost: productFormData.cost ? parseFloat(productFormData.cost) : 0,
         // Preserve existing SKU when editing if field left empty; otherwise use provided SKU
         sku:
@@ -961,8 +967,16 @@ export default function ProductsSection() {
                           </div>
 
                           {/* Price */}
-                          <div className="text-xl font-bold text-green-600">
-                            {formatCurrency(product.price || 0)}
+                          <div className="text-right">
+                            <div className="text-xl font-bold text-green-600">
+                              {formatCurrency(product.price || 0)}
+                            </div>
+                            {product.memberPrice &&
+                              product.memberPrice !== product.price && (
+                                <div className="text-sm text-orange-600 font-medium">
+                                  Member: {formatCurrency(product.memberPrice)}
+                                </div>
+                              )}
                           </div>
                         </div>
                       ))
@@ -1449,8 +1463,8 @@ export default function ProductsSection() {
               </div>
             </div>
 
-            {/* Price and Cost */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Price, Member Price and Cost */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Price (฿) *
@@ -1468,6 +1482,24 @@ export default function ProductsSection() {
                     })
                   }
                   required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Member Price (฿)
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={productFormData.memberPrice}
+                  onChange={(e) =>
+                    setProductFormData({
+                      ...productFormData,
+                      memberPrice: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div>
