@@ -307,7 +307,6 @@ export default function SalesSection({ cashier }) {
           .toString(36)
           .substr(2, 9)}`;
         localStorage.setItem("device_id", deviceId);
-        console.log("Generated new device ID:", deviceId);
       }
     }
   }, []);
@@ -372,9 +371,6 @@ export default function SalesSection({ cashier }) {
   // When connection returns online, always refetch fresh data from Firebase
   useEffect(() => {
     if (isOnline) {
-      console.log(
-        "Network online: refetching products and categories from Firebase"
-      );
       loadProducts();
       loadCustomers();
     }
@@ -431,10 +427,7 @@ export default function SalesSection({ cashier }) {
   const loadCustomTabsFromUser = async () => {
     if (!userId || products.length === 0) return;
 
-    console.log("📥 loadCustomTabsFromUser called");
-
     // CLEAR OLD localStorage data FIRST!
-    console.log("🗑️ Clearing old localStorage custom tabs data...");
     localStorage.removeItem("custom_category_products");
     localStorage.removeItem("category_slot_colors");
     localStorage.removeItem("custom_categories");
@@ -442,8 +435,6 @@ export default function SalesSection({ cashier }) {
     try {
       // Load ALL custom tabs from all users in Firebase (shared across all users)
       const firebaseTabs = await customTabsService.getAllCustomTabs();
-
-      console.log("📦 Firebase tabs received:", firebaseTabs);
 
       if (firebaseTabs && firebaseTabs.categories) {
         setCustomCategories(firebaseTabs.categories || []);
@@ -463,16 +454,10 @@ export default function SalesSection({ cashier }) {
           const resolvedArray = slots.map((slot, index) => {
             if (!slot) return null;
 
-            // Debug: Show what we got from Firebase
-            if (index === 2) {
-              console.log(`📦 Raw slot 2 from Firebase:`, slot);
-            }
-
             // Extract color for state (needed for color picker)
             if (slot.color) {
               const slotKey = `${category}-${index}-${slot.id}`;
               loadedColors[slotKey] = slot.color;
-              console.log(`🎨 Loaded color for ${slotKey}: ${slot.color}`);
             }
 
             if (slot.type === "product") {
@@ -516,7 +501,6 @@ export default function SalesSection({ cashier }) {
         });
 
         // Set colors state (for color picker)
-        console.log("🎨 Setting colors state:", loadedColors);
         setCategorySlotColors(loadedColors);
         localStorage.setItem(
           "category_slot_colors",
@@ -588,7 +572,6 @@ export default function SalesSection({ cashier }) {
 
       // If offline, load from IndexedDB only (fallback)
       if (!isOnline) {
-        console.log("📱 Offline: loading products from IndexedDB");
         const productsData = await dbService.getProducts();
         setProducts(productsData);
         setFilteredProducts(productsData);
@@ -764,7 +747,6 @@ export default function SalesSection({ cashier }) {
               JSON.stringify(resolvedSlots)
             );
           } else {
-            console.log("No Firebase data found, loading from localStorage");
             // Fallback to localStorage if no Firebase data
             const savedCustomCategories =
               localStorage.getItem("custom_categories");
@@ -818,16 +800,10 @@ export default function SalesSection({ cashier }) {
         const localIds = localProds.map((p) => p.id);
         if (localIds.length > 0) {
           await dbService.bulkDeleteProducts(localIds);
-          console.log(
-            `Cleared ${localIds.length} local products before rewrite`
-          );
         }
 
         if (finalProducts.length > 0) {
           await dbService.upsertProducts(finalProducts);
-          console.log(
-            `Rewrote ${finalProducts.length} products from Firebase into local DB`
-          );
         }
       } catch (syncErr) {
         console.warn("Failed to clear-and-rewrite products:", syncErr);
@@ -846,9 +822,6 @@ export default function SalesSection({ cashier }) {
         }
         if (finalCategories && finalCategories.length > 0) {
           await dbService.upsertCategories(finalCategories);
-          console.log(
-            `Rewrote ${finalCategories.length} categories from Firebase into local DB`
-          );
         }
       } catch (catSyncErr) {
         console.warn("Failed to clear-and-rewrite categories:", catSyncErr);
@@ -880,13 +853,9 @@ export default function SalesSection({ cashier }) {
     try {
       // If online, fetch from Firebase and sync to IndexedDB
       if (isOnline) {
-        console.log("🔄 Fetching customers from Firebase (online)...");
         const firebaseCustomers = await customersService.getAll({
           orderBy: ["name", "asc"],
         });
-        console.log(
-          `✅ Loaded ${firebaseCustomers.length} customers from Firebase`
-        );
 
         // Replace local customers by clearing local storage first then writing fresh Firebase data
         try {
@@ -901,9 +870,6 @@ export default function SalesSection({ cashier }) {
           }
           if (firebaseCustomers.length > 0) {
             await dbService.upsertCustomers(firebaseCustomers);
-            console.log(
-              `Rewrote ${firebaseCustomers.length} customers from Firebase into local DB`
-            );
           }
         } catch (custSyncErr) {
           console.warn("Failed to clear-and-rewrite customers:", custSyncErr);
@@ -912,11 +878,7 @@ export default function SalesSection({ cashier }) {
         setCustomers(firebaseCustomers);
       } else {
         // If offline, load from IndexedDB
-        console.log("📱 Loading customers from IndexedDB (offline)...");
         const offlineCustomers = await dbService.getAllCustomers();
-        console.log(
-          `✅ Loaded ${offlineCustomers.length} customers from IndexedDB`
-        );
         setCustomers(offlineCustomers);
       }
     } catch (error) {
@@ -1225,15 +1187,11 @@ export default function SalesSection({ cashier }) {
     );
 
     if (!userId) {
-      console.log("No userId, saved to localStorage only");
       return;
     }
 
     // If online, save to Firebase immediately
     if (!isOnline) {
-      console.log(
-        "Offline - saved to localStorage only, will sync when online"
-      );
       toast.warning("Offline - changes saved locally");
       return;
     }
@@ -1258,20 +1216,12 @@ export default function SalesSection({ cashier }) {
         });
       });
 
-      console.log("💾 Saving custom tabs to Firebase:", {
-        userId,
-        categories,
-        categoryCount: categories.length,
-        slotsCount: Object.keys(slotIds).length,
-      });
-
       // Save to Firebase immediately (no separate categorySlotColors needed!)
       await customTabsService.saveUserTabs(userId, {
         categories,
         categoryProducts: slotIds,
       });
 
-      console.log("✅ Custom tabs saved to Firebase successfully");
       toast.success("Changes synced to cloud");
     } catch (error) {
       console.error("❌ Error saving to Firebase:", error);
@@ -1519,7 +1469,6 @@ export default function SalesSection({ cashier }) {
     // Save immediately to Firebase (saveCustomTabsToFirebase already handles online check)
     saveCustomTabsToFirebase(newOrder, customCategoryProducts)
       .then(() => {
-        console.log("✅ Tab order saved to Firebase");
         toast.success("Tab order synced to cloud");
       })
       .catch((error) => {
@@ -1629,14 +1578,12 @@ export default function SalesSection({ cashier }) {
 
     // Save to Firebase with updated colors
     if (!userId) {
-      console.log("No userId, color saved to localStorage only");
       setShowSlotColorPicker(false);
       setSelectedSlotForColor(null);
       return;
     }
 
     if (!isOnline) {
-      console.log("Offline - color saved to localStorage only");
       toast.warning("Offline - color saved locally");
       setShowSlotColorPicker(false);
       setSelectedSlotForColor(null);
@@ -1663,19 +1610,12 @@ export default function SalesSection({ cashier }) {
         });
       });
 
-      console.log(
-        "💾 Saving color to Firebase (NEW SIMPLE WAY - inside slot):"
-      );
-      console.log("   Slots with colors:", slotIds);
-      console.log("   Total colors:", Object.keys(updatedColors).length);
-
       // Save to Firebase with colors INSIDE slots
       await customTabsService.saveUserTabs(userId, {
         categories: customCategories,
         categoryProducts: slotIds,
       });
 
-      console.log("✅ Category box color saved to Firebase successfully");
       toast.success("Color synced to cloud");
     } catch (error) {
       console.error("❌ Error saving color to Firebase:", error);
@@ -1839,18 +1779,6 @@ export default function SalesSection({ cashier }) {
         paymentTypeMap[paymentMethod] || paymentTypeMap.cash;
 
       // Create receipt data for Firebase
-      console.log("🧾 Creating receipt with cartData:", {
-        total: cartData.total,
-        subtotal: cartData.subtotal,
-        discountAmount: cartData.discountAmount,
-        itemsCount: items.length,
-        items: items.map((item) => ({
-          name: item.name,
-          total: item.total,
-          quantity: item.quantity,
-        })),
-      });
-
       const receiptData = {
         // Local identifiers
         orderNumber: orderNumber,
@@ -1945,26 +1873,9 @@ export default function SalesSection({ cashier }) {
           "@/lib/firebase/stockHistoryService"
         );
 
-        console.log("🔄 Starting stock update for", items.length, "items");
-
         for (const item of items) {
-          console.log("📦 Processing item:", {
-            name: item.name,
-            productId: item.productId,
-            quantity: item.quantity,
-          });
-
           // Fetch full product details to check if it tracks stock
           const product = await productsService.get(item.productId);
-
-          console.log("📦 Product fetched:", {
-            id: product?.id,
-            name: product?.name,
-            trackStock: product?.trackStock,
-            stock: product?.stock,
-            stockType: typeof product?.stock,
-            fullProduct: product,
-          });
 
           if (!product) {
             console.warn("⚠️ Product not found:", item.productId);
@@ -1972,19 +1883,11 @@ export default function SalesSection({ cashier }) {
           }
 
           if (!product.trackStock) {
-            console.log("⏭️ Product doesn't track stock:", product.name);
             continue;
           }
 
           // Check both stock and inStock fields (for compatibility)
           const currentStock = product.stock ?? product.inStock ?? 0;
-
-          console.log("📊 Current stock check:", {
-            product: product.name,
-            stockField: product.stock,
-            inStockField: product.inStock,
-            currentStock: currentStock,
-          });
 
           // Warn if stock is 0 or would go negative
           if (currentStock === 0) {
@@ -2004,19 +1907,10 @@ export default function SalesSection({ cashier }) {
           }
           const newStock = Math.max(0, currentStock - item.quantity);
 
-          console.log("📊 Stock calculation:", {
-            product: product.name,
-            currentStock,
-            quantity: item.quantity,
-            newStock,
-          });
-
           // Update product stock
           await productsService.update(product.id, {
             stock: newStock,
           });
-
-          console.log("✅ Stock updated:", product.name);
 
           // Log stock history
           await stockHistoryService.logStockMovement({
@@ -2033,11 +1927,7 @@ export default function SalesSection({ cashier }) {
             userName: cashier?.name || "Unknown",
             notes: `Sale: ${item.quantity}x ${product.name}`,
           });
-
-          console.log("✅ Stock history logged:", product.name);
         }
-
-        console.log("✅ All stock updates completed");
       } catch (error) {
         console.error("❌ Error updating stock:", error);
         console.error("Error details:", error.message, error.stack);
@@ -2152,7 +2042,6 @@ export default function SalesSection({ cashier }) {
             finalReceiptNumber: orderNumber,
             updatedAt: serverTimestamp(),
           });
-          console.log("✅ Kiosk order completed:", cartData.kioskOrderId);
         } catch (error) {
           console.error("Error updating kiosk order:", error);
           // Don't fail checkout if kiosk order update fails
@@ -2572,16 +2461,6 @@ export default function SalesSection({ cashier }) {
                               (() => {
                                 // NEW SIMPLE WAY: Read color directly from slot data!
                                 const customColor = slot.color;
-
-                                // Debug logging (only for slot 2 to avoid spam)
-                                if (index === 2) {
-                                  console.log("🎨 Rendering slot 2 (NEW WAY):");
-                                  console.log("  - Slot data:", slot);
-                                  console.log(
-                                    "  - Color from slot:",
-                                    customColor
-                                  );
-                                }
 
                                 // Generate gradient colors from custom color or use default blue
                                 const baseColor = customColor || "#3b82f6";

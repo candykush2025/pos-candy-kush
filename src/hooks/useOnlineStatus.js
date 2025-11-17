@@ -14,13 +14,11 @@ export const useOnlineStatus = () => {
     const handleOnline = () => {
       setIsOnline(true);
       setSyncOnline(true);
-      console.log("Connection restored - back online");
     };
 
     const handleOffline = () => {
       setIsOnline(false);
       setSyncOnline(false);
-      console.log("Connection lost - working offline");
     };
 
     window.addEventListener("online", handleOnline);

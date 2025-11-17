@@ -103,7 +103,6 @@ export default function KioskOrdersPanel({ currentUser }) {
 
       // Add customer if available (check if they have a customerId, not isNoMember flag)
       if (order.customer && order.customer.customerId) {
-        console.log("Adding customer to cart:", order.customer);
         setCustomer({
           id: order.customer.id,
           customerId: order.customer.customerId,
@@ -116,9 +115,7 @@ export default function KioskOrdersPanel({ currentUser }) {
             order.customer.currentPoints || order.customer.totalPoints || 0,
         });
       } else {
-        console.log(
-          "No customer or guest order - skipping customer assignment"
-        );
+        // No customer or guest order - skipping customer assignment
       }
 
       // Add all items to cart
@@ -169,7 +166,6 @@ export default function KioskOrdersPanel({ currentUser }) {
         updatedAt: serverTimestamp(),
       });
 
-      console.log("❌ Order cancelled:", orderId);
       setSelectedOrder(null);
       setShowModal(false);
 
@@ -737,8 +733,10 @@ function OrderDetailsModal({
 function playNotificationSound() {
   try {
     const audio = new Audio("/notification.mp3");
-    audio.play().catch((e) => console.log("Audio play failed:", e));
+    audio.play().catch((e) => {
+      // Audio play failed - silently ignore
+    });
   } catch (error) {
-    console.log("Could not play notification sound:", error);
+    // Could not play notification sound - silently ignore
   }
 }

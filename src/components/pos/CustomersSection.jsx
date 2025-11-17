@@ -897,7 +897,6 @@ export default function CustomersSection({ cashier }) {
   // Listen for cashier-update events
   useEffect(() => {
     const handleCashierUpdate = () => {
-      console.log("Cashier updated - reloading customers");
       loadCustomers();
     };
 
@@ -936,9 +935,6 @@ export default function CustomersSection({ cashier }) {
   const loadCustomers = async () => {
     try {
       setLoading(true);
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      console.log("🔄 LOADING CUSTOMERS FROM FIREBASE...");
-      console.log("Current cashier:", cashier);
 
       // Clear previous customers when switching users
       setCustomers([]);
@@ -948,26 +944,7 @@ export default function CustomersSection({ cashier }) {
         orderBy: { field: "name", direction: "asc" },
       });
 
-      console.log("📊 RAW DATA FROM FIREBASE:", data);
-      console.log("📊 Total customers fetched:", data.length);
-
-      if (data.length > 0) {
-        console.log("📄 Sample customer data:", data[0]);
-        console.log(
-          "📋 All customer IDs:",
-          data.map((c) => c.id)
-        );
-        console.log(
-          "📋 All customer names:",
-          data.map((c) => c.name)
-        );
-      }
-
       // DON'T FILTER BY CASHIER - SHOW ALL CUSTOMERS
-      console.log("✅ Showing ALL customers (no cashier filter)");
-
-      console.log(`✅ FINAL RESULT: ${data.length} customers displayed`);
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
       setCustomers(data);
       setFilteredCustomers(data);

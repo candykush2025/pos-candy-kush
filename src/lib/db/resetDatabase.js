@@ -6,10 +6,7 @@ import Dexie from "dexie";
  */
 export async function resetDatabase() {
   try {
-    console.log("🗑️ Deleting old database...");
     await Dexie.delete("CandyKushPOS");
-    console.log("✅ Database deleted successfully");
-    console.log("🔄 Please refresh the page to recreate the database");
     return true;
   } catch (error) {
     console.error("❌ Error deleting database:", error);

@@ -49,7 +49,6 @@ export default function SettingsSection() {
   useEffect(() => {
     const fetchApkMetadata = async () => {
       try {
-        console.log("Settings: Fetching APK metadata from API...");
         const response = await fetch("/api/apk");
 
         if (!response.ok) {
@@ -57,7 +56,6 @@ export default function SettingsSection() {
         }
 
         const metadata = await response.json();
-        console.log("Settings: APK metadata fetched successfully:", metadata);
         setApkMetadata(metadata);
       } catch (error) {
         console.error("Settings: Failed to fetch APK metadata:", error);
@@ -158,24 +156,16 @@ export default function SettingsSection() {
     setIsLoggingOut(true);
 
     try {
-      console.log(
-        "🧹 Performing complete logout from Settings - clearing all data"
-      );
-
       // Clear ALL localStorage data
-      console.log("🗑️ Clearing all localStorage...");
       localStorage.clear();
 
       // Clear ALL IndexedDB data (offline data)
-      console.log("🗑️ Clearing all offline data from IndexedDB...");
       await dbService.clearAllData();
 
       // Clear cart store
-      console.log("🗑️ Clearing cart...");
       const { clearCart } = useCartStore.getState();
       clearCart();
 
-      console.log("✅ Complete cleanup finished!");
       toast.success("Logged out - All data cleared");
 
       // Logout admin user and redirect to login page

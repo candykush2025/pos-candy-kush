@@ -38,9 +38,6 @@ export async function GET() {
     const apkBuffer = fs.readFileSync(apkPath);
     const stats = fs.statSync(apkPath);
 
-    // Log download attempt
-    console.log(`APK download initiated: ${stats.size} bytes from ${apkPath}`);
-
     // Return the APK file with proper headers
     return new NextResponse(apkBuffer, {
       headers: {

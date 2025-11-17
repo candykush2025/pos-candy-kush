@@ -71,8 +71,6 @@ export async function POST(request) {
 
     currentCart.lastUpdated = new Date().toISOString();
 
-    console.log("Cart updated:", currentCart);
-
     return new NextResponse(
       JSON.stringify({
         success: true,

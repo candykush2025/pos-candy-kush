@@ -47,16 +47,12 @@ export const dbService = {
   },
 
   async deleteProduct(id) {
-    console.log(`🗑️ [IndexedDB] Deleting product: ${id}`);
     const result = await db.products.delete(id);
-    console.log(`✅ [IndexedDB] Deleted product: ${id}`);
     return result;
   },
 
   async bulkDeleteProducts(ids) {
-    console.log(`🗑️ [IndexedDB] Bulk deleting ${ids.length} products`);
     const result = await db.products.bulkDelete(ids);
-    console.log(`✅ [IndexedDB] Bulk deleted ${ids.length} products`);
     return result;
   },
 

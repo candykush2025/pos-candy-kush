@@ -2,6 +2,17 @@ import withPWA from "next-pwa";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Turbopack is enabled by default in Next.js 15+
+  turbopack: {},
+  experimental: {
+    // Enable faster builds with package import optimization
+    optimizePackageImports: [
+      "lucide-react",
+      "@radix-ui/react-select",
+      "@radix-ui/react-dialog",
+    ],
+  },
+
   images: {
     remotePatterns: [
       {

@@ -34,13 +34,6 @@ export async function GET() {
       const parser = new ApkParser(apkPath);
       const result = await parser.parse();
 
-      console.log("APK parsed successfully:", {
-        name: result.name,
-        package: result.package,
-        versionName: result.versionName,
-        versionCode: result.versionCode,
-      });
-
       // Get file size
       const stats = fs.statSync(apkPath);
       const sizeFormatted = formatFileSize(stats.size);
@@ -72,7 +65,6 @@ export async function GET() {
       });
     } catch (parseError) {
       console.error("Error parsing APK file:", parseError);
-      console.log("Falling back to static metadata");
       return getFallbackMetadata();
     }
   } catch (error) {

@@ -49,12 +49,10 @@ class SyncEngine {
     const syncStore = useSyncStore.getState();
 
     if (!syncStore.isOnline) {
-      console.log("Offline - skipping sync");
       return;
     }
 
     if (syncStore.status === SYNC_STATUS.SYNCING) {
-      console.log("Sync already in progress");
       return;
     }
 
@@ -67,8 +65,6 @@ class SyncEngine {
 
       syncStore.setStatus(SYNC_STATUS.SYNCED);
       syncStore.setLastSyncTime(Date.now());
-
-      console.log("Sync completed successfully");
     } catch (error) {
       console.error("Sync failed:", error);
       syncStore.setStatus(SYNC_STATUS.ERROR);
@@ -86,11 +82,8 @@ class SyncEngine {
     const queue = await dbService.getSyncQueue();
 
     if (queue.length === 0) {
-      console.log("No pending changes to sync");
       return;
     }
-
-    console.log(`Syncing ${queue.length} pending changes`);
 
     const syncStore = useSyncStore.getState();
     syncStore.setPendingCount(queue.length);
@@ -282,7 +275,6 @@ class SyncEngine {
 
         if (products.length > 0) {
           await dbService.upsertProducts(products);
-          console.log(`Synced ${products.length} products from Firebase`);
         }
       } catch (error) {
         console.error("Error pulling products:", error);
@@ -308,7 +300,6 @@ class SyncEngine {
 
         if (categories.length > 0) {
           await dbService.upsertCategories(categories);
-          console.log(`Synced ${categories.length} categories from Firebase`);
         }
       } catch (error) {
         console.error("Error pulling categories:", error);
@@ -334,7 +325,6 @@ class SyncEngine {
 
         if (users.length > 0) {
           await dbService.upsertUsers(users);
-          console.log(`Synced ${users.length} users from Firebase`);
         }
       } catch (error) {
         console.error("Error pulling users:", error);

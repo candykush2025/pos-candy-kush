@@ -27,15 +27,8 @@ export function APKInstallPrompt({ forceShow = false }) {
       isAndroid || isDevelopment || isOnLoginRoute || forceShow;
 
     if (!shouldShow) {
-      console.log(
-        "APK Install: Not showing - not Android and not in development mode and not forced"
-      );
       return;
     }
-
-    console.log(
-      "APK Install: Device check passed, checking dismissal status..."
-    );
 
     // Check if already installed (this is a simple check)
     const dismissed = localStorage.getItem("apk-install-dismissed");
@@ -46,7 +39,6 @@ export function APKInstallPrompt({ forceShow = false }) {
       );
       // Show again after 7 days
       if (daysSinceDismissed < 7) {
-        console.log("APK Install: Recently dismissed, not showing");
         return;
       }
     }
@@ -54,7 +46,6 @@ export function APKInstallPrompt({ forceShow = false }) {
     // Fetch APK metadata from API
     const fetchApkMetadata = async () => {
       try {
-        console.log("APK Install: Fetching metadata from API...");
         const response = await fetch("/api/apk");
 
         if (!response.ok) {
@@ -62,12 +53,7 @@ export function APKInstallPrompt({ forceShow = false }) {
         }
 
         const metadata = await response.json();
-        console.log("APK Install: Metadata fetched successfully:", metadata);
-
         setApkMetadata(metadata);
-        console.log(
-          "APK Install: API metadata loaded, showing prompt on login page"
-        );
 
         // Show prompt instantly on login page or when forced
         if (isOnLoginRoute || forceShow) {
@@ -75,7 +61,6 @@ export function APKInstallPrompt({ forceShow = false }) {
         }
       } catch (error) {
         console.error("APK Install: Failed to fetch metadata from API:", error);
-        console.log("APK Install: Using fallback dummy metadata...");
 
         // Fallback to dummy APK metadata
         const dummyMetadata = {
@@ -93,9 +78,6 @@ export function APKInstallPrompt({ forceShow = false }) {
         };
 
         setApkMetadata(dummyMetadata);
-        console.log(
-          "APK Install: Fallback metadata loaded, showing prompt on login page"
-        );
 
         // Show prompt instantly on login page or when forced
         if (isOnLoginRoute || forceShow) {
@@ -191,8 +173,6 @@ export function APKInstallPrompt({ forceShow = false }) {
   if (isInstalled || !showPrompt || !apkMetadata) {
     return null;
   }
-
-  console.log("APK Install: Rendering prompt component");
 
   return (
     <div className="fixed bottom-4 right-4 z-50 max-w-sm">

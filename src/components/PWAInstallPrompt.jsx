@@ -41,15 +41,11 @@ export function PWAInstallPrompt() {
 
     // Listen for beforeinstallprompt event
     const handler = (e) => {
-      console.log("PWA: beforeinstallprompt event fired");
       e.preventDefault();
       setDeferredPrompt(e);
       // Show prompt instantly on login page (no delay)
       if (isOnLoginRoute) {
-        console.log("PWA: Showing install prompt on login page");
         setShowPrompt(true);
-      } else {
-        console.log("PWA: Not on login route, skipping prompt");
       }
     };
 

@@ -57,8 +57,6 @@ export async function POST(request) {
       transactionId: transactionId || null,
     };
 
-    console.log("Payment status updated:", paymentStatus);
-
     return NextResponse.json(
       {
         success: true,

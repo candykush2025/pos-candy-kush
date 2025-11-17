@@ -557,14 +557,6 @@ export default function ProductsSection() {
           const currentStock =
             editingProduct.stock ?? editingProduct.inStock ?? 0;
 
-          console.log("📊 Stock adjustment check:", {
-            product: editingProduct.name,
-            currentStock,
-            newStock,
-            stockField: editingProduct.stock,
-            inStockField: editingProduct.inStock,
-          });
-
           // If stock value changed, log it to stock history
           if (newStock !== currentStock) {
             const stockDifference = newStock - currentStock;

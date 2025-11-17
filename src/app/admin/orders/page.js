@@ -253,16 +253,6 @@ export default function AdminOrders() {
             const endDate = dateFilter.end.toDate();
             const inRange = receiptDate >= startDate && receiptDate <= endDate;
 
-            // Debug logging
-            if (!inRange && dateRange === "today") {
-              console.log("Filtered out:", {
-                receiptNumber: receipt.receiptNumber,
-                receiptDate: receiptDate.toISOString(),
-                startDate: startDate.toISOString(),
-                endDate: endDate.toISOString(),
-              });
-            }
-
             return inRange;
           } else if (dateFilter.start) {
             const startDate = dateFilter.start.toDate();
@@ -276,11 +266,6 @@ export default function AdminOrders() {
       }
 
       setReceipts(filteredData);
-      console.log(
-        `📦 Loaded receipts (${dateRange}):`,
-        filteredData.length,
-        `out of ${data.length} total`
-      );
 
       // Show warning if no results
       if (filteredData.length === 0 && data.length > 0) {

@@ -129,8 +129,6 @@ export async function GET(request) {
     const query = queryParams.toString();
     const url = `${LOYVERSE_API_BASE}${endpoint}${query ? `?${query}` : ""}`;
 
-    console.log("Proxying request to:", url);
-
     const response = await fetch(url, {
       method: "GET",
       headers: {

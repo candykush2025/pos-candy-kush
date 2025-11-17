@@ -72,33 +72,25 @@ function CashierLogin({ onLogin }) {
       let users = [];
       let isOnline = navigator.onLine;
 
-      console.log(`Internet status: ${isOnline ? "ONLINE" : "OFFLINE"}`);
-
       if (isOnline) {
         // PRIORITY: Fetch from Firebase when online
-        console.log("📡 Online mode: Fetching fresh data from Firebase...");
         try {
           const firebaseUsers = await getDocuments("users");
           if (firebaseUsers.length > 0) {
             // Sync to IndexedDB for offline use
             await dbService.upsertUsers(firebaseUsers);
             users = firebaseUsers;
-            console.log(
-              `✅ Synced ${firebaseUsers.length} users from Firebase to IndexedDB`
-            );
           } else {
-            console.log("⚠️ No users found in Firebase");
+            // No users found in Firebase
           }
         } catch (fbError) {
           console.error("❌ Firebase fetch error:", fbError);
           // If online but Firebase fails, fall back to local data
-          console.log("⚠️ Firebase unavailable, using local data...");
           users = await dbService.getUsers();
           toast.warning("Using cached data. Some information may be outdated.");
         }
       } else {
         // OFFLINE: Use local IndexedDB data
-        console.log("📴 Offline mode: Using local data from IndexedDB...");
         users = await dbService.getUsers();
         if (users.length > 0) {
           toast.info("Working offline with cached data");
@@ -113,19 +105,6 @@ function CashierLogin({ onLogin }) {
         setLoading(false);
         return;
       }
-
-      console.log("Available users:", users);
-      console.log("Entered PIN:", currentPin);
-      console.log(
-        "Users with PINs:",
-        users
-          .filter((u) => u.pin)
-          .map((u) => ({
-            name: u.name,
-            pin: u.pin,
-            role: u.role,
-          }))
-      );
 
       // Find user with matching PIN and cashier role
       const cashier = users.find(
@@ -474,10 +453,6 @@ export default function SalesPage() {
   useEffect(() => {
     const loadCashier = () => {
       const savedCashier = localStorage.getItem("pos_cashier");
-      console.log(
-        "📥 Sales page loadCashier:",
-        savedCashier ? JSON.parse(savedCashier).name : "null"
-      );
 
       if (savedCashier) {
         try {
@@ -489,7 +464,6 @@ export default function SalesPage() {
         }
       } else {
         // If no cashier in localStorage, clear state to show login
-        console.log("🔓 Sales page: Clearing cashier state");
         setCashier(null);
       }
     };
@@ -512,9 +486,6 @@ export default function SalesPage() {
         const parsedCurrentCashier = JSON.parse(currentCashier);
         if (parsedCurrentCashier.id !== user.id) {
           // Different employee - clear all previous data
-          console.log(
-            `🔄 Switching from ${parsedCurrentCashier.name} to ${user.name}`
-          );
           toast.info(`Switching to ${user.name}...`);
 
           // IMMEDIATELY clear state first
@@ -530,7 +501,6 @@ export default function SalesPage() {
 
           // Force a brief delay to ensure clean state, then set new employee
           setTimeout(() => {
-            console.log(`✅ Setting new employee: ${user.name}`);
             setCashier(user);
             setActiveShift(shift);
             localStorage.setItem("pos_cashier", JSON.stringify(user));
@@ -563,22 +533,17 @@ export default function SalesPage() {
 
   const handleCashierLogout = async () => {
     try {
-      console.log("🧹 Starting complete logout cleanup...");
-
       // Clear React state
       setCashier(null);
       setActiveShift(null);
 
       // Clear ALL localStorage data
-      console.log("🗑️ Clearing all localStorage...");
       localStorage.clear();
 
       // Clear ALL IndexedDB data (offline data)
-      console.log("🗑️ Clearing all offline data from IndexedDB...");
       await dbService.clearAllData();
 
       // Clear cart store
-      console.log("🗑️ Clearing cart...");
       const { clearCart } = useCartStore.getState();
       clearCart();
 
@@ -586,7 +551,6 @@ export default function SalesPage() {
       window.dispatchEvent(new Event("cashier-update"));
       window.dispatchEvent(new Event("storage"));
 
-      console.log("✅ Complete cleanup finished!");
       toast.success("Logged out successfully - All data cleared");
     } catch (error) {
       console.error("❌ Error during logout cleanup:", error);

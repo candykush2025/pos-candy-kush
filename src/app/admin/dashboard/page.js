@@ -453,13 +453,6 @@ export default function AdminDashboard() {
     const now = new Date();
     let start, end;
 
-    console.log(
-      "📅 Date range select called:",
-      rangeType,
-      "Current time:",
-      now.toISOString()
-    );
-
     switch (rangeType) {
       case "today":
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -471,12 +464,6 @@ export default function AdminDashboard() {
           59,
           59,
           999
-        );
-        console.log(
-          "📅 Today range:",
-          start.toISOString(),
-          "to",
-          end.toISOString()
         );
         break;
       case "thisWeek":
@@ -495,14 +482,6 @@ export default function AdminDashboard() {
           59,
           999
         );
-        console.log(
-          "📅 This week range (day",
-          dayOfWeek,
-          "):",
-          start.toISOString(),
-          "to",
-          end.toISOString()
-        );
         break;
       case "thisMonth":
         start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -514,12 +493,6 @@ export default function AdminDashboard() {
           59,
           59,
           999
-        );
-        console.log(
-          "📅 This month range:",
-          start.toISOString(),
-          "to",
-          end.toISOString()
         );
         break;
       case "thisYear":
@@ -545,21 +518,6 @@ export default function AdminDashboard() {
     setSelectedDateRangeLabel(label);
     setShowDateRangeDropdown(false);
     setShowCustomPeriodInputs(false);
-
-    console.log(
-      "📅 Date range selected:",
-      rangeType,
-      "- start:",
-      start.toISOString(),
-      "end:",
-      end.toISOString()
-    );
-    console.log(
-      "📅 Date strings set: startDate =",
-      startDateStr,
-      "endDate =",
-      endDateStr
-    );
 
     // Calculate previous period for comparison
     const duration = end.getTime() - start.getTime();
@@ -710,14 +668,6 @@ export default function AdminDashboard() {
 
         // Skip receipts with invalid dates
         if (!receiptDate || isNaN(receiptDate.getTime())) {
-          console.log(
-            "⚠️ Skipping receipt with invalid date:",
-            receipt.receipt_number || receipt.receiptNumber,
-            "receipt_date:",
-            receipt.receipt_date,
-            "receiptDate:",
-            receipt.receiptDate
-          );
           return false;
         }
 
@@ -726,28 +676,10 @@ export default function AdminDashboard() {
           receiptDate < selectedDateRange.end;
 
         if (receipts.indexOf(receipt) < 3) {
-          console.log(
-            `📅 Receipt ${
-              receipt.receipt_number || receipt.receiptNumber
-            }: date=${receiptDate.toISOString()}, matches=${matches}, start=${selectedDateRange.start.toISOString()}, end=${selectedDateRange.end.toISOString()}, source=${
-              receipt.source
-            }`
-          );
         }
 
         return matches;
       });
-
-      console.log(
-        "📅 Selected date range:",
-        selectedDateRange.start.toISOString(),
-        "to",
-        selectedDateRange.end.toISOString()
-      );
-      console.log(
-        "� Filtered receipts for selected period:",
-        monthReceipts.length
-      );
 
       // Filter receipts by previous period for comparison
       const lastMonthReceipts = receipts.filter((receipt) => {
@@ -812,20 +744,6 @@ export default function AdminDashboard() {
         (sum, receipt) => sum + getReceiptTotal(receipt),
         0
       );
-
-      console.log("💰 Revenue calculation:", {
-        monthRevenue,
-        monthReceipts: monthReceipts.length,
-        todayRevenue,
-        todayReceipts: todayReceipts.length,
-        sampleReceipt: monthReceipts[0]
-          ? {
-              totalMoney: monthReceipts[0].totalMoney,
-              total_money: monthReceipts[0].total_money,
-              source: monthReceipts[0].source,
-            }
-          : null,
-      });
 
       // Calculate changes
       const revenueChange =

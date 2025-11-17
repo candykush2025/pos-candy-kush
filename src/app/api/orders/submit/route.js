@@ -140,14 +140,6 @@ export async function POST(request) {
     // 5. Save to Firebase
     const docRef = await addDoc(collection(db, "kioskOrders"), orderDocument);
 
-    console.log("✅ Kiosk order saved:", {
-      orderId: docRef.id,
-      transactionId: orderData.transactionId,
-      customer: orderData.customer?.fullName,
-      total: orderData.pricing?.total,
-      paymentMethod: orderData.payment?.method,
-    });
-
     // 6. Get queue position (optional)
     const queueNumber = await getQueuePosition();
 
