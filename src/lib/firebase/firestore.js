@@ -99,26 +99,17 @@ export const getDocument = async (collectionName, id) => {
 // Get all documents
 export const getDocuments = async (collectionName, options = {}) => {
   try {
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log(
-      `🔥 FETCHING ${collectionName.toUpperCase()} FROM FIREBASE SERVER`
-    );
-    console.log("Options:", JSON.stringify(options, null, 2));
-
     let q = collection(db, collectionName);
 
     if (options.where) {
-      console.log("🔍 Adding WHERE filter:", options.where);
       q = query(q, where(...options.where));
     }
 
     if (options.orderBy) {
       // orderBy can be an object {field, direction} or array [field, direction]
       if (Array.isArray(options.orderBy)) {
-        console.log("📊 Adding ORDER BY (array):", options.orderBy);
         q = query(q, orderBy(...options.orderBy));
       } else if (options.orderBy.field) {
-        console.log("📊 Adding ORDER BY (object):", options.orderBy);
         q = query(
           q,
           orderBy(options.orderBy.field, options.orderBy.direction || "asc")
@@ -127,16 +118,11 @@ export const getDocuments = async (collectionName, options = {}) => {
     }
 
     if (options.limit) {
-      console.log("🔢 Adding LIMIT:", options.limit);
       q = query(q, limit(options.limit));
     }
 
-    console.log("⏳ Executing Firebase query...");
     // FORCE FETCH FROM SERVER - NOT CACHE!
     const querySnapshot = await getDocsFromServer(q);
-
-    console.log(`📦 Raw query result: ${querySnapshot.size} documents`);
-    console.log(`📦 Empty: ${querySnapshot.empty}`);
 
     const results = querySnapshot.docs.map((doc) => {
       const data = doc.data();
@@ -149,31 +135,6 @@ export const getDocuments = async (collectionName, options = {}) => {
         _dataId: data.id, // Backup: Store the old "id" field for reference
       };
     });
-
-    console.log(
-      `✅ FETCHED ${
-        results.length
-      } ${collectionName.toUpperCase()} FROM FIREBASE SERVER`
-    );
-
-    if (results.length > 0) {
-      console.log(
-        "📄 First document sample:",
-        JSON.stringify(results[0], null, 2)
-      );
-      console.log(
-        "📋 All document IDs:",
-        results.map((r) => r.id)
-      );
-    } else {
-      console.warn(`⚠️ NO ${collectionName.toUpperCase()} FOUND IN FIREBASE!`);
-      console.warn(
-        "Collection path:",
-        `${db.app.options.projectId}/firestore/${collectionName}`
-      );
-    }
-
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     return results;
   } catch (error) {
@@ -200,29 +161,22 @@ export const updateDocument = async (collectionName, id, data) => {
 // Delete document
 export const deleteDocument = async (collectionName, id) => {
   try {
-    console.log(`🗑️ Attempting to delete from ${collectionName}:`, id);
     const docRef = doc(db, collectionName, id);
 
     // Verify document exists before deleting
     const docSnap = await getDocFromServer(docRef);
     if (!docSnap.exists()) {
-      console.warn(`⚠️ Document ${id} does not exist in ${collectionName}`);
       return id;
     }
 
-    console.log(`📄 Document exists, proceeding with deletion...`);
     await deleteDoc(docRef);
 
     // Verify deletion
     const verifySnap = await getDocFromServer(docRef);
     if (verifySnap.exists()) {
-      console.error(
-        `❌ DELETION FAILED! Document ${id} still exists after deleteDoc()`
-      );
       throw new Error("Deletion verification failed - document still exists");
     }
 
-    console.log(`✅ Successfully deleted ${id} from ${collectionName}`);
     return id;
   } catch (error) {
     console.error(`❌ Error deleting document from ${collectionName}:`, error);
@@ -350,12 +304,6 @@ export const customTabsService = {
   // Save custom tabs to SHARED document (all users use same tabs)
   saveUserTabs: async (userId, tabsData) => {
     try {
-      console.log("📤 saveUserTabs called with:", {
-        userId,
-        categoriesCount: tabsData.categories?.length || 0,
-        categoryProductsKeys: Object.keys(tabsData.categoryProducts || {}),
-      });
-
       // Use a fixed document ID "shared" instead of userId
       const docRef = doc(db, COLLECTIONS.CUSTOM_TABS, "shared");
 
@@ -366,28 +314,14 @@ export const customTabsService = {
         lastUpdatedBy: userId, // Track who made the last change
       };
 
-      console.log(
-        "💾 Writing to Firestore (colors are inside slots now!):",
-        dataToSave
-      );
-
       await setDoc(docRef, dataToSave);
-
-      console.log("✅ setDoc completed, verifying write...");
 
       // Verify the write by reading back immediately
       const verifySnap = await getDoc(docRef);
       if (verifySnap.exists()) {
         const writtenData = verifySnap.data();
-        console.log("✅ Verified data in Firestore:");
-        console.log("  📁 Document ID: shared");
-        console.log("  📊 Categories:", writtenData.categories);
-        console.log("  📦 Category Products:", writtenData.categoryProducts);
-      } else {
-        console.error("❌ Document doesn't exist after write!");
       }
 
-      console.log("✅ Custom tabs saved to shared document successfully");
       return true;
     } catch (error) {
       console.error("❌ Error saving custom tabs:", error);
@@ -419,8 +353,6 @@ export const customTabsService = {
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        console.log("📖 getAllCustomTabs - Raw data from Firebase:", data);
-        console.log("📖 categoryProducts:", data.categoryProducts);
 
         return {
           categories: data.categories || [],
