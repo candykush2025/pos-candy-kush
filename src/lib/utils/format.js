@@ -21,6 +21,7 @@ export const formatDate = (date, format = "short") => {
     full: { dateStyle: "full", timeStyle: "short" },
     time: { timeStyle: "short" },
     datetime: { dateStyle: "short", timeStyle: "short" },
+    date: { day: "numeric", month: "long", year: "numeric" }, // "17 November 2025"
   };
 
   return new Intl.DateTimeFormat(

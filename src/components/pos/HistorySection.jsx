@@ -20,6 +20,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   History,
   Calendar,
@@ -33,9 +40,11 @@ import {
   Clock,
   WifiOff,
   AlertCircle,
+  RotateCcw,
+  Edit2,
+  Trash2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
-import { loyverseService } from "@/lib/api/loyverse";
 
 const getReceiptDate = (receipt) => {
   if (!receipt) return null;
@@ -193,6 +202,8 @@ const buildSearchPool = (receipt) => {
     receipt.customerId,
     receipt.employeeName,
     receipt.employeeId,
+    receipt.cashierName,
+    receipt.cashierId,
     receipt.source,
     receipt.location?.name,
     ...(payments || []),
@@ -382,10 +393,13 @@ export default function HistorySection({ cashier: _cashier }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [employees, setEmployees] = useState({});
+  const [displayCount, setDisplayCount] = useState(20); // Lazy loading
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [showChangePaymentModal, setShowChangePaymentModal] = useState(false);
+  const [newPaymentMethod, setNewPaymentMethod] = useState("");
 
-  const PAGE_SIZE = 10;
-  const pendingEmployeesRef = useRef(new Set());
+  const PAGE_SIZE = 20;
+  const scrollContainerRef = useRef(null);
 
   useEffect(() => {
     loadReceipts();
@@ -396,6 +410,7 @@ export default function HistorySection({ cashier: _cashier }) {
       setLoading(true);
       const data = await receiptsService.getAll({
         orderBy: ["createdAt", "desc"],
+        limit: 50, // Load only 50 receipts initially
       });
 
       const normalized = data
@@ -430,6 +445,11 @@ export default function HistorySection({ cashier: _cashier }) {
         });
 
       setReceipts(normalized);
+
+      // Auto-select first receipt
+      if (normalized.length > 0 && !selectedReceipt) {
+        setSelectedReceipt(normalized[0]);
+      }
     } catch (error) {
       console.error("Error loading receipts:", error);
     } finally {
@@ -447,77 +467,59 @@ export default function HistorySection({ cashier: _cashier }) {
     });
   }, [receipts, searchQuery]);
 
-  const totalPages = Math.ceil(filteredReceipts.length / PAGE_SIZE) || 1;
-
+  // Reset display count when search changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, receipts.length]);
+    setDisplayCount(20);
+  }, [searchQuery]);
 
+  // Lazy loaded receipts
+  const displayedReceipts = useMemo(() => {
+    return filteredReceipts.slice(0, displayCount);
+  }, [filteredReceipts, displayCount]);
+
+  // Group receipts by date
+  const groupedReceipts = useMemo(() => {
+    const groups = [];
+    let currentDate = null;
+
+    displayedReceipts.forEach((receipt) => {
+      const receiptDate = receipt._receiptDate;
+      if (!receiptDate) return;
+
+      const dateStr = formatDate(receiptDate, "date"); // Format: "17 November 2025"
+
+      if (dateStr !== currentDate) {
+        currentDate = dateStr;
+        groups.push({ type: "header", date: dateStr });
+      }
+
+      groups.push({ type: "receipt", data: receipt });
+    });
+
+    return groups;
+  }, [displayedReceipts]);
+
+  // Handle infinite scroll
   useEffect(() => {
-    const bounded = Math.min(Math.max(currentPage, 1), totalPages);
-    if (bounded !== currentPage) {
-      setCurrentPage(bounded);
-    }
-  }, [currentPage, totalPages]);
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
-  const startIndex = (safePage - 1) * PAGE_SIZE;
-  const paginatedReceipts = filteredReceipts.slice(
-    startIndex,
-    startIndex + PAGE_SIZE
-  );
-  const showingFrom = filteredReceipts.length === 0 ? 0 : startIndex + 1;
-  const showingTo = Math.min(
-    startIndex + paginatedReceipts.length,
-    filteredReceipts.length
-  );
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
 
-  useEffect(() => {
-    const receiptsNeedingEmployees = paginatedReceipts
-      .map((receipt) => receipt.employeeId)
-      .filter((employeeId) => {
-        if (!employeeId) return false;
-        if (employees[employeeId]) return false;
-        return !pendingEmployeesRef.current.has(employeeId);
-      });
-
-    if (receiptsNeedingEmployees.length === 0) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    const loadEmployees = async () => {
-      for (const employeeId of receiptsNeedingEmployees) {
-        pendingEmployeesRef.current.add(employeeId);
-        try {
-          const employee = await loyverseService.getEmployee(employeeId);
-          if (!cancelled && employee) {
-            setEmployees((prev) => ({
-              ...prev,
-              [employeeId]: employee,
-            }));
-          }
-        } catch (error) {
-          console.error(`Error loading employee ${employeeId}:`, error);
-          if (!cancelled) {
-            setEmployees((prev) => ({
-              ...prev,
-              [employeeId]: { name: null },
-            }));
-          }
-        } finally {
-          pendingEmployeesRef.current.delete(employeeId);
+      // Load more when scrolled to 80% of the content
+      if (scrollTop + clientHeight >= scrollHeight * 0.8) {
+        if (displayCount < filteredReceipts.length) {
+          setDisplayCount((prev) =>
+            Math.min(prev + 20, filteredReceipts.length)
+          );
         }
       }
     };
 
-    loadEmployees();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [paginatedReceipts, employees]);
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [displayCount, filteredReceipts.length]);
 
   const handleViewDetails = (receipt) => {
     setSelectedReceipt(receipt);
@@ -526,16 +528,11 @@ export default function HistorySection({ cashier: _cashier }) {
 
   const getCashierLabel = (receipt) => {
     if (receipt.employeeName) return receipt.employeeName;
+    if (receipt.cashierName) return receipt.cashierName;
     if (receipt.employee) {
       const nameFromEmbedded =
         receipt.employee.name || resolveEmployeeName(receipt.employee);
       if (nameFromEmbedded) return nameFromEmbedded;
-    }
-    if (receipt.employeeId) {
-      const cached = employees[receipt.employeeId];
-      const resolved = resolveEmployeeName(cached);
-      if (resolved) return resolved;
-      return `Employee ${receipt.employeeId.slice(0, 6)}...`;
     }
     return "Unknown";
   };
@@ -545,409 +542,588 @@ export default function HistorySection({ cashier: _cashier }) {
     return date ? formatDate(date, "datetime") : "Unknown date";
   };
 
+  const getPaymentIcon = (receipt) => {
+    const payment = receipt.payments?.[0];
+    const paymentType = payment?.type || payment?.name || "cash";
+    const type = paymentType.toLowerCase();
+
+    if (
+      type.includes("card") ||
+      type.includes("credit") ||
+      type.includes("debit")
+    ) {
+      return "💳";
+    }
+    if (
+      type.includes("crypto") ||
+      type.includes("bitcoin") ||
+      type.includes("btc")
+    ) {
+      return "₿";
+    }
+    if (type.includes("transfer") || type.includes("bank")) {
+      return "🏦";
+    }
+    return "💵"; // Cash default
+  };
+
+  const handleRefundRequest = async () => {
+    if (!selectedReceipt) return;
+
+    try {
+      const editRequest = {
+        receiptId: selectedReceipt.id,
+        receiptNumber:
+          selectedReceipt.receiptNumber || selectedReceipt.id || "Unknown",
+        type: "refund",
+        requestedBy: _cashier?.id || "unknown",
+        requestedByName: _cashier?.name || "Unknown Cashier",
+        requestedAt: new Date().toISOString(),
+        status: "pending",
+        originalAmount: resolveMoneyValue(
+          selectedReceipt.totalMoney ??
+            selectedReceipt.total_money ??
+            selectedReceipt.total ??
+            selectedReceipt._total ??
+            0
+        ),
+        originalPaymentMethod: getPaymentSummary(selectedReceipt),
+      };
+
+      // Save to a new collection for admin review
+      await receiptsService.createEditRequest(editRequest);
+
+      alert("Refund request submitted for admin approval");
+      setShowRefundModal(false);
+    } catch (error) {
+      console.error("Error submitting refund request:", error);
+      alert("Failed to submit refund request");
+    }
+  };
+
+  const handleChangePaymentRequest = async () => {
+    if (!selectedReceipt || !newPaymentMethod) return;
+
+    try {
+      const oldPaymentMethod = getPaymentSummary(selectedReceipt);
+
+      const editRequest = {
+        receiptId: selectedReceipt.id,
+        receiptNumber:
+          selectedReceipt.receiptNumber || selectedReceipt.id || "Unknown",
+        type: "payment_change",
+        requestedBy: _cashier?.id || "unknown",
+        requestedByName: _cashier?.name || "Unknown Cashier",
+        requestedAt: new Date().toISOString(),
+        status: "pending",
+        oldPaymentMethod,
+        newPaymentMethod,
+        amount: resolveMoneyValue(
+          selectedReceipt.totalMoney ??
+            selectedReceipt.total_money ??
+            selectedReceipt.total ??
+            selectedReceipt._total ??
+            0
+        ),
+      };
+
+      // Save to a new collection for admin review
+      const requestDoc = await receiptsService.createEditRequest(editRequest);
+
+      // Mark the receipt as having a pending change with full details
+      await receiptsService.update(selectedReceipt.id, {
+        hasPendingPaymentChange: true,
+        pendingPaymentChange: {
+          oldMethod: oldPaymentMethod,
+          newMethod: newPaymentMethod,
+          requestedBy: _cashier?.id || "unknown",
+          requestedByName: _cashier?.name || "Unknown Cashier",
+          requestedAt: new Date().toISOString(),
+          requestId: requestDoc.id, // Store the request ID for later reference
+        },
+      });
+
+      alert(
+        "Payment change request submitted for admin approval. The receipt will be updated after admin approval."
+      );
+      setShowChangePaymentModal(false);
+      setNewPaymentMethod("");
+
+      // Reload receipts to show the pending badge
+      loadReceipts();
+    } catch (error) {
+      console.error("Error submitting payment change request:", error);
+      alert("Failed to submit payment change request");
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col p-6 overflow-auto bg-gray-50 dark:bg-gray-950">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <History className="h-8 w-8 text-primary" />
-          Order History
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-2">
-          View all completed transactions
-        </p>
-      </div>
+    <div className="h-full flex overflow-hidden bg-gray-50 dark:bg-gray-950">
+      {/* 2 Column Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Column - Receipt List (30%) */}
+        <div className="w-[30%] border-r bg-white dark:bg-gray-900 flex flex-col">
+          {/* Search Bar */}
+          <div className="p-4 border-b">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search receipts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
 
-      <div className="mb-6">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search by receipt number, customer, employee, or source..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500 dark:text-gray-400">
-            Loading receipts...
-          </p>
-        </div>
-      ) : filteredReceipts.length === 0 ? (
-        <Card className="py-12">
-          <CardContent className="text-center">
-            <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">
-              No receipts found
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {paginatedReceipts.map((receipt) => (
-            <Card
-              key={receipt.id}
-              className="gap-4 rounded-lg border border-gray-200/80 py-4 shadow-sm transition-colors hover:border-primary/40"
-            >
-              <CardHeader className="gap-1 px-5 pb-0">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      #{receipt.receiptNumber || receipt.id?.slice(0, 8)}
-                    </CardTitle>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      {receipt.source || "Loyverse"}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {getTimestampLabel(receipt)}
-                    </p>
-                    <p className="text-xl font-semibold text-emerald-600">
-                      {formatCurrency(
-                        resolveMoneyValue(
-                          receipt.totalMoney ?? receipt.total ?? 0
-                        )
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {receipt.receiptType && (
-                    <Badge
-                      variant="outline"
-                      className="w-fit text-xs uppercase tracking-wide"
-                    >
-                      {receipt.receiptType}
-                    </Badge>
-                  )}
-                  {(() => {
-                    const syncBadge = getSyncStatusBadge(receipt);
-                    const SyncIcon = syncBadge.icon;
+          {/* Receipt List */}
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto scrollbar-hide"
+          >
+            {loading ? (
+              <div className="flex justify-center items-center h-64">
+                <p className="text-gray-500 dark:text-gray-400">Loading...</p>
+              </div>
+            ) : filteredReceipts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 px-4">
+                <Receipt className="h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-gray-500 dark:text-gray-400 text-center">
+                  No receipts found
+                </p>
+              </div>
+            ) : (
+              <div>
+                {groupedReceipts.map((item, index) => {
+                  if (item.type === "header") {
                     return (
-                      <Badge
-                        variant={syncBadge.variant}
-                        className={`w-fit text-xs font-medium ${syncBadge.className}`}
+                      <div
+                        key={`header-${item.date}`}
+                        className="sticky top-0 z-10 bg-gray-100 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700"
                       >
-                        <SyncIcon className="mr-1 h-3 w-3" />
-                        {syncBadge.text}
-                      </Badge>
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          {item.date}
+                        </p>
+                      </div>
                     );
-                  })()}
-                  {receipt.fromThisDevice && (
-                    <Badge
-                      variant="secondary"
-                      className="w-fit text-xs font-medium bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                  }
+
+                  const receipt = item.data;
+                  return (
+                    <div
+                      key={receipt.id}
+                      onClick={() => handleViewDetails(receipt)}
+                      className={`p-4 border-b cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${
+                        selectedReceipt?.id === receipt.id
+                          ? "bg-primary/10 border-l-4 border-l-primary"
+                          : ""
+                      }`}
                     >
-                      This Device
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="px-5 pb-3 pt-2">
-                <div className="grid gap-3 text-sm text-gray-600 dark:text-gray-300 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="space-y-1">
-                    <span className="text-xs uppercase text-gray-400">
-                      Customer
-                    </span>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {getCustomerLabel(receipt)}
+                      <div className="flex items-start gap-3">
+                        {/* Payment Icon */}
+                        <div className="text-3xl">
+                          {getPaymentIcon(receipt)}
+                        </div>
+
+                        {/* Amount and Time */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                            {formatCurrency(
+                              resolveMoneyValue(
+                                receipt.totalMoney ?? receipt.total ?? 0
+                              )
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {receipt._receiptDate
+                              ? formatDate(receipt._receiptDate, "time")
+                              : "Unknown time"}
+                          </p>
+                        </div>
+
+                        {/* Receipt ID */}
+                        <div className="text-right">
+                          <p className="text-sm font-mono font-semibold text-gray-700 dark:text-gray-300">
+                            #{receipt.receiptNumber || receipt.id?.slice(0, 8)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Loading more indicator */}
+                {displayCount < filteredReceipts.length && (
+                  <div className="p-4 text-center">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Loading more...
                     </p>
                   </div>
-                  <div className="space-y-1">
-                    <span className="text-xs uppercase text-gray-400">
-                      Items
-                    </span>
-                    <p className="flex items-center gap-2">
-                      <ShoppingBag className="h-4 w-4 text-gray-400" />
-                      {receipt.lineItems?.length || 0} lines
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs uppercase text-gray-400">
-                      Payments
-                    </span>
-                    <p className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-gray-400" />
-                      {getPaymentSummary(receipt)}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs uppercase text-gray-400">
-                      Cashier
-                    </span>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {getCashierLabel(receipt)}
-                    </p>
-                  </div>
-                  {receipt.location?.name && (
-                    <div className="space-y-1">
-                      <span className="text-xs uppercase text-gray-400">
-                        Location
-                      </span>
-                      <p>{receipt.location.name}</p>
+                )}
+
+                {/* End of list indicator */}
+                {displayCount >= filteredReceipts.length &&
+                  filteredReceipts.length > 0 && (
+                    <div className="p-4 text-center">
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {filteredReceipts.length} receipt
+                        {filteredReceipts.length !== 1 ? "s" : ""} loaded
+                      </p>
                     </div>
                   )}
-                </div>
-              </CardContent>
-              <CardFooter className="px-5 pt-0">
-                <div className="flex w-full items-center gap-3">
-                  <span className="text-xs text-gray-400">
-                    {receipt.receiptType?.toUpperCase() === "REFUND"
-                      ? "Refund receipt"
-                      : "Completed transaction"}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="ml-auto text-primary"
-                    onClick={() => handleViewDetails(receipt)}
-                  >
-                    View Details
-                  </Button>
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
+              </div>
+            )}
+          </div>
+        </div>
 
-          {filteredReceipts.length > PAGE_SIZE && (
-            <div className="flex flex-col gap-4 border-t pt-4 md:flex-row md:items-center md:justify-between">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                Showing {showingFrom}-{showingTo} of {filteredReceipts.length}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCurrentPage((page) => Math.max(1, page - 1))
-                  }
-                  disabled={safePage === 1}
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" /> Previous
-                </Button>
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                  Page {safePage} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCurrentPage((page) => Math.min(totalPages, page + 1))
-                  }
-                  disabled={safePage >= totalPages}
-                >
-                  Next <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
+        {/* Right Column - Receipt Details (70%) */}
+        <div className="w-[70%] bg-white dark:bg-gray-900 flex flex-col overflow-auto">
+          {!selectedReceipt ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <Receipt className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">
+                  Select a receipt to view details
+                </p>
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Receipt Details</DialogTitle>
-            <DialogDescription>
-              Receipt #{selectedReceipt?.receiptNumber || selectedReceipt?.id}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedReceipt && (
-            <div className="space-y-4">
-              {/* Sync Status Section */}
-              <div className="rounded-lg border p-3">
-                <h3 className="mb-2 font-semibold">Sync Status</h3>
-                <div className="flex flex-wrap gap-2">
-                  {(() => {
-                    const syncBadge = getSyncStatusBadge(selectedReceipt);
-                    const SyncIcon = syncBadge.icon;
-                    return (
-                      <Badge
-                        variant={syncBadge.variant}
-                        className={`font-medium ${syncBadge.className}`}
-                      >
-                        <SyncIcon className="mr-1 h-3 w-3" />
-                        {syncBadge.text}
-                      </Badge>
-                    );
-                  })()}
-                  {selectedReceipt.fromThisDevice && (
-                    <Badge
-                      variant="secondary"
-                      className="font-medium bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
-                    >
-                      Created on This Device
-                    </Badge>
-                  )}
-                  {selectedReceipt.loyverseReceiptNumber && (
-                    <Badge
-                      variant="outline"
-                      className="font-medium bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
-                    >
-                      Loyverse #{selectedReceipt.loyverseReceiptNumber}
-                    </Badge>
-                  )}
+          ) : (
+            <div className="flex-1 overflow-auto p-8">
+              <div className="max-w-2xl mx-auto space-y-6">
+                {/* Action Buttons - Top Right */}
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRefundModal(true)}
+                    className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Refund
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowChangePaymentModal(true)}
+                    className="flex items-center gap-2"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                    Change Payment
+                  </Button>
                 </div>
-                {selectedReceipt.syncError && (
-                  <div className="mt-2 rounded bg-red-50 p-2 text-sm text-red-700">
-                    <strong>Sync Error:</strong> {selectedReceipt.syncError}
-                  </div>
-                )}
-                {selectedReceipt.syncedAt && (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Synced: {formatDate(new Date(selectedReceipt.syncedAt))}
-                  </p>
-                )}
-              </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">Customer</h3>
-                <p>{getCustomerLabel(selectedReceipt)}</p>
-              </div>
-
-              {selectedReceipt.lineItems &&
-                selectedReceipt.lineItems.length > 0 && (
-                  <div>
-                    <h3 className="font-semibold mb-2">Items</h3>
-                    <div className="space-y-2">
-                      {selectedReceipt.lineItems.map((item, idx) => {
-                        const quantity = getLineItemQuantity(item);
-                        const unitPrice = getLineItemUnitPrice(item);
-                        const total = getLineItemTotal(item);
-                        const name = getLineItemName(item);
-                        const sku = getLineItemSku(item);
-
-                        return (
-                          <div
-                            key={`${
-                              item._lineId || item.id || item.sku || idx
-                            }-${idx}`}
-                            className="flex items-start justify-between gap-4 rounded-md bg-gray-100 dark:bg-gray-800 px-3 py-2 text-sm"
-                          >
-                            <div className="flex-1 space-y-1">
-                              <p className="font-medium text-gray-900 dark:text-gray-100">
-                                {name}
-                              </p>
-                              <p className="text-xs text-gray-600 dark:text-gray-300">
-                                {quantity} x {formatCurrency(unitPrice)}
-                              </p>
-                              {sku && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  SKU: {sku}
-                                </p>
-                              )}
-                            </div>
-                            <span className="font-semibold text-gray-900 dark:text-gray-100">
-                              {formatCurrency(total)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-              <div className="space-y-2 border-t pt-4">
-                {typeof selectedReceipt.subtotal === "number" && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Subtotal
-                    </span>
-                    <span className="font-medium">
-                      {formatCurrency(selectedReceipt.subtotal)}
-                    </span>
-                  </div>
-                )}
-                {typeof selectedReceipt.discount === "number" &&
-                  selectedReceipt.discount > 0 && (
-                    <div className="flex justify-between text-sm text-orange-600">
-                      <span>Discount</span>
-                      <span>-{formatCurrency(selectedReceipt.discount)}</span>
-                    </div>
-                  )}
-                {typeof selectedReceipt.tax === "number" && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Tax
-                    </span>
-                    <span className="font-medium">
-                      {formatCurrency(selectedReceipt.tax)}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between text-base font-semibold">
-                  <span>Total</span>
-                  <span>
+                {/* Total Amount - Center */}
+                <div className="text-center py-6">
+                  <p className="text-5xl font-bold text-gray-900 dark:text-gray-100">
                     {formatCurrency(
                       resolveMoneyValue(
                         selectedReceipt.totalMoney ?? selectedReceipt.total ?? 0
                       )
                     )}
-                  </span>
+                  </p>
+                  <p className="text-gray-500 dark:text-gray-400 mt-2">Total</p>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                {/* Employee */}
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Employee
+                  </p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {getCashierLabel(selectedReceipt)}
+                  </p>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                {/* Items */}
+                <div className="space-y-3">
+                  {selectedReceipt.lineItems &&
+                    selectedReceipt.lineItems.length > 0 &&
+                    selectedReceipt.lineItems.map((item, idx) => {
+                      const quantity = getLineItemQuantity(item);
+                      const unitPrice = getLineItemUnitPrice(item);
+                      const total = getLineItemTotal(item);
+                      const name = getLineItemName(item);
+
+                      return (
+                        <div
+                          key={`${item._lineId || idx}-${idx}`}
+                          className="flex items-start justify-between gap-4"
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
+                              {name}
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {quantity} x {formatCurrency(unitPrice)}
+                            </p>
+                          </div>
+                          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                            {formatCurrency(total)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                {/* Payment Method */}
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Payment Method
+                  </p>
+                  <div className="mt-1 space-y-2">
+                    {selectedReceipt.paymentHistory &&
+                    selectedReceipt.paymentHistory.length > 0 ? (
+                      <div className="space-y-1">
+                        {/* Old payment with strikethrough */}
+                        <div className="flex items-center gap-2">
+                          <p className="text-lg line-through text-gray-400 dark:text-gray-500">
+                            {
+                              selectedReceipt.paymentHistory[
+                                selectedReceipt.paymentHistory.length - 1
+                              ].oldMethod
+                            }
+                          </p>
+                        </div>
+                        {/* New payment */}
+                        <div className="flex items-center gap-2">
+                          <p className="text-lg font-semibold text-green-600 dark:text-green-500">
+                            {getPaymentSummary(selectedReceipt)}
+                          </p>
+                          <Badge
+                            variant="secondary"
+                            className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                          >
+                            Changed
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Changed by{" "}
+                          {
+                            selectedReceipt.paymentHistory[
+                              selectedReceipt.paymentHistory.length - 1
+                            ].changedBy
+                          }
+                        </p>
+                      </div>
+                    ) : selectedReceipt.hasPendingPaymentChange ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                            {getPaymentSummary(selectedReceipt)}
+                          </p>
+                          <Badge
+                            variant="secondary"
+                            className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+                          >
+                            <Clock className="h-3 w-3 mr-1" />
+                            Change Pending
+                          </Badge>
+                        </div>
+                        {selectedReceipt.pendingPaymentChange && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Requested change to:{" "}
+                            {selectedReceipt.pendingPaymentChange.newMethod}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {getPaymentSummary(selectedReceipt)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                {/* Date and Receipt ID */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Date
+                    </p>
+                    <p className="text-base font-medium text-gray-900 dark:text-gray-100 mt-1">
+                      {getTimestampLabel(selectedReceipt)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Receipt ID
+                    </p>
+                    <p className="text-base font-mono font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                      #{selectedReceipt.receiptNumber || selectedReceipt.id}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Refund Modal */}
+      <Dialog open={showRefundModal} onOpenChange={setShowRefundModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Refund</DialogTitle>
+            <DialogDescription>
+              Submit a refund request for this receipt. Admin approval required.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReceipt && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Receipt #
+                    </span>
+                    <span className="font-mono font-semibold">
+                      {selectedReceipt.receiptNumber || selectedReceipt.id}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Amount
+                    </span>
+                    <span className="font-semibold">
+                      {formatCurrency(
+                        resolveMoneyValue(
+                          selectedReceipt.totalMoney ??
+                            selectedReceipt.total ??
+                            0
+                        )
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Payment Method
+                    </span>
+                    <span className="font-semibold">
+                      {getPaymentSummary(selectedReceipt)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRefundModal(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleRefundRequest}
+                  className="flex-1"
+                  variant="destructive"
+                >
+                  Submit Refund Request
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Payment Modal */}
+      <Dialog
+        open={showChangePaymentModal}
+        onOpenChange={setShowChangePaymentModal}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Payment Method</DialogTitle>
+            <DialogDescription>
+              Request to change the payment method. Admin approval required.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReceipt && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Receipt #
+                    </span>
+                    <span className="font-mono font-semibold">
+                      {selectedReceipt.receiptNumber || selectedReceipt.id}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Amount
+                    </span>
+                    <span className="font-semibold">
+                      {formatCurrency(
+                        resolveMoneyValue(
+                          selectedReceipt.totalMoney ??
+                            selectedReceipt.total ??
+                            0
+                        )
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Current Payment
+                    </span>
+                    <span className="font-semibold">
+                      {getPaymentSummary(selectedReceipt)}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {selectedReceipt.payments && (
-                <div className="border-t pt-4 space-y-2">
-                  <h3 className="font-semibold">Payments</h3>
-                  <div className="space-y-2 text-sm">
-                    {selectedReceipt.payments.length === 0 && (
-                      <p className="text-gray-500 dark:text-gray-400">
-                        Unknown
-                      </p>
-                    )}
-                    {selectedReceipt.payments.map((payment, idx) => (
-                      <div
-                        key={`${
-                          payment.id || payment.name || "payment"
-                        }-${idx}`}
-                        className="flex justify-between"
-                      >
-                        <span>
-                          {payment.name || payment.payment_type?.name || "Cash"}
-                        </span>
-                        <span>
-                          {formatCurrency(
-                            resolveMoneyValue(
-                              payment.amount_money ??
-                                payment.amount ??
-                                payment.total ??
-                                0
-                            )
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  New Payment Method
+                </label>
+                <Select
+                  value={newPaymentMethod}
+                  onValueChange={setNewPaymentMethod}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Card">Card</SelectItem>
+                    <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="Crypto">Crypto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <div className="border-t pt-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Date</span>
-                  <span>
-                    {getReceiptDate(selectedReceipt)
-                      ? formatDate(getReceiptDate(selectedReceipt), "datetime")
-                      : "Unknown"}
-                  </span>
-                </div>
-                {selectedReceipt.employeeName && (
-                  <div className="flex justify-between">
-                    <span>Cashier</span>
-                    <span className="font-medium">
-                      {selectedReceipt.employeeName}
-                    </span>
-                  </div>
-                )}
-                {selectedReceipt.location?.name && (
-                  <div className="flex justify-between">
-                    <span>Location</span>
-                    <span>{selectedReceipt.location.name}</span>
-                  </div>
-                )}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowChangePaymentModal(false);
+                    setNewPaymentMethod("");
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleChangePaymentRequest}
+                  className="flex-1"
+                  disabled={!newPaymentMethod}
+                >
+                  Submit Change Request
+                </Button>
               </div>
             </div>
           )}

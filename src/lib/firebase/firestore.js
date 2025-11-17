@@ -297,6 +297,13 @@ export const receiptsService = {
   delete: (id) => deleteDocument(COLLECTIONS.RECEIPTS, id),
   subscribe: (callback, options) =>
     subscribeToCollection(COLLECTIONS.RECEIPTS, callback, options),
+
+  // Edit requests for admin approval
+  createEditRequest: (data) => createDocument("receipt_edit_requests", data),
+  getEditRequests: (options) => getDocuments("receipt_edit_requests", options),
+  updateEditRequest: (id, data) =>
+    updateDocument("receipt_edit_requests", id, data),
+  deleteEditRequest: (id) => deleteDocument("receipt_edit_requests", id),
 };
 
 // Custom Tabs - store per user

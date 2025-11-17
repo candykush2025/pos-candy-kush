@@ -10,6 +10,20 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   ShoppingCart,
   Receipt,
@@ -17,6 +31,11 @@ import {
   ChevronRight,
   Filter,
   X,
+  ArrowRight,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Edit2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -28,6 +47,10 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
+  const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
+  const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState(null);
+  const [editedPaymentMethod, setEditedPaymentMethod] = useState("");
+  const [pendingRequests, setPendingRequests] = useState([]);
 
   // Filter states
   const [dateRange, setDateRange] = useState("today"); // today, yesterday, this_week, last_week, this_month, last_month, custom, all
@@ -42,6 +65,7 @@ export default function AdminOrders() {
   useEffect(() => {
     loadReceipts();
     loadEmployees();
+    loadPendingRequests();
   }, [dateRange, customStartDate, customEndDate]); // Reload when date range changes
 
   const getDateRangeFilter = () => {
@@ -277,6 +301,19 @@ export default function AdminOrders() {
     // We'll fetch employees on-demand when needed
   };
 
+  const loadPendingRequests = async () => {
+    try {
+      const requests = await receiptsService.getEditRequests({
+        orderBy: ["requestedAt", "desc"],
+      });
+      // Filter only pending requests
+      const pending = requests.filter((r) => r.status === "pending");
+      setPendingRequests(pending);
+    } catch (error) {
+      console.error("Error loading pending requests:", error);
+    }
+  };
+
   // Fetch employee details on-demand
   const fetchEmployeeDetails = async (employeeId) => {
     if (!employeeId || employees[employeeId]) {
@@ -296,6 +333,155 @@ export default function AdminOrders() {
         ...prev,
         [employeeId]: { name: null },
       }));
+    }
+  };
+
+  // Handle approve payment change
+  const handleApprovePaymentChange = async (receipt) => {
+    if (!receipt.pendingPaymentChange) return;
+
+    try {
+      const newPaymentMethod = receipt.pendingPaymentChange.newMethod;
+      const existingHistory = receipt.paymentHistory || [];
+
+      await receiptsService.update(receipt.id, {
+        payments: [
+          {
+            name: newPaymentMethod,
+            amount: receipt.totalMoney || receipt.total_money || 0,
+            type: newPaymentMethod.toLowerCase(),
+          },
+        ],
+        paymentHistory: [
+          ...existingHistory,
+          {
+            oldMethod: receipt.pendingPaymentChange.oldMethod,
+            newMethod: newPaymentMethod,
+            changedAt: new Date().toISOString(),
+            changedBy: receipt.pendingPaymentChange.requestedByName,
+            approvedBy: "admin",
+            status: "approved",
+          },
+        ],
+        hasPendingPaymentChange: false,
+        pendingPaymentChange: null,
+      });
+
+      // Update the edit request status
+      if (receipt.pendingPaymentChange.requestId) {
+        await receiptsService.updateEditRequest(
+          receipt.pendingPaymentChange.requestId,
+          {
+            status: "approved",
+            approvedAt: new Date().toISOString(),
+            approvedBy: "admin",
+          }
+        );
+      }
+
+      toast.success("Payment method change approved");
+      loadReceipts();
+      loadPendingRequests();
+    } catch (error) {
+      console.error("Error approving payment change:", error);
+      toast.error("Failed to approve payment change");
+    }
+  };
+
+  // Handle decline payment change
+  const handleDeclinePaymentChange = async (receipt) => {
+    if (!receipt.pendingPaymentChange) return;
+
+    try {
+      await receiptsService.update(receipt.id, {
+        hasPendingPaymentChange: false,
+        pendingPaymentChange: null,
+      });
+
+      // Update the edit request status
+      if (receipt.pendingPaymentChange.requestId) {
+        await receiptsService.updateEditRequest(
+          receipt.pendingPaymentChange.requestId,
+          {
+            status: "declined",
+            declinedAt: new Date().toISOString(),
+            declinedBy: "admin",
+          }
+        );
+      }
+
+      toast.success("Payment method change declined");
+      loadReceipts();
+      loadPendingRequests();
+    } catch (error) {
+      console.error("Error declining payment change:", error);
+      toast.error("Failed to decline payment change");
+    }
+  };
+
+  // Handle edit payment change
+  const handleEditPaymentChange = (receipt) => {
+    setSelectedReceiptForEdit(receipt);
+    setEditedPaymentMethod(receipt.pendingPaymentChange?.newMethod || "");
+    setShowEditPaymentModal(true);
+  };
+
+  // Handle submit edited payment change
+  const handleSubmitEditedPayment = async () => {
+    if (!selectedReceiptForEdit || !editedPaymentMethod) return;
+
+    try {
+      const existingHistory = selectedReceiptForEdit.paymentHistory || [];
+
+      await receiptsService.update(selectedReceiptForEdit.id, {
+        payments: [
+          {
+            name: editedPaymentMethod,
+            amount:
+              selectedReceiptForEdit.totalMoney ||
+              selectedReceiptForEdit.total_money ||
+              0,
+            type: editedPaymentMethod.toLowerCase(),
+          },
+        ],
+        paymentHistory: [
+          ...existingHistory,
+          {
+            oldMethod: selectedReceiptForEdit.pendingPaymentChange.oldMethod,
+            newMethod: editedPaymentMethod,
+            changedAt: new Date().toISOString(),
+            changedBy:
+              selectedReceiptForEdit.pendingPaymentChange.requestedByName,
+            approvedBy: "admin",
+            status: "approved_edited",
+          },
+        ],
+        hasPendingPaymentChange: false,
+        pendingPaymentChange: null,
+      });
+
+      // Update the edit request status
+      if (selectedReceiptForEdit.pendingPaymentChange.requestId) {
+        await receiptsService.updateEditRequest(
+          selectedReceiptForEdit.pendingPaymentChange.requestId,
+          {
+            status: "approved",
+            approvedAt: new Date().toISOString(),
+            approvedBy: "admin",
+            finalPaymentMethod: editedPaymentMethod,
+          }
+        );
+      }
+
+      toast.success("Payment method updated successfully");
+      setShowEditPaymentModal(false);
+      setSelectedReceiptForEdit(null);
+      setEditedPaymentMethod("");
+      loadReceipts();
+      loadPendingRequests();
+    } catch (error) {
+      console.error("Error updating payment method:", error);
+      toast.error("Failed to update payment method");
     }
   };
 
@@ -440,6 +626,140 @@ export default function AdminOrders() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Payment Change Requests */}
+      {pendingRequests.length > 0 && (
+        <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 dark:border-yellow-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-800 dark:text-yellow-300">
+              <Clock className="h-5 w-5" />
+              Pending Payment Change Requests ({pendingRequests.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">
+                          Receipt #{request.receiptNumber}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Requested by {request.requestedByName} •{" "}
+                          {formatDate(
+                            new Date(request.requestedAt),
+                            "datetime"
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Badge
+                        variant="secondary"
+                        className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                      >
+                        {request.oldPaymentMethod}
+                      </Badge>
+                      <ArrowRight className="h-4 w-4 text-gray-400" />
+                      <Badge
+                        variant="secondary"
+                        className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                      >
+                        {request.newPaymentMethod}
+                      </Badge>
+                      <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
+                        Amount:{" "}
+                        {formatCurrency(
+                          request.amount || request.originalAmount || 0
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      onClick={async () => {
+                        // Find the receipt and approve
+                        const receipt = receipts.find(
+                          (r) => r.id === request.receiptId
+                        );
+                        if (receipt) {
+                          await handleApprovePaymentChange({
+                            ...receipt,
+                            pendingPaymentChange: {
+                              oldMethod: request.oldPaymentMethod,
+                              newMethod: request.newPaymentMethod,
+                              requestedByName: request.requestedByName,
+                              requestId: request.id,
+                            },
+                          });
+                        }
+                      }}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={async () => {
+                        // Find the receipt and decline
+                        const receipt = receipts.find(
+                          (r) => r.id === request.receiptId
+                        );
+                        if (receipt) {
+                          await handleDeclinePaymentChange({
+                            ...receipt,
+                            pendingPaymentChange: {
+                              requestId: request.id,
+                            },
+                          });
+                        }
+                      }}
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Decline
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => {
+                        // Find the receipt and edit
+                        const receipt = receipts.find(
+                          (r) => r.id === request.receiptId
+                        );
+                        if (receipt) {
+                          handleEditPaymentChange({
+                            ...receipt,
+                            pendingPaymentChange: {
+                              oldMethod: request.oldPaymentMethod,
+                              newMethod: request.newPaymentMethod,
+                              requestedByName: request.requestedByName,
+                              requestId: request.id,
+                            },
+                          });
+                        }
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Date Range Selection */}
       <Card>
@@ -770,27 +1090,127 @@ export default function AdminOrders() {
 
                       {/* Payment Method */}
                       <td className="px-4 py-3">
-                        <div className="text-sm text-neutral-700 dark:text-neutral-300">
-                          {receipt.payments && receipt.payments.length > 0
-                            ? receipt.payments
+                        <div className="space-y-1">
+                          {/* Current Payment Method */}
+                          <div className="text-sm text-neutral-700 dark:text-neutral-300">
+                            {receipt.paymentHistory &&
+                            receipt.paymentHistory.length > 0 ? (
+                              <div className="space-y-1">
+                                {/* Old payment with strikethrough */}
+                                <div className="line-through text-neutral-400 dark:text-neutral-500">
+                                  {
+                                    receipt.paymentHistory[
+                                      receipt.paymentHistory.length - 1
+                                    ].oldMethod
+                                  }
+                                </div>
+                                {/* New payment */}
+                                <div className="font-semibold text-green-600 dark:text-green-500">
+                                  {receipt.payments &&
+                                  receipt.payments.length > 0
+                                    ? receipt.payments
+                                        .map(
+                                          (p) =>
+                                            p.name ||
+                                            p.payment_type?.name ||
+                                            "Cash"
+                                        )
+                                        .join(", ")
+                                    : "N/A"}
+                                  <Badge
+                                    variant="secondary"
+                                    className="ml-2 text-xs bg-green-100 text-green-800"
+                                  >
+                                    Changed
+                                  </Badge>
+                                </div>
+                              </div>
+                            ) : receipt.hasPendingPaymentChange ? (
+                              <div className="space-y-1">
+                                <div>
+                                  {receipt.payments &&
+                                  receipt.payments.length > 0
+                                    ? receipt.payments
+                                        .map(
+                                          (p) =>
+                                            p.name ||
+                                            p.payment_type?.name ||
+                                            "Cash"
+                                        )
+                                        .join(", ")
+                                    : receipt.paymentMethod ||
+                                      receipt.paymentTypeName ||
+                                      "N/A"}
+                                </div>
+                                {/* Show pending change info */}
+                                {receipt.pendingPaymentChange && (
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <Badge
+                                      variant="secondary"
+                                      className="bg-yellow-100 text-yellow-800"
+                                    >
+                                      {receipt.pendingPaymentChange.oldMethod} →{" "}
+                                      {receipt.pendingPaymentChange.newMethod}
+                                    </Badge>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 px-2 text-xs text-green-600 hover:text-green-700"
+                                        onClick={() =>
+                                          handleApprovePaymentChange(receipt)
+                                        }
+                                      >
+                                        Approve
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
+                                        onClick={() =>
+                                          handleDeclinePaymentChange(receipt)
+                                        }
+                                      >
+                                        Decline
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 px-2 text-xs text-blue-600 hover:text-blue-700"
+                                        onClick={() =>
+                                          handleEditPaymentChange(receipt)
+                                        }
+                                      >
+                                        Edit
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : receipt.payments &&
+                              receipt.payments.length > 0 ? (
+                              receipt.payments
                                 .map(
                                   (p) =>
                                     p.name || p.payment_type?.name || "Cash"
                                 )
                                 .join(", ")
-                            : receipt.paymentMethod ||
+                            ) : (
+                              receipt.paymentMethod ||
                               receipt.paymentTypeName ||
-                              "N/A"}
-                        </div>
-                        {(receipt.totalDiscount || receipt.total_discount) >
-                          0 && (
-                          <div className="text-xs text-orange-600 dark:text-orange-400">
-                            Discount:{" "}
-                            {formatCurrency(
-                              receipt.totalDiscount || receipt.total_discount
+                              "N/A"
                             )}
                           </div>
-                        )}
+                          {(receipt.totalDiscount || receipt.total_discount) >
+                            0 && (
+                            <div className="text-xs text-orange-600 dark:text-orange-400">
+                              Discount:{" "}
+                              {formatCurrency(
+                                receipt.totalDiscount || receipt.total_discount
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Employee */}
@@ -904,6 +1324,103 @@ export default function AdminOrders() {
           </CardContent>
         </Card>
       )}
+
+      {/* Edit Payment Method Modal */}
+      <Dialog
+        open={showEditPaymentModal}
+        onOpenChange={setShowEditPaymentModal}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Payment Method</DialogTitle>
+            <DialogDescription>
+              Change the payment method for this receipt
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReceiptForEdit && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Receipt #
+                  </span>
+                  <span className="font-mono font-semibold">
+                    {selectedReceiptForEdit.receiptNumber ||
+                      selectedReceiptForEdit.id}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Amount
+                  </span>
+                  <span className="font-semibold">
+                    {formatCurrency(
+                      selectedReceiptForEdit.totalMoney ||
+                        selectedReceiptForEdit.total_money ||
+                        0
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                  <span className="text-gray-600">Original:</span>
+                  <span className="font-semibold">
+                    {selectedReceiptForEdit.pendingPaymentChange?.oldMethod}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-blue-600" />
+                  <span className="text-gray-600">Requested:</span>
+                  <span className="font-semibold text-blue-600">
+                    {selectedReceiptForEdit.pendingPaymentChange?.newMethod}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Select Payment Method
+                </label>
+                <Select
+                  value={editedPaymentMethod}
+                  onValueChange={setEditedPaymentMethod}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Card">Card</SelectItem>
+                    <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="Crypto">Crypto</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-2">
+                  You can approve a different payment method than requested
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowEditPaymentModal(false);
+                    setSelectedReceiptForEdit(null);
+                    setEditedPaymentMethod("");
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitEditedPayment}
+                  className="flex-1"
+                  disabled={!editedPaymentMethod}
+                >
+                  Approve with Changes
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
