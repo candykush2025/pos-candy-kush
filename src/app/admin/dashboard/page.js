@@ -1245,7 +1245,7 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-center py-4">
           <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600"></div>
-            <span className="text-sm font-medium">Loading sales data...</span>
+            <span className="text-lg font-medium">Loading sales data...</span>
           </div>
         </div>
       </div>
@@ -1274,21 +1274,21 @@ export default function AdminDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-in slide-in-from-top duration-300">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-3xl md:text-3xl font-bold">
+              <h1 className="text-4xl md:text-3xl font-bold">
                 Sales Dashboard
               </h1>
-              <p className="text-base md:text-base text-neutral-500 dark:text-neutral-400 mt-1">
+              <p className="text-lg md:text-base text-neutral-500 dark:text-neutral-400 mt-1">
                 Candy Kush POS - Sales Analytics
                 {selectedCategory !== "all" && (
-                  <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-sm md:text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
-                    <Tag className="h-4 w-4 md:h-3 md:w-3 mr-1" />
+                  <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-base md:text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+                    <Tag className="h-5 w-5 md:h-3 md:w-3 mr-1" />
                     {categories.find((c) => c.id === selectedCategory)?.name}
                   </span>
                 )}
                 {isSyncing && (
-                  <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-sm md:text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 animate-pulse">
+                  <span className="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-base md:text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 animate-pulse">
                     <svg
-                      className="animate-spin h-4 w-4 md:h-3 md:w-3 mr-1"
+                      className="animate-spin h-5 w-5 md:h-3 md:w-3 mr-1"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -1417,29 +1417,29 @@ export default function AdminDashboard() {
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                   <div className="flex-1">
-                    <CardTitle className="text-base md:text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                    <CardTitle className="text-lg md:text-sm font-medium text-neutral-600 dark:text-neutral-300">
                       {stat.title}
                     </CardTitle>
                     {stat.subtitle && (
-                      <p className="text-sm md:text-xs text-neutral-400 dark:text-neutral-500 mt-1">
+                      <p className="text-base md:text-xs text-neutral-400 dark:text-neutral-500 mt-1">
                         {stat.subtitle}
                       </p>
                     )}
                   </div>
-                  <div className={`p-2 md:p-3 rounded-lg ${stat.bgColor}`}>
-                    <Icon className={`h-6 w-6 md:h-6 md:w-6 ${stat.color}`} />
+                  <div className={`p-3 md:p-3 rounded-lg ${stat.bgColor}`}>
+                    <Icon className={`h-7 w-7 md:h-6 md:w-6 ${stat.color}`} />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl md:text-2xl lg:text-3xl font-bold">
+                  <div className="text-4xl md:text-2xl lg:text-3xl font-bold">
                     {stat.value}
                   </div>
                   {stat.change !== undefined && stat.change !== null && (
-                    <div className="flex items-center mt-2 text-sm md:text-sm">
+                    <div className="flex items-center mt-2 text-base md:text-sm">
                       {isPositive ? (
-                        <ArrowUpRight className="h-5 w-5 md:h-4 md:w-4 text-green-600 dark:text-green-400 mr-1" />
+                        <ArrowUpRight className="h-6 w-6 md:h-4 md:w-4 text-green-600 dark:text-green-400 mr-1" />
                       ) : (
-                        <ArrowDownRight className="h-5 w-5 md:h-4 md:w-4 text-red-600 dark:text-red-400 mr-1" />
+                        <ArrowDownRight className="h-6 w-6 md:h-4 md:w-4 text-red-600 dark:text-red-400 mr-1" />
                       )}
                       <span
                         className={
@@ -1466,12 +1466,12 @@ export default function AdminDashboard() {
           {/* Daily Sales Chart */}
           <Card className="hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle className="text-lg md:text-lg">
+              <CardTitle className="text-xl md:text-lg">
                 {useDateRange
                   ? "Daily Sales"
                   : `Daily Sales - ${months[selectedMonth]} ${selectedYear}`}
               </CardTitle>
-              <CardDescription className="text-sm md:text-sm">
+              <CardDescription className="text-base md:text-sm">
                 {useDateRange
                   ? `Revenue per day (${new Date(
                       startDate
@@ -1510,10 +1510,10 @@ export default function AdminDashboard() {
           {/* Monthly Revenue Trend */}
           <Card className="hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle className="text-lg md:text-lg">
+              <CardTitle className="text-xl md:text-lg">
                 Monthly Revenue - {selectedYear}
               </CardTitle>
-              <CardDescription className="text-sm md:text-sm">
+              <CardDescription className="text-base md:text-sm">
                 Revenue trend for the year
               </CardDescription>
             </CardHeader>
@@ -1548,10 +1548,10 @@ export default function AdminDashboard() {
           {/* Top Products */}
           <Card className="hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle className="text-lg md:text-lg">
+              <CardTitle className="text-xl md:text-lg">
                 Top Selling Products
               </CardTitle>
-              <CardDescription className="text-sm md:text-sm">
+              <CardDescription className="text-base md:text-sm">
                 Best performers this month
               </CardDescription>
             </CardHeader>
@@ -1568,15 +1568,15 @@ export default function AdminDashboard() {
                       className="flex items-center justify-between pb-3 border-b last:border-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 -mx-4 px-4 rounded-lg transition-all duration-200 cursor-pointer hover:scale-102"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-base md:text-base truncate">
+                        <p className="font-medium text-lg md:text-base truncate">
                           {product.name}
                         </p>
-                        <p className="text-sm md:text-xs text-neutral-500 dark:text-neutral-400">
+                        <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
                           Qty: {product.quantity}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-base md:text-base text-green-600 dark:text-green-400">
+                        <p className="font-bold text-lg md:text-base text-green-600 dark:text-green-400">
                           {formatCurrency(product.revenue)}
                         </p>
                       </div>
@@ -1590,10 +1590,10 @@ export default function AdminDashboard() {
           {/* Payment Methods Distribution */}
           <Card className="hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle className="text-lg md:text-lg">
+              <CardTitle className="text-xl md:text-lg">
                 Payment Methods
               </CardTitle>
-              <CardDescription className="text-sm md:text-sm">
+              <CardDescription className="text-base md:text-sm">
                 Distribution this month
               </CardDescription>
             </CardHeader>
@@ -1641,16 +1641,16 @@ export default function AdminDashboard() {
                       >
                         <div className="flex items-center gap-2">
                           <div
-                            className="w-4 h-4 md:w-3 md:h-3 rounded-full"
+                            className="w-5 h-5 md:w-3 md:h-3 rounded-full"
                             style={{
                               backgroundColor: COLORS[index % COLORS.length],
                             }}
                           ></div>
-                          <span className="text-base md:text-sm">
+                          <span className="text-lg md:text-sm">
                             {method.name}
                           </span>
                         </div>
-                        <span className="font-semibold text-base md:text-sm">
+                        <span className="font-semibold text-lg md:text-sm">
                           {formatCurrency(method.value)}
                         </span>
                       </div>
@@ -1665,11 +1665,11 @@ export default function AdminDashboard() {
         {/* Sales by Payment Type Table */}
         <Card className="hover:shadow-lg transition-shadow duration-300">
           <CardHeader>
-            <CardTitle className="text-lg md:text-lg flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
+            <CardTitle className="text-xl md:text-lg flex items-center gap-2">
+              <CreditCard className="h-6 w-6 md:h-5 md:w-5" />
               Sales by Payment Type
             </CardTitle>
-            <CardDescription className="text-sm md:text-sm">
+            <CardDescription className="text-base md:text-sm">
               Transaction breakdown by payment method
             </CardDescription>
           </CardHeader>
@@ -1680,16 +1680,16 @@ export default function AdminDashboard() {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-base md:text-sm">
+                <table className="w-full text-lg md:text-sm">
                   <thead>
                     <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                      <th className="text-left py-3 md:py-2 px-2 font-semibold text-neutral-700 dark:text-neutral-300">
+                      <th className="text-left py-4 md:py-2 px-2 font-semibold text-neutral-700 dark:text-neutral-300">
                         Payment Type
                       </th>
-                      <th className="text-right py-3 md:py-2 px-2 font-semibold text-neutral-700 dark:text-neutral-300">
+                      <th className="text-right py-4 md:py-2 px-2 font-semibold text-neutral-700 dark:text-neutral-300">
                         Transactions
                       </th>
-                      <th className="text-right py-3 md:py-2 px-2 font-semibold text-neutral-700 dark:text-neutral-300">
+                      <th className="text-right py-4 md:py-2 px-2 font-semibold text-neutral-700 dark:text-neutral-300">
                         Amount
                       </th>
                     </tr>
@@ -1700,29 +1700,29 @@ export default function AdminDashboard() {
                         key={index}
                         className="border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
                       >
-                        <td className="py-4 md:py-3 px-2 text-neutral-900 dark:text-neutral-100">
+                        <td className="py-5 md:py-3 px-2 text-neutral-900 dark:text-neutral-100">
                           {method.name}
                         </td>
-                        <td className="py-4 md:py-3 px-2 text-right text-neutral-900 dark:text-neutral-100">
+                        <td className="py-5 md:py-3 px-2 text-right text-neutral-900 dark:text-neutral-100">
                           {method.transactions || 0}
                         </td>
-                        <td className="py-4 md:py-3 px-2 text-right font-semibold text-neutral-900 dark:text-neutral-100">
+                        <td className="py-5 md:py-3 px-2 text-right font-semibold text-neutral-900 dark:text-neutral-100">
                           {formatCurrency(method.value)}
                         </td>
                       </tr>
                     ))}
                     {/* Total Row */}
                     <tr className="border-t-2 border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800/50">
-                      <td className="py-4 md:py-3 px-2 font-semibold text-neutral-900 dark:text-neutral-100">
+                      <td className="py-5 md:py-3 px-2 font-semibold text-neutral-900 dark:text-neutral-100">
                         Total
                       </td>
-                      <td className="py-4 md:py-3 px-2 text-right font-semibold text-neutral-900 dark:text-neutral-100">
+                      <td className="py-5 md:py-3 px-2 text-right font-semibold text-neutral-900 dark:text-neutral-100">
                         {paymentMethodsData.reduce(
                           (sum, method) => sum + (method.transactions || 0),
                           0
                         )}
                       </td>
-                      <td className="py-4 md:py-3 px-2 text-right font-semibold text-neutral-900 dark:text-neutral-100">
+                      <td className="py-5 md:py-3 px-2 text-right font-semibold text-neutral-900 dark:text-neutral-100">
                         {formatCurrency(
                           paymentMethodsData.reduce(
                             (sum, method) => sum + method.value,
@@ -1741,11 +1741,11 @@ export default function AdminDashboard() {
         {/* Latest Transactions - Mobile Friendly */}
         <Card className="hover:shadow-lg transition-shadow duration-300 animate-in slide-in-from-bottom animation-duration-700">
           <CardHeader>
-            <CardTitle className="text-lg md:text-lg flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
+            <CardTitle className="text-xl md:text-lg flex items-center gap-2">
+              <ShoppingCart className="h-6 w-6 md:h-5 md:w-5" />
               Latest Transactions
             </CardTitle>
-            <CardDescription className="text-sm md:text-sm">
+            <CardDescription className="text-base md:text-sm">
               Most recent transactions across all time
             </CardDescription>
           </CardHeader>
@@ -1767,12 +1767,12 @@ export default function AdminDashboard() {
                       className="flex items-center justify-between border-b pb-3 last:border-0 gap-4 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 -mx-4 px-4 rounded-lg transition-all duration-200 cursor-pointer"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-base md:text-base">
+                        <p className="font-medium text-lg md:text-base">
                           Receipt #
                           {transaction.receiptNumber ||
                             transaction.id.slice(0, 8)}
                         </p>
-                        <p className="text-sm md:text-xs text-neutral-500 dark:text-neutral-400">
+                        <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
                           {receiptDate.toLocaleString("default", {
                             month: "short",
                             day: "numeric",
@@ -1781,13 +1781,13 @@ export default function AdminDashboard() {
                           })}
                         </p>
                         {transaction.lineItems && (
-                          <p className="text-sm md:text-xs text-neutral-400 dark:text-neutral-500 truncate mt-1">
+                          <p className="text-base md:text-xs text-neutral-400 dark:text-neutral-500 truncate mt-1">
                             {transaction.lineItems.length} items
                           </p>
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-base md:text-base text-green-600 dark:text-green-400">
+                        <p className="font-bold text-lg md:text-base text-green-600 dark:text-green-400">
                           {formatCurrency(
                             resolveMoneyValue(
                               transaction.total_money ??
@@ -1799,7 +1799,7 @@ export default function AdminDashboard() {
                         </p>
                         {transaction.payments &&
                           transaction.payments.length > 0 && (
-                            <p className="text-sm md:text-xs text-neutral-500 dark:text-neutral-400 capitalize">
+                            <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400 capitalize">
                               {transaction.payments[0].name ||
                                 transaction.payments[0].type}
                             </p>
