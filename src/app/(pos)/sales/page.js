@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Lock, DollarSign } from "lucide-react";
+import { DollarSign } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useCartStore } from "@/store/useCartStore";
 import { dbService } from "@/lib/db/dbService";
@@ -197,92 +197,62 @@ function CashierLogin({ onLogin }) {
   };
 
   return (
-    <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 landscape:p-2">
-      <Card className="w-full max-w-4xl landscape:max-w-2xl landscape:max-h-[95vh] landscape:overflow-y-auto">
-        <CardHeader className="text-center landscape:py-6 landscape:pb-4 landscape:space-y-3">
-          <div className="mx-auto h-40 w-40 rounded-full bg-primary/10 flex items-center justify-center mb-8 landscape:h-16 landscape:w-16 landscape:mb-3">
-            <Lock className="h-20 w-20 text-primary landscape:h-8 landscape:w-8" />
+    <div className="min-h-screen w-full bg-gray-100 dark:bg-gray-900 flex flex-col">
+      {/* Header Section */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-4">
+        {/* PIN Input Section */}
+        <div className="w-full max-w-sm mx-auto mb-6">
+          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl p-4 shadow-xl border border-white/20">
+            <Input
+              type="text"
+              readOnly
+              placeholder="Enter PIN"
+              value={pin.replace(/./g, "●")}
+              className="text-center text-3xl tracking-widest pointer-events-none bg-transparent border-0 h-12 landscape:text-xl landscape:h-10 focus:ring-0"
+              inputMode="none"
+              autoComplete="off"
+              onFocus={(e) => e.target.blur()}
+            />
           </div>
-          <CardTitle className="text-7xl landscape:text-3xl landscape:!mb-0">
-            Cashier Login
-          </CardTitle>
-          <p className="text-gray-500 mt-6 landscape:mt-2 landscape:text-lg">
-            Enter your PIN to access POS
-          </p>
-        </CardHeader>
-        <CardContent className="landscape:py-6 landscape:pt-3">
-          <form
-            onSubmit={handleLogin}
-            className="space-y-10 landscape:space-y-6"
-          >
-            {/* PIN Display (Read-only to prevent keyboard popup) */}
-            <div>
-              <Input
-                type="text"
-                readOnly
-                placeholder="Enter PIN"
-                value={pin.replace(/./g, "●")}
-                className="text-center text-8xl tracking-widest pointer-events-none bg-gray-50 dark:bg-gray-800 h-32 landscape:text-4xl landscape:h-16"
-                inputMode="none"
-                autoComplete="off"
-                onFocus={(e) => e.target.blur()}
-              />
-            </div>
+        </div>
 
-            {/* On-Screen Numeric Keypad */}
-            <div className="grid grid-cols-3 gap-6 landscape:gap-3">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                <Button
-                  key={num}
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  onClick={() => handleKeypadPress(num.toString())}
-                  className="h-36 text-5xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-16 landscape:text-2xl"
-                >
-                  {num}
-                </Button>
-              ))}
-              <Button
+        {/* Numeric Keypad */}
+        <div className="w-full max-w-sm mx-auto mb-4">
+          <div className="grid grid-cols-3 gap-3 landscape:gap-2">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+              <button
+                key={num}
                 type="button"
-                variant="outline"
-                size="lg"
-                onClick={() => handleKeypadPress("clear")}
-                className="h-36 text-xl font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all active:scale-95 landscape:h-16 landscape:text-base"
+                onClick={() => handleKeypadPress(num.toString())}
+                className="aspect-square bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg border border-white/20 hover:bg-white dark:hover:bg-gray-800 hover:shadow-xl transition-all duration-200 active:scale-95 flex items-center justify-center text-2xl font-semibold text-gray-900 dark:text-white landscape:text-lg"
               >
-                Clear
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                onClick={() => handleKeypadPress("0")}
-                className="h-36 text-5xl font-semibold hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 landscape:h-16 landscape:text-2xl"
-              >
-                0
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                onClick={() => handleKeypadPress("backspace")}
-                className="h-36 text-4xl font-medium hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950 transition-all active:scale-95 landscape:h-16 landscape:text-xl"
-              >
-                ⌫
-              </Button>
-            </div>
-
-            {/* Login Button */}
-            <Button
-              type="submit"
-              className="w-full h-24 text-3xl font-semibold landscape:h-12 landscape:text-lg"
-              disabled={loading || pin.length < 4}
+                {num}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => handleKeypadPress("clear")}
+              className="aspect-square bg-red-50 dark:bg-red-900/50 backdrop-blur-sm rounded-lg shadow-lg border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/70 hover:shadow-xl transition-all duration-200 active:scale-95 flex items-center justify-center text-sm font-medium text-red-600 dark:text-red-400 landscape:text-xs"
             >
-              {loading ? "Logging in..." : "Login"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => handleKeypadPress("0")}
+              className="aspect-square bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg border border-white/20 hover:bg-white dark:hover:bg-gray-800 hover:shadow-xl transition-all duration-200 active:scale-95 flex items-center justify-center text-2xl font-semibold text-gray-900 dark:text-white landscape:text-lg"
+            >
+              0
+            </button>
+            <button
+              type="button"
+              onClick={() => handleKeypadPress("backspace")}
+              className="aspect-square bg-amber-50 dark:bg-amber-900/50 backdrop-blur-sm rounded-lg shadow-lg border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/70 hover:shadow-xl transition-all duration-200 active:scale-95 flex items-center justify-center text-xl landscape:text-lg"
+            >
+              ⌫
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Starting Cash Modal */}
       <Dialog

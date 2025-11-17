@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { receiptsService } from "@/lib/firebase/firestore";
+import { dbService } from "@/lib/db/dbService";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -400,20 +402,66 @@ export default function HistorySection({ cashier: _cashier }) {
 
   const PAGE_SIZE = 20;
   const scrollContainerRef = useRef(null);
+  const isOnline = useOnlineStatus();
 
   useEffect(() => {
     loadReceipts();
-  }, []);
+  }, [isOnline]);
 
   const loadReceipts = async () => {
     try {
       setLoading(true);
-      const data = await receiptsService.getAll({
-        orderBy: ["createdAt", "desc"],
-        limit: 50, // Load only 50 receipts initially
-      });
+      let allReceipts = [];
 
-      const normalized = data
+      // Always try to fetch Firebase receipts if online
+      if (isOnline) {
+        try {
+          const firebaseData = await receiptsService.getAll({
+            orderBy: ["createdAt", "desc"],
+            limit: 50, // Load only 50 receipts initially
+          });
+          allReceipts = [...firebaseData];
+        } catch (error) {
+          console.warn("Failed to fetch Firebase receipts:", error);
+        }
+      }
+
+      // Fetch local offline transactions from IndexedDB
+      try {
+        const localOrders = await dbService.getOrders({
+          // Get all orders, we'll filter and sort them later
+        });
+
+        // Convert local orders to receipt-like format
+        const localReceipts = localOrders.map((order) => ({
+          ...order,
+          // Map order fields to receipt fields for consistency
+          receiptNumber: order.orderNumber || order.id,
+          orderNumber: order.orderNumber || order.id,
+          customerName: order.customerName,
+          customerId: order.customerId,
+          employeeName: order.employeeName || order.cashierName,
+          employeeId: order.employeeId || order.cashierId,
+          cashierName: order.cashierName,
+          cashierId: order.cashierId,
+          source: "local",
+          syncStatus: order.syncStatus || "offline",
+          fromThisDevice: true,
+          // Convert order items to line items
+          lineItems: order.items || [],
+          payments: order.payments || [],
+          totalMoney: order.total || order.totalMoney || 0,
+          createdAt: order.createdAt,
+          receiptDate: order.createdAt,
+          // Add any other fields that might be needed
+        }));
+
+        allReceipts = [...allReceipts, ...localReceipts];
+      } catch (error) {
+        console.warn("Failed to fetch local orders:", error);
+      }
+
+      const normalized = allReceipts
         .map((receipt) => {
           const receiptDate = getReceiptDate(receipt);
           const lineItems = normalizeLineItems(

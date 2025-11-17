@@ -147,6 +147,10 @@ export const dbService = {
     return { ...order, items };
   },
 
+  async updateOrder(orderId, updates) {
+    return await db.orders.update(orderId, updates);
+  },
+
   // Tickets (Parked Orders)
   async createTicket(ticket, items) {
     return await db.transaction("rw", db.tickets, db.ticketItems, async () => {

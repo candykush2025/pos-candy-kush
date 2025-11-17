@@ -1766,6 +1766,7 @@ export default function SalesSection({ cashier }) {
 
       const orderNumber = generateOrderNumber();
       const now = new Date();
+      const isOnlineNow = navigator.onLine;
 
       // Map payment method to payment type
       const paymentTypeMap = {
@@ -1862,10 +1863,30 @@ export default function SalesSection({ cashier }) {
             payment_details: null,
           },
         ],
+
+        // Add sync status
+        syncStatus: isOnlineNow ? "synced" : "pending",
+        syncedAt: isOnlineNow ? now.toISOString() : null,
       };
 
-      // Save to Firebase
-      await receiptsService.create(receiptData);
+      // Try to save to Firebase if online
+      let firebaseSaved = false;
+      if (isOnlineNow) {
+        try {
+          await receiptsService.create(receiptData);
+          firebaseSaved = true;
+          receiptData.syncStatus = "synced";
+          receiptData.syncedAt = now.toISOString();
+        } catch (error) {
+          console.error("❌ Failed to save to Firebase:", error);
+          // Mark as pending for sync later
+          receiptData.syncStatus = "pending";
+          receiptData.syncedAt = null;
+          toast.warning("Saved locally - will sync when online");
+        }
+      } else {
+        toast.info("Offline mode - Transaction will sync when online");
+      }
 
       // Update stock levels and log history for items that track stock
       try {
@@ -1950,32 +1971,56 @@ export default function SalesSection({ cashier }) {
 
       // Also save to IndexedDB for local cache
       try {
-        await db.transaction("rw", db.orders, db.orderItems, async () => {
-          const localOrderId = await db.orders.add({
-            orderNumber: orderNumber,
-            status: "completed",
-            total: total,
-            subtotal: cartData.subtotal,
-            discount: cartData.discountAmount,
-            tax: 0,
-            userId: cashier?.id || null,
-            cashierId: cashier?.id || null,
-            cashierName: cashier?.name || "Unknown Cashier",
-            customerId: cartCustomer?.id || null,
-            customerName: cartCustomer?.name || null,
-            paymentMethod,
-            cashReceived: paymentMethod === "cash" ? cashAmount : total,
-            change: paymentMethod === "cash" ? cashAmount - total : 0,
-            createdAt: now.toISOString(),
-          });
+        await db.transaction(
+          "rw",
+          db.orders,
+          db.orderItems,
+          db.syncQueue,
+          async () => {
+            const localOrderId = await db.orders.add({
+              orderNumber: orderNumber,
+              status: "completed",
+              total: total,
+              subtotal: cartData.subtotal,
+              discount: cartData.discountAmount,
+              tax: 0,
+              userId: cashier?.id || null,
+              cashierId: cashier?.id || null,
+              cashierName: cashier?.name || "Unknown Cashier",
+              customerId: cartCustomer?.id || null,
+              customerName: cartCustomer?.name || null,
+              paymentMethod,
+              cashReceived: paymentMethod === "cash" ? cashAmount : total,
+              change: paymentMethod === "cash" ? cashAmount - total : 0,
+              createdAt: now.toISOString(),
+              syncStatus: receiptData.syncStatus,
+              syncedAt: receiptData.syncedAt,
+            });
 
-          const orderItemsWithOrderId = items.map((item) => ({
-            ...item,
-            orderId: localOrderId,
-          }));
+            const orderItemsWithOrderId = items.map((item) => ({
+              ...item,
+              orderId: localOrderId,
+            }));
 
-          await db.orderItems.bulkAdd(orderItemsWithOrderId);
-        });
+            await db.orderItems.bulkAdd(orderItemsWithOrderId);
+
+            // Add to sync queue if not synced to Firebase
+            if (!firebaseSaved) {
+              await db.syncQueue.add({
+                type: "receipt",
+                action: "create",
+                data: receiptData,
+                timestamp: now.toISOString(),
+                status: "pending",
+                attempts: 0,
+                orderId: localOrderId,
+              });
+            }
+          }
+        );
+
+        // Trigger sync check to update UI badge
+        checkUnsyncedOrders();
       } catch (error) {
         console.error("Error saving to IndexedDB:", error);
         // Don't fail the checkout if IndexedDB fails
@@ -1988,20 +2033,53 @@ export default function SalesSection({ cashier }) {
           if (savedShift) {
             const activeShift = JSON.parse(savedShift);
             if (activeShift && activeShift.status === "active") {
-              // Add transaction to shift
-              await shiftsService.addTransaction(activeShift.id, {
-                id: receiptData.orderNumber,
-                total: total,
-                paymentMethod: paymentMethod,
-                createdAt: now.toISOString(),
-              });
+              // Add transaction to shift (works both online and offline)
+              if (isOnlineNow) {
+                try {
+                  await shiftsService.addTransaction(activeShift.id, {
+                    id: receiptData.orderNumber,
+                    total: total,
+                    paymentMethod: paymentMethod,
+                    createdAt: now.toISOString(),
+                  });
 
-              // Refresh shift data
-              const updatedShift = await shiftsService.getById(activeShift.id);
-              localStorage.setItem(
-                "active_shift",
-                JSON.stringify(updatedShift)
-              );
+                  // Refresh shift data
+                  const updatedShift = await shiftsService.getById(
+                    activeShift.id
+                  );
+                  localStorage.setItem(
+                    "active_shift",
+                    JSON.stringify(updatedShift)
+                  );
+                } catch (error) {
+                  console.error("Error updating shift online:", error);
+                  // Update locally if online update fails
+                  activeShift.transactions = activeShift.transactions || [];
+                  activeShift.transactions.push({
+                    id: receiptData.orderNumber,
+                    total: total,
+                    paymentMethod: paymentMethod,
+                    createdAt: now.toISOString(),
+                  });
+                  localStorage.setItem(
+                    "active_shift",
+                    JSON.stringify(activeShift)
+                  );
+                }
+              } else {
+                // Offline mode - update shift locally
+                activeShift.transactions = activeShift.transactions || [];
+                activeShift.transactions.push({
+                  id: receiptData.orderNumber,
+                  total: total,
+                  paymentMethod: paymentMethod,
+                  createdAt: now.toISOString(),
+                });
+                localStorage.setItem(
+                  "active_shift",
+                  JSON.stringify(activeShift)
+                );
+              }
 
               // Notify layout to reload shift data
               window.dispatchEvent(new Event("cashier-update"));

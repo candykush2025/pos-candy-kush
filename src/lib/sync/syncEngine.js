@@ -197,6 +197,28 @@ class SyncEngine {
           }
           break;
 
+        case "receipt":
+          if (action === "create") {
+            // Create receipt in Firebase with auto-generated ID if not present
+            const receiptData = { ...data };
+            delete receiptData.id; // Remove local ID
+            const docRef = await addDoc(collection(db, "receipts"), {
+              ...receiptData,
+              syncedAt: serverTimestamp(),
+              syncStatus: "synced",
+            });
+
+            // Update local IndexedDB with Firebase ID and sync status
+            if (item.orderId) {
+              await dbService.updateOrder(item.orderId, {
+                firebaseId: docRef.id,
+                syncStatus: "synced",
+                syncedAt: new Date().toISOString(),
+              });
+            }
+          }
+          break;
+
         default:
           console.warn(`Unknown sync type: ${type}`);
       }
