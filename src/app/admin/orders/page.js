@@ -632,7 +632,7 @@ export default function AdminOrders() {
                     <div className="flex items-center gap-3">
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-gray-100">
-                          Receipt #{request.receiptNumber}
+                          Receipt ID: {request.receiptId}
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
                           Requested by {request.requestedByName} •{" "}
@@ -840,7 +840,7 @@ export default function AdminOrders() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400 dark:text-neutral-500" />
               <Input
-                placeholder="Search by receipt #, customer, employee, source..."
+                placeholder="Search by receipt ID, customer, employee, source..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -973,7 +973,7 @@ export default function AdminOrders() {
                 <thead className="bg-neutral-50 dark:bg-gray-800 border-b dark:border-gray-700">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                      Receipt #
+                      Receipt ID
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
                       Date & Time
@@ -1004,8 +1004,13 @@ export default function AdminOrders() {
                       {/* Receipt Number */}
                       <td className="px-4 py-3">
                         <div className="font-semibold text-neutral-900 dark:text-white">
-                          #{receipt.receiptNumber}
+                          {receipt.id}
                         </div>
+                        {receipt.receiptNumber && (
+                          <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                            #{receipt.receiptNumber}
+                          </div>
+                        )}
                         {receipt.source && (
                           <div className="text-xs text-neutral-500 dark:text-neutral-400">
                             {receipt.source}
@@ -1327,7 +1332,7 @@ export default function AdminOrders() {
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600 dark:text-gray-400">
-                    Receipt #
+                    Receipt ID
                   </span>
                   <span className="font-mono font-semibold">
                     {selectedReceiptForEdit.receiptNumber ||

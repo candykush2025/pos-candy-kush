@@ -399,6 +399,8 @@ export default function HistorySection({ cashier: _cashier }) {
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showChangePaymentModal, setShowChangePaymentModal] = useState(false);
   const [newPaymentMethod, setNewPaymentMethod] = useState("");
+  const [submittingChangeRequest, setSubmittingChangeRequest] = useState(false);
+  const [submittingRefundRequest, setSubmittingRefundRequest] = useState(false);
 
   const PAGE_SIZE = 20;
   const scrollContainerRef = useRef(null);
@@ -456,7 +458,19 @@ export default function HistorySection({ cashier: _cashier }) {
           // Add any other fields that might be needed
         }));
 
-        allReceipts = [...allReceipts, ...localReceipts];
+        // Only add local receipts if they don't exist in Firebase receipts
+        // Deduplicate by orderNumber or receiptNumber
+        const firebaseOrderNumbers = new Set(
+          allReceipts.map((r) => r.receiptNumber || r.orderNumber || r.id)
+        );
+
+        const uniqueLocalReceipts = localReceipts.filter((localReceipt) => {
+          const localOrderNum =
+            localReceipt.orderNumber || localReceipt.receiptNumber || localReceipt.id;
+          return !firebaseOrderNumbers.has(localOrderNum);
+        });
+
+        allReceipts = [...allReceipts, ...uniqueLocalReceipts];
       } catch (error) {
         console.warn("Failed to fetch local orders:", error);
       }
@@ -619,6 +633,7 @@ export default function HistorySection({ cashier: _cashier }) {
     if (!selectedReceipt) return;
 
     try {
+      setSubmittingRefundRequest(true);
       const editRequest = {
         receiptId: selectedReceipt.id,
         receiptNumber:
@@ -646,6 +661,8 @@ export default function HistorySection({ cashier: _cashier }) {
     } catch (error) {
       console.error("Error submitting refund request:", error);
       alert("Failed to submit refund request");
+    } finally {
+      setSubmittingRefundRequest(false);
     }
   };
 
@@ -653,6 +670,7 @@ export default function HistorySection({ cashier: _cashier }) {
     if (!selectedReceipt || !newPaymentMethod) return;
 
     try {
+      setSubmittingChangeRequest(true);
       const oldPaymentMethod = getPaymentSummary(selectedReceipt);
 
       const editRequest = {
@@ -702,6 +720,8 @@ export default function HistorySection({ cashier: _cashier }) {
     } catch (error) {
       console.error("Error submitting payment change request:", error);
       alert("Failed to submit payment change request");
+    } finally {
+      setSubmittingChangeRequest(false);
     }
   };
 
@@ -1076,8 +1096,16 @@ export default function HistorySection({ cashier: _cashier }) {
                   onClick={handleRefundRequest}
                   className="flex-1"
                   variant="destructive"
+                  disabled={submittingRefundRequest}
                 >
-                  Submit Refund Request
+                  {submittingRefundRequest ? (
+                    <>
+                      <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Refund Request"
+                  )}
                 </Button>
               </div>
             </div>
@@ -1168,9 +1196,16 @@ export default function HistorySection({ cashier: _cashier }) {
                 <Button
                   onClick={handleChangePaymentRequest}
                   className="flex-1"
-                  disabled={!newPaymentMethod}
+                  disabled={!newPaymentMethod || submittingChangeRequest}
                 >
-                  Submit Change Request
+                  {submittingChangeRequest ? (
+                    <>
+                      <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Change Request"
+                  )}
                 </Button>
               </div>
             </div>
