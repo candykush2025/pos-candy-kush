@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,9 @@ import {
   Receipt,
   Plus,
   XCircle,
+  Wallet,
+  ArrowUpCircle,
+  ArrowDownCircle,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -34,10 +38,14 @@ export default function ShiftsSection({ cashier }) {
   const [statistics, setStatistics] = useState(null);
   const [showStartShiftModal, setShowStartShiftModal] = useState(false);
   const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
+  const [showCashManagementModal, setShowCashManagementModal] = useState(false);
   const [selectedShift, setSelectedShift] = useState(null);
   const [startingCash, setStartingCash] = useState("");
   const [closingCash, setClosingCash] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
+  const [cashManagementAmount, setCashManagementAmount] = useState("");
+  const [cashManagementDetails, setCashManagementDetails] = useState("");
+  const [cashManagementType, setCashManagementType] = useState("payin"); // payin or payout
 
   useEffect(() => {
     if (cashier?.id) {
@@ -144,9 +152,71 @@ export default function ShiftsSection({ cashier }) {
     }
   };
 
-  const handleCashKeypad = (value, isClosing = false) => {
-    const setter = isClosing ? setClosingCash : setStartingCash;
-    const currentValue = isClosing ? closingCash : startingCash;
+  const handleCashManagement = async () => {
+    try {
+      const amount = parseFloat(cashManagementAmount);
+      if (!amount || amount <= 0) {
+        toast.error("Please enter a valid amount");
+        return;
+      }
+
+      if (!cashManagementDetails.trim()) {
+        toast.error("Please enter details for this transaction");
+        return;
+      }
+
+      const cashMovement = {
+        type: cashManagementType,
+        amount: amount,
+        details: cashManagementDetails,
+        cashierName: cashier?.name || "Unknown",
+        timestamp: new Date().toISOString(),
+      };
+
+      await shiftsService.addCashMovement(selectedShift.id, cashMovement);
+
+      // Update localStorage if this is the active shift
+      const savedShift = localStorage.getItem("active_shift");
+      if (savedShift) {
+        const activeShift = JSON.parse(savedShift);
+        if (activeShift.id === selectedShift.id) {
+          const updatedShift = await shiftsService.getById(selectedShift.id);
+          localStorage.setItem("active_shift", JSON.stringify(updatedShift));
+          window.dispatchEvent(new Event("cashier-update"));
+        }
+      }
+
+      setShowCashManagementModal(false);
+      setCashManagementAmount("");
+      setCashManagementDetails("");
+      setCashManagementType("payin");
+      loadShifts();
+      toast.success(
+        `${
+          cashManagementType === "payin" ? "Pay In" : "Pay Out"
+        } recorded successfully!`
+      );
+    } catch (error) {
+      console.error("Error recording cash movement:", error);
+      toast.error("Failed to record cash movement");
+    }
+  };
+
+  const handleCashKeypad = (
+    value,
+    isClosing = false,
+    isCashManagement = false
+  ) => {
+    const setter = isCashManagement
+      ? setCashManagementAmount
+      : isClosing
+      ? setClosingCash
+      : setStartingCash;
+    const currentValue = isCashManagement
+      ? cashManagementAmount
+      : isClosing
+      ? closingCash
+      : startingCash;
 
     if (value === "backspace") {
       setter((prev) => prev.slice(0, -1));
@@ -362,17 +432,31 @@ export default function ShiftsSection({ cashier }) {
                             )}
                           </Badge>
                           {isActive && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => {
-                                setSelectedShift(shift);
-                                setShowCloseShiftModal(true);
-                              }}
-                            >
-                              <XCircle className="mr-1 h-3 w-3" />
-                              Close Shift
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedShift(shift);
+                                  setShowCashManagementModal(true);
+                                }}
+                                className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                              >
+                                <Wallet className="mr-1 h-3 w-3" />
+                                Cash Management
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  setSelectedShift(shift);
+                                  setShowCloseShiftModal(true);
+                                }}
+                              >
+                                <XCircle className="mr-1 h-3 w-3" />
+                                Close Shift
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -405,75 +489,166 @@ export default function ShiftsSection({ cashier }) {
                         )}
                       </div>
 
-                      {/* Cash Handling Details */}
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700">
-                        <div>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-1">
-                            Starting Cash
-                          </p>
-                          <p className="font-semibold text-lg text-gray-100 dark:text-gray-100">
-                            {formatCurrency(shift.startingCash || 0)}
-                          </p>
+                      {/* Cash Drawer Section */}
+                      <div className="space-y-4 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700">
+                        <h4 className="font-semibold text-base text-gray-900 dark:text-gray-100">
+                          Cash Drawer
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Starting Cash
+                            </p>
+                            <p className="font-semibold text-base text-gray-900 dark:text-gray-100">
+                              {formatCurrency(shift.startingCash || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Cash Payments
+                            </p>
+                            <p className="font-semibold text-base text-green-600">
+                              + {formatCurrency(shift.totalCashSales || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Cash Refunds
+                            </p>
+                            <p className="font-semibold text-base text-red-600">
+                              - {formatCurrency(shift.totalCashRefunds || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Paid In
+                            </p>
+                            <p className="font-semibold text-base text-blue-600">
+                              + {formatCurrency(shift.totalPaidIn || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Paid Out
+                            </p>
+                            <p className="font-semibold text-base text-orange-600">
+                              - {formatCurrency(shift.totalPaidOut || 0)}
+                            </p>
+                          </div>
+                          <div className="col-span-2 md:col-span-1 bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Expected Cash
+                            </p>
+                            <p className="font-bold text-lg text-blue-600">
+                              {formatCurrency(
+                                shift.expectedCash || shift.startingCash || 0
+                              )}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">
-                            Cash Sales
-                          </p>
-                          <p className="font-semibold text-lg text-green-600">
-                            {formatCurrency(shift.totalCashSales || 0)}
-                          </p>
+
+                        {/* Separator */}
+                        <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                        {/* Sales Summary */}
+                        <h4 className="font-semibold text-base text-gray-900 dark:text-gray-100">
+                          Sales Summary
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Gross Sales
+                            </p>
+                            <p className="font-semibold text-base text-gray-900 dark:text-gray-100">
+                              {formatCurrency(
+                                shift.grossSales || shift.totalSales || 0
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Refunds
+                            </p>
+                            <p className="font-semibold text-base text-red-600">
+                              - {formatCurrency(shift.totalRefunds || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Discounts
+                            </p>
+                            <p className="font-semibold text-base text-orange-600">
+                              - {formatCurrency(shift.totalDiscounts || 0)}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">
-                            Expected Cash
-                          </p>
-                          <p className="font-semibold text-lg">
-                            {formatCurrency(
-                              shift.expectedCash || shift.startingCash || 0
-                            )}
-                          </p>
+
+                        {/* Separator */}
+                        <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                        {/* Net Sales */}
+                        <div className="bg-green-50 dark:bg-green-950/30 p-4 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              Net Sales
+                            </p>
+                            <p className="text-2xl font-bold text-green-600">
+                              {formatCurrency(
+                                (shift.grossSales || shift.totalSales || 0) -
+                                  (shift.totalRefunds || 0) -
+                                  (shift.totalDiscounts || 0)
+                              )}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">
-                            Actual Cash
-                          </p>
-                          <p className="font-semibold text-lg">
-                            {shift.actualCash !== null
-                              ? formatCurrency(shift.actualCash)
-                              : isActive
-                              ? "Ongoing"
-                              : "N/A"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Variance</p>
-                          <p
-                            className={`font-bold text-lg ${
-                              variance === 0
-                                ? "text-green-600"
-                                : isShort
-                                ? "text-red-600"
-                                : "text-yellow-600"
-                            }`}
-                          >
-                            {shift.variance !== null ? (
-                              <>
-                                {variance === 0 ? (
-                                  <>✓ Perfect</>
-                                ) : (
-                                  <>
-                                    {isShort ? "↓" : "↑"}{" "}
-                                    {formatCurrency(Math.abs(variance))}
-                                  </>
-                                )}
-                              </>
-                            ) : isActive ? (
-                              "TBD"
-                            ) : (
-                              "N/A"
-                            )}
-                          </p>
-                        </div>
+
+                        {/* Actual Cash & Variance (for closed shifts) */}
+                        {!isActive && (
+                          <>
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                  Actual Cash
+                                </p>
+                                <p className="font-semibold text-lg text-gray-900 dark:text-gray-100">
+                                  {shift.actualCash !== null
+                                    ? formatCurrency(shift.actualCash)
+                                    : "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                  Variance
+                                </p>
+                                <p
+                                  className={`font-bold text-lg ${
+                                    variance === 0
+                                      ? "text-green-600"
+                                      : isShort
+                                      ? "text-red-600"
+                                      : "text-yellow-600"
+                                  }`}
+                                >
+                                  {shift.variance !== null ? (
+                                    <>
+                                      {variance === 0 ? (
+                                        <>✓ Perfect</>
+                                      ) : (
+                                        <>
+                                          {isShort ? "↓" : "↑"}{" "}
+                                          {formatCurrency(Math.abs(variance))}
+                                        </>
+                                      )}
+                                    </>
+                                  ) : (
+                                    "N/A"
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       {/* Sales Summary */}
@@ -565,6 +740,68 @@ export default function ShiftsSection({ cashier }) {
                           </div>
                         </div>
                       )}
+
+                      {/* Pay In/Pay Out History */}
+                      {shift.cashMovements &&
+                        shift.cashMovements.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                              Pay In / Pay Out History
+                            </h4>
+                            <div className="space-y-2">
+                              {shift.cashMovements.map((movement, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {movement.type === "payin" ? (
+                                      <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                                        <ArrowUpCircle className="h-4 w-4 text-green-600" />
+                                      </div>
+                                    ) : (
+                                      <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                                        <ArrowDownCircle className="h-4 w-4 text-red-600" />
+                                      </div>
+                                    )}
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                        {movement.type === "payin"
+                                          ? "Pay In"
+                                          : "Pay Out"}
+                                      </p>
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {movement.details}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p
+                                      className={`text-base font-semibold ${
+                                        movement.type === "payin"
+                                          ? "text-green-600"
+                                          : "text-red-600"
+                                      }`}
+                                    >
+                                      {movement.type === "payin" ? "+" : "-"}
+                                      {formatCurrency(movement.amount)}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {new Date(
+                                        movement.timestamp
+                                      ).toLocaleString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                       {/* Notes */}
                       {shift.notes && (
@@ -803,6 +1040,124 @@ export default function ShiftsSection({ cashier }) {
                 className="flex-1"
               >
                 Close Shift
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cash Management Modal */}
+      <Dialog
+        open={showCashManagementModal}
+        onOpenChange={setShowCashManagementModal}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cash Management</DialogTitle>
+            <DialogDescription>
+              Record cash paid in or paid out of the drawer
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Type Selection */}
+            <div className="flex gap-2">
+              <Button
+                variant={cashManagementType === "payin" ? "default" : "outline"}
+                onClick={() => setCashManagementType("payin")}
+                className="flex-1"
+              >
+                <ArrowUpCircle className="mr-2 h-4 w-4" />
+                Pay In
+              </Button>
+              <Button
+                variant={
+                  cashManagementType === "payout" ? "default" : "outline"
+                }
+                onClick={() => setCashManagementType("payout")}
+                className="flex-1"
+              >
+                <ArrowDownCircle className="mr-2 h-4 w-4" />
+                Pay Out
+              </Button>
+            </div>
+
+            {/* Amount Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Amount</label>
+              <div className="text-center p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                <div className="text-3xl font-bold">
+                  {cashManagementAmount
+                    ? formatCurrency(parseFloat(cashManagementAmount))
+                    : "$0.00"}
+                </div>
+              </div>
+              {/* Number Keypad */}
+              <div className="grid grid-cols-3 gap-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, ".", 0, "⌫"].map((num) => (
+                  <Button
+                    key={num}
+                    variant="outline"
+                    size="lg"
+                    onClick={() =>
+                      handleCashKeypad(
+                        num === "⌫" ? "backspace" : num.toString(),
+                        false,
+                        true
+                      )
+                    }
+                    className="h-14 text-lg"
+                  >
+                    {num}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Details Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Details / Reason</label>
+              <Textarea
+                value={cashManagementDetails}
+                onChange={(e) => setCashManagementDetails(e.target.value)}
+                placeholder="Enter reason for this transaction..."
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCashManagementModal(false);
+                  setSelectedShift(null);
+                  setCashManagementAmount("");
+                  setCashManagementDetails("");
+                  setCashManagementType("payin");
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCashManagement}
+                disabled={
+                  !cashManagementAmount || !cashManagementDetails.trim()
+                }
+                className="flex-1"
+              >
+                {cashManagementType === "payin" ? (
+                  <>
+                    <ArrowUpCircle className="mr-2 h-4 w-4" />
+                    Record Pay In
+                  </>
+                ) : (
+                  <>
+                    <ArrowDownCircle className="mr-2 h-4 w-4" />
+                    Record Pay Out
+                  </>
+                )}
               </Button>
             </div>
           </div>

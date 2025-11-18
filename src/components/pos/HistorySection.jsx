@@ -466,7 +466,9 @@ export default function HistorySection({ cashier: _cashier }) {
 
         const uniqueLocalReceipts = localReceipts.filter((localReceipt) => {
           const localOrderNum =
-            localReceipt.orderNumber || localReceipt.receiptNumber || localReceipt.id;
+            localReceipt.orderNumber ||
+            localReceipt.receiptNumber ||
+            localReceipt.id;
           return !firebaseOrderNumbers.has(localOrderNum);
         });
 

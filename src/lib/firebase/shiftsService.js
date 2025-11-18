@@ -32,11 +32,18 @@ export const shiftsService = {
       variance: null, // Difference between expected and actual
       status: "active", // active, completed, pending
       totalSales: 0,
+      grossSales: 0,
       totalCashSales: 0,
       totalCardSales: 0,
       totalOtherSales: 0,
+      totalCashRefunds: 0,
+      totalRefunds: 0,
+      totalDiscounts: 0,
+      totalPaidIn: 0,
+      totalPaidOut: 0,
       transactionCount: 0,
       transactions: [], // Array of transaction IDs
+      cashMovements: [], // Array of pay in/pay out transactions
       notes: shiftData.notes || "",
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
@@ -212,6 +219,53 @@ export const shiftsService = {
       notes,
       updatedAt: Timestamp.now(),
     });
+  },
+
+  // Add cash movement (Pay In / Pay Out)
+  async addCashMovement(shiftId, movement) {
+    const docRef = doc(db, COLLECTION_NAME, shiftId);
+    const shiftSnap = await getDoc(docRef);
+
+    if (!shiftSnap.exists()) {
+      throw new Error("Shift not found");
+    }
+
+    const shift = shiftSnap.data();
+    const cashMovements = shift.cashMovements || [];
+    cashMovements.push(movement);
+
+    // Calculate new totals
+    const totalPaidIn =
+      (shift.totalPaidIn || 0) +
+      (movement.type === "payin" ? movement.amount : 0);
+    const totalPaidOut =
+      (shift.totalPaidOut || 0) +
+      (movement.type === "payout" ? movement.amount : 0);
+
+    // Update expected cash
+    const expectedCash =
+      (shift.startingCash || 0) +
+      (shift.totalCashSales || 0) -
+      (shift.totalCashRefunds || 0) +
+      totalPaidIn -
+      totalPaidOut;
+
+    await updateDoc(docRef, {
+      cashMovements,
+      totalPaidIn,
+      totalPaidOut,
+      expectedCash,
+      updatedAt: Timestamp.now(),
+    });
+
+    return {
+      id: shiftId,
+      ...shift,
+      cashMovements,
+      totalPaidIn,
+      totalPaidOut,
+      expectedCash,
+    };
   },
 
   // Get shifts by date range
