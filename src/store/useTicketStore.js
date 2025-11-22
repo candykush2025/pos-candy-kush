@@ -14,6 +14,7 @@ export const useTicketStore = create((set, get) => ({
       userId,
       status: ORDER_STATUS.PARKED,
       items: cartData.items,
+      discounts: cartData.discounts || [],
       discount: cartData.discount,
       tax: cartData.tax,
       customer: cartData.customer,
@@ -36,6 +37,7 @@ export const useTicketStore = create((set, get) => ({
           ? {
               ...ticket,
               items: cartData.items,
+              discounts: cartData.discounts || [],
               discount: cartData.discount,
               tax: cartData.tax,
               customer: cartData.customer,

@@ -58,9 +58,9 @@ export default function AdminSetupPage() {
       toast.success("Demo data created!");
       setStep(3);
 
-      // Redirect to login after 2 seconds
+      // Redirect to admin dashboard after 2 seconds (authentication bypassed)
       setTimeout(() => {
-        router.push("/login");
+        router.push("/admin/dashboard");
       }, 2000);
     } catch (error) {
       console.error("Setup failed:", error);
@@ -265,7 +265,9 @@ export default function AdminSetupPage() {
                 </div>
               )}
               <div className="pt-4 text-center">
-                <p className="text-sm text-neutral-600">Redirecting to login...</p>
+                <p className="text-sm text-neutral-600">
+                  Redirecting to login...
+                </p>
               </div>
             </div>
           )}
@@ -286,4 +288,3 @@ export default function AdminSetupPage() {
     </div>
   );
 }
-

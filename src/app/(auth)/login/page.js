@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
+import { jwtUtils } from "@/lib/jwt";
 import { loginWithEmail } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import { APKInstallPrompt } from "@/components/APKInstallPrompt";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated, user, setAuth, setLoading, setError } =
+  const { isAuthenticated, user, setAuth, setLoading, setError, token } =
     useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,8 +31,13 @@ export default function LoginPage() {
   useEffect(() => {
     // Small delay to ensure Zustand persist has hydrated
     const timer = setTimeout(() => {
-      if (isAuthenticated && user) {
-        console.log("User already authenticated, redirecting...");
+      // Check if JWT token is valid
+      const isTokenValid = token && jwtUtils.isValid(token);
+
+      if (isAuthenticated && user && isTokenValid) {
+        console.log(
+          "User already authenticated with valid JWT, redirecting..."
+        );
         // Redirect based on role
         if (user.role === "admin") {
           router.push("/admin/dashboard");
@@ -44,7 +50,7 @@ export default function LoginPage() {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, token, router]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

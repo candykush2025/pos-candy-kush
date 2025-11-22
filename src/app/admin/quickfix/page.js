@@ -46,9 +46,9 @@ export default function QuickFixPage() {
       toast.success("Setup complete!");
       setIsComplete(true);
 
-      // Redirect to login after 2 seconds
+      // Redirect to admin dashboard after 2 seconds (authentication bypassed)
       setTimeout(() => {
-        router.push("/login");
+        router.push("/admin/dashboard");
       }, 2000);
     } catch (error) {
       console.error("Setup failed:", error);
@@ -226,4 +226,3 @@ export default function QuickFixPage() {
     </div>
   );
 }
-

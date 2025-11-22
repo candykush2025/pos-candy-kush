@@ -29,11 +29,14 @@ import {
   AlertCircle,
   CheckCircle,
   Upload,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { dbService } from "@/lib/db/dbService";
 import { formatCurrency } from "@/lib/utils/format";
 import { customersService } from "@/lib/firebase/firestore";
+import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
 
 export default function CashierCustomersPage() {
   const [customers, setCustomers] = useState([]);
@@ -66,6 +69,8 @@ export default function CashierCustomersPage() {
     isActive: true,
     // Kiosk Permissions
     allowedCategories: [],
+    // Expiry Date
+    expiryDate: "",
   });
 
   useEffect(() => {
@@ -190,6 +195,7 @@ export default function CashierCustomersPage() {
       isNoMember: false,
       isActive: true,
       allowedCategories: [],
+      expiryDate: "",
     });
     setIsModalOpen(true);
   };
@@ -209,6 +215,7 @@ export default function CashierCustomersPage() {
       isNoMember: customer.isNoMember || false,
       isActive: customer.isActive !== false,
       allowedCategories: customer.allowedCategories || [],
+      expiryDate: customer.expiryDate || "",
     });
     setIsModalOpen(true);
   };
@@ -827,6 +834,95 @@ export default function CashierCustomersPage() {
                     />
                     <span className="text-sm font-medium">Active Account</span>
                   </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Expiry Date Section - Requires Admin Approval */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg border-b pb-2">
+                Membership Expiry
+              </h3>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Expiry Date{" "}
+                    {formData.expiryDate && (
+                      <Badge
+                        variant={
+                          customerApprovalService.isCustomerExpired(
+                            formData.expiryDate
+                          )
+                            ? "destructive"
+                            : customerApprovalService.isExpiringSoon(
+                                formData.expiryDate
+                              )
+                            ? "outline"
+                            : "default"
+                        }
+                        className="ml-2"
+                      >
+                        {customerApprovalService.isCustomerExpired(
+                          formData.expiryDate
+                        )
+                          ? "Expired"
+                          : customerApprovalService.isExpiringSoon(
+                              formData.expiryDate
+                            )
+                          ? "Expiring Soon"
+                          : "Active"}
+                      </Badge>
+                    )}
+                  </label>
+                  <Input
+                    type="date"
+                    value={formData.expiryDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, expiryDate: e.target.value })
+                    }
+                    placeholder="YYYY-MM-DD"
+                  />
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Set expiry date for customer membership
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const expiry =
+                        customerApprovalService.calculateExpiryDate("10days");
+                      setFormData({ ...formData, expiryDate: expiry });
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Set +10 Days
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const expiry =
+                        customerApprovalService.calculateExpiryDate("6months");
+                      setFormData({ ...formData, expiryDate: expiry });
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Set +6 Months
+                  </Button>
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg">
+                  <p className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    Cashier expiry changes require admin approval before being
+                    applied
+                  </p>
                 </div>
               </div>
             </div>

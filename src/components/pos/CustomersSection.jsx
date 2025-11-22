@@ -2,8 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { customersService, ordersService } from "@/lib/firebase/firestore";
+import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -29,13 +37,12 @@ import {
   DollarSign,
   RefreshCw,
   Award,
-  Filter,
-  Database,
-  Monitor,
-  Building2,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { countries } from "@/lib/countires";
 
 // Customer Card Component
 function CustomerCard({
@@ -62,24 +69,41 @@ function CustomerCard({
             <div>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-lg">{customer.name}</CardTitle>
-                {customer.source && (
+                {customer.expiryDate && (
                   <Badge
                     variant={
-                      customer.source === "loyverse"
-                        ? "secondary"
-                        : customer.source === "kiosk"
-                        ? "default"
-                        : "outline"
+                      customerApprovalService.isCustomerExpired(
+                        customer.expiryDate
+                      )
+                        ? "destructive"
+                        : customerApprovalService.isExpiringSoon(
+                            customer.expiryDate
+                          )
+                        ? "outline"
+                        : "default"
                     }
-                    className={
-                      customer.source === "kiosk"
-                        ? "text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                        : customer.source === "local"
-                        ? "text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
-                        : "text-xs"
-                    }
+                    className="text-xs flex items-center gap-1"
                   >
-                    {customer.source}
+                    {customerApprovalService.isCustomerExpired(
+                      customer.expiryDate
+                    ) ? (
+                      <>
+                        <AlertTriangle className="h-3 w-3" />
+                        Expired
+                      </>
+                    ) : customerApprovalService.isExpiringSoon(
+                        customer.expiryDate
+                      ) ? (
+                      <>
+                        <Clock className="h-3 w-3" />
+                        Expiring Soon
+                      </>
+                    ) : (
+                      <>
+                        <Calendar className="h-3 w-3" />
+                        Active
+                      </>
+                    )}
                   </Badge>
                 )}
               </div>
@@ -173,34 +197,30 @@ function CustomerCard({
             Redeem Points
           </Button>
         </div>
-
-        {customer.note && (
-          <div className="mt-3 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm">
-            <p className="text-gray-300 dark:text-gray-300">{customer.note}</p>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
 }
 
 // Customer Form Modal Component
-function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
+function CustomerFormModal({ isOpen, onClose, customer, onSave, cashier }) {
   const [formData, setFormData] = useState({
+    // Personal Information
     name: "",
-    customerCode: "",
+    lastName: "",
+    nickname: "",
+    nationality: "",
+    dateOfBirth: "",
+    // Contact Information
     email: "",
-    phone: "",
-    address: "",
-    city: "",
-    province: "",
-    postalCode: "",
-    country: "",
-    note: "",
-    points: 0,
-    visits: 0,
-    lastVisit: null,
+    cell: "",
+    // Member Information
+    memberId: "",
+    isActive: true,
+    // Kiosk Permissions
     allowedCategories: [],
+    // System fields (read-only)
+    expiryDate: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -209,6 +229,7 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
   const [selectedCategoryForColor, setSelectedCategoryForColor] =
     useState(null);
   const [longPressTimer, setLongPressTimer] = useState(null);
+  const [originalMemberId, setOriginalMemberId] = useState("");
 
   // Color palette for category indicators
   const CATEGORY_COLORS = [
@@ -257,46 +278,57 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
 
   useEffect(() => {
     if (customer) {
+      const memberId = customer.memberId || customer.customerId || "";
       setFormData({
+        // Personal Information
         name: customer.name || "",
-        customerCode: customer.customerCode || "",
+        lastName: customer.lastName || "",
+        nickname: customer.nickname || "",
+        nationality: customer.nationality || "",
+        dateOfBirth: customer.dateOfBirth || "",
+        // Contact Information
         email: customer.email || "",
-        phone: customer.phone || "",
-        address: customer.address || "",
-        city: customer.city || "",
-        province: customer.province || "",
-        postalCode: customer.postalCode || "",
-        country: customer.country || "",
-        note: customer.note || "",
-        points: customer.points || 0,
-        visits: customer.visits || 0,
-        lastVisit: customer.lastVisit || null,
+        cell: customer.cell || "",
+        // Member Information
+        memberId: memberId,
+        isActive: customer.isActive !== false,
+        // Kiosk Permissions
         allowedCategories: customer.allowedCategories || [],
+        // System fields
+        expiryDate: customer.expiryDate || "",
       });
+      setOriginalMemberId(memberId);
     } else {
-      // Generate customer code for new customer
+      // Generate member ID for new customer
+      const customerCount = Date.now().toString().slice(-4);
+      const newMemberId = `CK-${customerCount}`;
       setFormData({
+        // Personal Information
         name: "",
-        customerCode: `CUST-${Date.now().toString().slice(-6)}`,
+        lastName: "",
+        nickname: "",
+        nationality: "",
+        dateOfBirth: "",
+        // Contact Information
         email: "",
-        phone: "",
-        address: "",
-        city: "",
-        province: "",
-        postalCode: "",
-        country: "",
-        note: "",
-        points: 0,
-        visits: 0,
-        lastVisit: null,
+        cell: "",
+        // Member Information
+        memberId: newMemberId,
+        isActive: true,
+        // Kiosk Permissions
         allowedCategories: [],
-        lastVisit: null,
+        // System fields
+        expiryDate: "",
       });
+      setOriginalMemberId("");
     }
   }, [customer, isOpen]);
 
   const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    // Ensure date fields are always strings to prevent undefined values
+    const processedValue =
+      field === "dateOfBirth" || field === "expiryDate" ? value || "" : value;
+    setFormData((prev) => ({ ...prev, [field]: processedValue }));
   };
 
   // Handle category color selection
@@ -348,14 +380,77 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
       return;
     }
 
-    if (!formData.customerCode.trim()) {
-      toast.error("Customer code is required");
+    if (!formData.memberId.trim()) {
+      toast.error("Member ID is required");
       return;
     }
 
+    // Check memberId uniqueness
+    try {
+      const existingCustomers = await customersService.getAll();
+      console.log("🔍 Checking memberId uniqueness:");
+      console.log("Current formData.memberId:", formData.memberId.trim());
+      console.log("Original memberId:", originalMemberId);
+      console.log("Existing customers count:", existingCustomers.length);
+
+      // Only check for duplicates if the memberId has actually changed
+      if (formData.memberId.trim() !== originalMemberId) {
+        const duplicateCustomer = existingCustomers.find(
+          (c) => c.memberId === formData.memberId.trim()
+        );
+
+        console.log("Found duplicate customer:", duplicateCustomer);
+
+        if (duplicateCustomer) {
+          toast.error(
+            "Member ID already exists. Please choose a different one."
+          );
+          return;
+        }
+      } else {
+        console.log("MemberId hasn't changed, skipping uniqueness check");
+      }
+    } catch (error) {
+      console.error("Error checking member ID uniqueness:", error);
+      toast.error("Failed to validate member ID");
+      return;
+    }
+
+    // Only save fields that exist in Firebase schema
+    const finalFormData = {
+      name: formData.name.trim(),
+      lastName: formData.lastName.trim(),
+      nickname: formData.nickname.trim(),
+      nationality: formData.nationality.trim(),
+      // Handle dateOfBirth - only include if it has a value
+      ...(formData.dateOfBirth &&
+        typeof formData.dateOfBirth === "string" &&
+        formData.dateOfBirth.trim() !== "" && {
+          dateOfBirth: formData.dateOfBirth.trim(),
+        }),
+      email: formData.email.trim(),
+      cell: formData.cell.trim(),
+      customerId: formData.memberId.trim(), // Set customerId to memberId for backward compatibility
+      memberId: formData.memberId.trim(),
+      isActive: formData.isActive,
+      allowedCategories: formData.allowedCategories,
+      // Handle expiryDate - only include if it has a value
+      ...(formData.expiryDate &&
+        typeof formData.expiryDate === "string" &&
+        formData.expiryDate.trim() !== "" && {
+          expiryDate: formData.expiryDate.trim(),
+        }),
+      // System fields - only include for existing customers, never overwrite
+      ...(customer && {
+        points: customer.points || [],
+        totalSpent: customer.totalSpent || 0,
+        visitCount: customer.visitCount || 0,
+      }),
+    };
+
     setIsSaving(true);
     try {
-      await onSave(formData);
+      await onSave(finalFormData);
       onClose();
     } catch (error) {
       console.error("Error saving customer:", error);
@@ -373,210 +468,402 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave }) {
             {customer ? "Edit Customer" : "Add New Customer"}
           </DialogTitle>
           <DialogDescription>
-            Fill in the customer information. Name and Customer Code are
-            required.
+            Fill in the customer information. Name and Member ID are required.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Personal Information Section */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg border-b pb-2">
+              Personal Information
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Name - Required */}
+              <div>
+                <label className="text-sm font-medium">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => handleChange("name", e.target.value)}
+                  placeholder="John"
+                  required
+                />
+              </div>
+
+              {/* Last Name */}
+              <div>
+                <label className="text-sm font-medium">Last Name</label>
+                <Input
+                  value={formData.lastName}
+                  onChange={(e) => handleChange("lastName", e.target.value)}
+                  placeholder="Doe"
+                />
+              </div>
+
+              {/* Nickname */}
+              <div>
+                <label className="text-sm font-medium">Nickname</label>
+                <Input
+                  value={formData.nickname}
+                  onChange={(e) => handleChange("nickname", e.target.value)}
+                  placeholder="Johnny"
+                />
+              </div>
+
+              {/* Nationality */}
+              <div>
+                <label className="text-sm font-medium">Nationality</label>
+                <Select
+                  value={formData.nationality || undefined}
+                  onValueChange={(value) => handleChange("nationality", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select nationality" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {countries.map((country) => (
+                      <SelectItem key={country} value={country}>
+                        {country}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date of Birth */}
+              <div className="col-span-2">
+                <label className="text-sm font-medium">Date of Birth</label>
+                <Input
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => handleChange("dateOfBirth", e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Contact Information Section */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg border-b pb-2">
+              Contact Information
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Email */}
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange("email", e.target.value)}
+                  placeholder="john@example.com"
+                />
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label className="text-sm font-medium">Phone Number</label>
+                <Input
+                  type="tel"
+                  value={formData.cell}
+                  onChange={(e) => handleChange("cell", e.target.value)}
+                  placeholder="+66812345678"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Member Information Section */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg border-b pb-2">
+              Member Information
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Member ID - Required */}
+              <div className="col-span-2">
+                <label className="text-sm font-medium">
+                  Member ID <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={formData.memberId}
+                  onChange={(e) => handleChange("memberId", e.target.value)}
+                  placeholder="CK-0001"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1"></p>
+              </div>
+
+              {/* Active Status */}
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  type="checkbox"
+                  id="isActive"
+                  checked={formData.isActive}
+                  onChange={(e) => handleChange("isActive", e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                <label htmlFor="isActive" className="text-sm font-medium">
+                  Active Account
+                </label>
+              </div>
+
+              {/* Show current system stats for existing customers */}
+              {customer && (
+                <div className="col-span-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    System Statistics (Read Only)
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">
+                        Points:{" "}
+                      </span>
+                      <span className="font-semibold">
+                        {customer.points?.length || 0}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">
+                        Spent:{" "}
+                      </span>
+                      <span className="font-semibold">
+                        {formatCurrency(customer.totalSpent || 0)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">
+                        Visits:{" "}
+                      </span>
+                      <span className="font-semibold">
+                        {customer.visitCount || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
-            {/* Name - Required */}
+            {/* Expiry Date - Cashier needs approval */}
             <div className="col-span-2">
-              <label className="text-sm font-medium">
-                Name <span className="text-red-500">*</span>
+              <label className="text-sm font-medium mb-2 block">
+                Expiry Date{" "}
+                {formData.expiryDate && (
+                  <Badge
+                    variant={
+                      customerApprovalService.isCustomerExpired(
+                        formData.expiryDate
+                      )
+                        ? "destructive"
+                        : customerApprovalService.isExpiringSoon(
+                            formData.expiryDate
+                          )
+                        ? "outline"
+                        : "default"
+                    }
+                    className="ml-2"
+                  >
+                    {customerApprovalService.isCustomerExpired(
+                      formData.expiryDate
+                    )
+                      ? "Expired"
+                      : customerApprovalService.isExpiringSoon(
+                          formData.expiryDate
+                        )
+                      ? "Expiring Soon"
+                      : "Active"}
+                  </Badge>
+                )}
               </label>
-              <Input
-                value={formData.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-                placeholder="Enter customer name"
-                required
-              />
-            </div>
-
-            {/* Customer Code - Required */}
-            <div className="col-span-2">
-              <label className="text-sm font-medium">
-                Customer Code <span className="text-red-500">*</span>
-              </label>
-              <Input
-                value={formData.customerCode}
-                onChange={(e) => handleChange("customerCode", e.target.value)}
-                placeholder="Auto-generated or enter custom code"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Unique identifier for this customer
-              </p>
-            </div>
-
-            {/* Email - Optional */}
-            <div>
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                placeholder="customer@example.com"
-              />
-            </div>
-
-            {/* Phone - Optional */}
-            <div>
-              <label className="text-sm font-medium">Phone</label>
-              <Input
-                value={formData.phone}
-                onChange={(e) => handleChange("phone", e.target.value)}
-                placeholder="+1 (555) 123-4567"
-              />
-            </div>
-
-            {/* Address - Optional */}
-            <div className="col-span-2">
-              <label className="text-sm font-medium">Address</label>
-              <Input
-                value={formData.address}
-                onChange={(e) => handleChange("address", e.target.value)}
-                placeholder="Street address"
-              />
-            </div>
-
-            {/* City - Optional */}
-            <div>
-              <label className="text-sm font-medium">City</label>
-              <Input
-                value={formData.city}
-                onChange={(e) => handleChange("city", e.target.value)}
-                placeholder="City"
-              />
-            </div>
-
-            {/* Province - Optional */}
-            <div>
-              <label className="text-sm font-medium">Province/State</label>
-              <Input
-                value={formData.province}
-                onChange={(e) => handleChange("province", e.target.value)}
-                placeholder="Province or State"
-              />
-            </div>
-
-            {/* Postal Code - Optional */}
-            <div>
-              <label className="text-sm font-medium">Postal Code</label>
-              <Input
-                value={formData.postalCode}
-                onChange={(e) => handleChange("postalCode", e.target.value)}
-                placeholder="A1B 2C3"
-              />
-            </div>
-
-            {/* Country - Optional */}
-            <div>
-              <label className="text-sm font-medium">Country</label>
-              <Input
-                value={formData.country}
-                onChange={(e) => handleChange("country", e.target.value)}
-                placeholder="Canada"
-              />
-            </div>
-
-            {/* Note - Optional */}
-            <div className="col-span-2">
-              <label className="text-sm font-medium">Note</label>
-              <textarea
-                className="w-full min-h-[80px] px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                value={formData.note}
-                onChange={(e) => handleChange("note", e.target.value)}
-                placeholder="Additional notes about this customer..."
-              />
+              <div className="space-y-2">
+                <Input
+                  type="date"
+                  value={formData.expiryDate}
+                  onChange={(e) => handleChange("expiryDate", e.target.value)}
+                  placeholder="YYYY-MM-DD"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const expiry =
+                        customerApprovalService.calculateExpiryDate("10days");
+                      handleChange("expiryDate", expiry);
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 mr-1" />
+                    +10 Days
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const expiry =
+                        customerApprovalService.calculateExpiryDate("6months");
+                      handleChange("expiryDate", expiry);
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 mr-1" />
+                    +6 Months
+                  </Button>
+                </div>
+                {cashier && customer && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Cashier changes require admin approval
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Allowed Categories - Kiosk Permissions */}
             <div className="col-span-2">
               <label className="text-sm font-medium mb-2 block">
                 Allowed Categories (Kiosk Access)
+                {formData.allowedCategories.length > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {formData.allowedCategories.length} selected
+                  </Badge>
+                )}
               </label>
-              <p className="text-xs text-gray-500 mb-3">
-                Leave empty to allow access to all categories. Select specific
-                categories to restrict access on kiosk.
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                {formData.allowedCategories.length === 0
+                  ? "✓ All categories allowed (no restrictions)"
+                  : "Customer restricted to selected categories only"}
               </p>
 
               <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
                 {loadingCategories ? (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Loading categories from kiosk...
-                  </p>
-                ) : categories.length === 0 ? (
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                    ⚠️ No categories available from kiosk. Customer will have
-                    access to all categories.
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {categories.map((category) => (
-                      <label
-                        key={category.id}
-                        className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded cursor-pointer group"
-                        onMouseDown={() => handleCategoryMouseDown(category)}
-                        onMouseUp={handleCategoryMouseUp}
-                        onMouseLeave={handleCategoryMouseUp}
-                        onTouchStart={() => handleCategoryMouseDown(category)}
-                        onTouchEnd={handleCategoryMouseUp}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.allowedCategories.includes(
-                            category.id
-                          )}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({
-                                ...formData,
-                                allowedCategories: [
-                                  ...formData.allowedCategories,
-                                  category.id,
-                                ],
-                              });
-                            } else {
-                              setFormData({
-                                ...formData,
-                                allowedCategories:
-                                  formData.allowedCategories.filter(
-                                    (id) => id !== category.id
-                                  ),
-                              });
-                            }
-                          }}
-                          className="rounded border-gray-300 dark:border-gray-600"
-                        />
-                        {/* Color Indicator */}
-                        <button
-                          type="button"
-                          onClick={(e) => handleCategoryColorClick(category, e)}
-                          className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex-shrink-0 hover:scale-110 transition-transform"
-                          style={{
-                            backgroundColor: category.color || "#808080",
-                          }}
-                          title="Click to change color"
-                        />
-                        <div className="flex-1">
-                          <span className="text-sm font-medium">
-                            {category.name}
-                          </span>
-                          {category.description && (
-                            <p className="text-xs text-gray-500">
-                              {category.description}
-                            </p>
-                          )}
-                        </div>
-                        {category.isActive && (
-                          <Badge variant="outline" className="text-xs">
-                            Active
-                          </Badge>
-                        )}
-                      </label>
-                    ))}
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600 mr-2"></div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Loading categories...
+                    </p>
                   </div>
+                ) : categories.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                      ⚠️ No categories available. Customer will have access to
+                      all categories.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-center mb-3 pb-2 border-b">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Select categories to restrict access
+                      </span>
+                      <div className="flex gap-2">
+                        {formData.allowedCategories.length <
+                          categories.length && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                allowedCategories: categories.map(
+                                  (cat) => cat.id
+                                ),
+                              })
+                            }
+                            className="text-xs h-6"
+                          >
+                            Select All
+                          </Button>
+                        )}
+                        {formData.allowedCategories.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                allowedCategories: [],
+                              })
+                            }
+                            className="text-xs h-6"
+                          >
+                            Clear All
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {categories.map((category) => (
+                        <label
+                          key={category.id}
+                          className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded cursor-pointer group"
+                          onMouseDown={() => handleCategoryMouseDown(category)}
+                          onMouseUp={handleCategoryMouseUp}
+                          onMouseLeave={handleCategoryMouseUp}
+                          onTouchStart={() => handleCategoryMouseDown(category)}
+                          onTouchEnd={handleCategoryMouseUp}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.allowedCategories.includes(
+                              category.id
+                            )}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  allowedCategories: [
+                                    ...formData.allowedCategories,
+                                    category.id,
+                                  ],
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  allowedCategories:
+                                    formData.allowedCategories.filter(
+                                      (id) => id !== category.id
+                                    ),
+                                });
+                              }
+                            }}
+                            className="rounded border-gray-300 dark:border-gray-600"
+                          />
+                          {/* Color Indicator */}
+                          <button
+                            type="button"
+                            onClick={(e) =>
+                              handleCategoryColorClick(category, e)
+                            }
+                            className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex-shrink-0 hover:scale-110 transition-transform"
+                            style={{
+                              backgroundColor: category.color || "#808080",
+                            }}
+                            title="Click to change color"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm font-medium">
+                              {category.name}
+                            </span>
+                            {category.description && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {category.description}
+                              </p>
+                            )}
+                          </div>
+                          {category.isActive && (
+                            <Badge variant="outline" className="text-xs">
+                              Active
+                            </Badge>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -881,7 +1168,6 @@ export default function CustomersSection({ cashier }) {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("all"); // all, loyverse, local, kiosk
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -909,11 +1195,6 @@ export default function CustomersSection({ cashier }) {
   useEffect(() => {
     let filtered = customers;
 
-    // Apply source filter
-    if (sourceFilter !== "all") {
-      filtered = filtered.filter((c) => c.source === sourceFilter);
-    }
-
     // Apply search filter
     if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
@@ -930,7 +1211,7 @@ export default function CustomersSection({ cashier }) {
     }
 
     setFilteredCustomers(filtered);
-  }, [searchQuery, customers, sourceFilter]);
+  }, [searchQuery, customers]);
 
   const loadCustomers = async () => {
     try {
@@ -973,9 +1254,44 @@ export default function CustomersSection({ cashier }) {
   const handleSaveCustomer = async (formData) => {
     try {
       if (editingCustomer) {
-        // Update existing customer
-        await customersService.update(editingCustomer.id, formData);
-        toast.success("Customer updated successfully");
+        // Check if cashier is trying to change expiry date
+        const expiryChanged =
+          formData.expiryDate !== editingCustomer.expiryDate;
+
+        if (cashier && expiryChanged) {
+          // Cashier needs approval for expiry date changes
+          await customerApprovalService.createExpiryRequest({
+            customerId: editingCustomer.id,
+            customerName: editingCustomer.name,
+            currentExpiryDate: editingCustomer.expiryDate,
+            newExpiryDate: formData.expiryDate,
+            requestedBy: cashier.id,
+            requestedByName: cashier.name,
+            reason: "Cashier requested expiry date extension",
+          });
+
+          // Update customer without expiry date change - filter out undefined values
+          const updateData = Object.fromEntries(
+            Object.entries({
+              ...formData,
+              expiryDate: editingCustomer.expiryDate,
+            }).filter(([key, value]) => value !== undefined)
+          );
+          await customersService.update(editingCustomer.id, updateData);
+
+          toast.success(
+            "Customer updated! Expiry date change sent for admin approval."
+          );
+        } else {
+          // Admin or no expiry change - update directly, filter out undefined values
+          const updateData = Object.fromEntries(
+            Object.entries(formData).filter(
+              ([key, value]) => value !== undefined
+            )
+          );
+          await customersService.update(editingCustomer.id, updateData);
+          toast.success("Customer updated successfully");
+        }
       } else {
         // Create new customer with cashier info and source as "local"
         const customerData = {
@@ -984,8 +1300,42 @@ export default function CustomersSection({ cashier }) {
           createdBy: cashier?.id || null,
           createdByName: cashier?.name || null,
         };
-        await customersService.create(customerData);
-        toast.success("Customer created successfully");
+
+        // For new customers created by cashier with expiry date, also requires approval
+        if (cashier && formData.expiryDate) {
+          // Create customer without expiry date first - filter out undefined values
+          const createData = Object.fromEntries(
+            Object.entries({
+              ...customerData,
+              expiryDate: "", // Don't set expiry yet
+            }).filter(([key, value]) => value !== undefined)
+          );
+          const newCustomer = await customersService.create(createData);
+
+          // Create approval request
+          await customerApprovalService.createExpiryRequest({
+            customerId: newCustomer.id,
+            customerName: customerData.name,
+            currentExpiryDate: "",
+            newExpiryDate: formData.expiryDate,
+            requestedBy: cashier.id,
+            requestedByName: cashier.name,
+            reason: "Cashier set initial expiry date",
+          });
+
+          toast.success(
+            "Customer created! Expiry date sent for admin approval."
+          );
+        } else {
+          // Admin creating customer - set expiry directly, filter out undefined values
+          const createData = Object.fromEntries(
+            Object.entries(customerData).filter(
+              ([key, value]) => value !== undefined
+            )
+          );
+          await customersService.create(createData);
+          toast.success("Customer created successfully");
+        }
       }
       loadCustomers();
     } catch (error) {
@@ -1100,7 +1450,7 @@ export default function CustomersSection({ cashier }) {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
-                placeholder="Search by name, customer ID, email, or phone..."
+                placeholder="Search by name, member ID, email, or phone..."
                 className="pl-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1108,63 +1458,10 @@ export default function CustomersSection({ cashier }) {
             </div>
           </div>
 
-          {/* Source Filter Buttons */}
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant={sourceFilter === "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSourceFilter("all")}
-              className="gap-1"
-            >
-              <Filter className="h-4 w-4" />
-              All Sources
-              <Badge variant="secondary" className="ml-1">
-                {customers.length}
-              </Badge>
-            </Button>
-            <Button
-              variant={sourceFilter === "loyverse" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSourceFilter("loyverse")}
-              className="gap-1"
-            >
-              <Database className="h-4 w-4" />
-              Loyverse
-              <Badge variant="secondary" className="ml-1">
-                {customers.filter((c) => c.source === "loyverse").length}
-              </Badge>
-            </Button>
-            <Button
-              variant={sourceFilter === "local" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSourceFilter("local")}
-              className="gap-1"
-            >
-              <Building2 className="h-4 w-4" />
-              Local
-              <Badge variant="secondary" className="ml-1">
-                {customers.filter((c) => c.source === "local").length}
-              </Badge>
-            </Button>
-            <Button
-              variant={sourceFilter === "kiosk" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSourceFilter("kiosk")}
-              className="gap-1"
-            >
-              <Monitor className="h-4 w-4" />
-              Kiosk
-              <Badge variant="secondary" className="ml-1">
-                {customers.filter((c) => c.source === "kiosk").length}
-              </Badge>
-            </Button>
-          </div>
-
           {/* Stats */}
           <div className="mt-4 flex gap-4">
             <Badge variant="secondary" className="text-base px-4 py-2">
               {filteredCustomers.length} Customers
-              {sourceFilter !== "all" && ` (${sourceFilter})`}
             </Badge>
             {searchQuery && (
               <Badge variant="outline" className="text-base px-4 py-2">
@@ -1215,27 +1512,12 @@ export default function CustomersSection({ cashier }) {
                             <h3 className="font-semibold text-lg">
                               {customer.name}
                             </h3>
-                            {customer.source && (
-                              <Badge
-                                variant="outline"
-                                className={`text-xs ${
-                                  customer.source === "loyverse"
-                                    ? "bg-purple-50 dark:bg-purple-950 border-purple-500 text-purple-700 dark:text-purple-400"
-                                    : customer.source === "kiosk"
-                                    ? "bg-blue-50 dark:bg-blue-950 border-blue-500 text-blue-700 dark:text-blue-400"
-                                    : "bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
-                                }`}
-                              >
-                                {customer.source === "loyverse"
-                                  ? "📊 Loyverse"
-                                  : customer.source === "kiosk"
-                                  ? "🖥️ Kiosk"
-                                  : "💼 Local"}
-                              </Badge>
-                            )}
                           </div>
                           <p className="text-sm text-gray-500">
-                            {customer.customerCode || customer.id}
+                            Member ID:{" "}
+                            {customer.memberId ||
+                              customer.customerId ||
+                              customer.id}
                           </p>
                         </div>
                       </div>
@@ -1336,6 +1618,7 @@ export default function CustomersSection({ cashier }) {
           onClose={() => setIsModalOpen(false)}
           customer={editingCustomer}
           onSave={handleSaveCustomer}
+          cashier={cashier}
         />
 
         {/* Purchase History Modal */}

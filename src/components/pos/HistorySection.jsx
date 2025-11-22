@@ -391,11 +391,12 @@ const resolveEmployeeName = (employee) => {
 export default function HistorySection({ cashier: _cashier }) {
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false); // Prevent duplicate loads
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [displayCount, setDisplayCount] = useState(20); // Lazy loading
+  const [displayCount, setDisplayCount] = useState(50); // Lazy loading
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showChangePaymentModal, setShowChangePaymentModal] = useState(false);
   const [newPaymentMethod, setNewPaymentMethod] = useState("");
@@ -415,7 +416,7 @@ export default function HistorySection({ cashier: _cashier }) {
       setLoading(true);
       let allReceipts = [];
 
-      // Always try to fetch Firebase receipts if online
+      // Only fetch Firebase receipts (no offline data for initial load)
       if (isOnline) {
         try {
           const firebaseData = await receiptsService.getAll({
@@ -428,57 +429,114 @@ export default function HistorySection({ cashier: _cashier }) {
         }
       }
 
-      // Fetch local offline transactions from IndexedDB
-      try {
-        const localOrders = await dbService.getOrders({
-          // Get all orders, we'll filter and sort them later
-        });
-
-        // Convert local orders to receipt-like format
-        const localReceipts = localOrders.map((order) => ({
-          ...order,
-          // Map order fields to receipt fields for consistency
-          receiptNumber: order.orderNumber || order.id,
-          orderNumber: order.orderNumber || order.id,
-          customerName: order.customerName,
-          customerId: order.customerId,
-          employeeName: order.employeeName || order.cashierName,
-          employeeId: order.employeeId || order.cashierId,
-          cashierName: order.cashierName,
-          cashierId: order.cashierId,
-          source: "local",
-          syncStatus: order.syncStatus || "offline",
-          fromThisDevice: true,
-          // Convert order items to line items
-          lineItems: order.items || [],
-          payments: order.payments || [],
-          totalMoney: order.total || order.totalMoney || 0,
-          createdAt: order.createdAt,
-          receiptDate: order.createdAt,
-          // Add any other fields that might be needed
-        }));
-
-        // Only add local receipts if they don't exist in Firebase receipts
-        // Deduplicate by orderNumber or receiptNumber
-        const firebaseOrderNumbers = new Set(
-          allReceipts.map((r) => r.receiptNumber || r.orderNumber || r.id)
+      const normalized = allReceipts.map((receipt, index) => {
+        const receiptDate = getReceiptDate(receipt);
+        const lineItems = normalizeLineItems(
+          receipt.lineItems ||
+            receipt.line_items ||
+            receipt.items ||
+            receipt.receiptItems ||
+            receipt.receipt_items ||
+            []
         );
 
-        const uniqueLocalReceipts = localReceipts.filter((localReceipt) => {
-          const localOrderNum =
-            localReceipt.orderNumber ||
-            localReceipt.receiptNumber ||
-            localReceipt.id;
-          return !firebaseOrderNumbers.has(localOrderNum);
-        });
+        const enrichedReceipt = {
+          ...receipt,
+          lineItems,
+          totalMoney:
+            receipt.totalMoney || receipt.total_money || receipt.total || 0,
+          _receiptDate: receiptDate,
+        };
 
-        allReceipts = [...allReceipts, ...uniqueLocalReceipts];
-      } catch (error) {
-        console.warn("Failed to fetch local orders:", error);
+        const result = {
+          ...enrichedReceipt,
+          _searchPool: buildSearchPool(enrichedReceipt),
+        };
+
+        // Preserve the _docSnapshot getter for ALL receipts that have it
+        // (not just the last one, since sorting may change order)
+        if (receipt._docSnapshot) {
+          Object.defineProperty(result, "_docSnapshot", {
+            get() {
+              return receipt._docSnapshot;
+            },
+            enumerable: false,
+            configurable: true,
+          });
+        }
+
+        return result;
+      });
+      // No need to sort - Firebase already returned them sorted by createdAt desc
+      // Sorting would move the _docSnapshot to a different position!
+
+      console.log("Loaded initial receipts:", normalized.length);
+      console.log(
+        "Last receipt has _docSnapshot:",
+        !!normalized[normalized.length - 1]?._docSnapshot
+      );
+
+      setReceipts(normalized);
+
+      // Auto-select first receipt
+      if (normalized.length > 0 && !selectedReceipt) {
+        setSelectedReceipt(normalized[0]);
+      }
+    } catch (error) {
+      console.error("Error loading receipts:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMoreReceipts = async () => {
+    if (!isOnline || loadingMore) return; // Prevent duplicate calls
+
+    try {
+      setLoadingMore(true);
+
+      // Get the last receipt for pagination
+      const lastReceipt = receipts[receipts.length - 1];
+      if (!lastReceipt) {
+        setLoadingMore(false);
+        return;
       }
 
-      const normalized = allReceipts
-        .map((receipt) => {
+      console.log("Current last receipt ID:", lastReceipt.id);
+      console.log("Current last receipt date:", lastReceipt._receiptDate);
+
+      // Check if we have the DocumentSnapshot for pagination
+      const lastDocSnapshot = lastReceipt._docSnapshot;
+      if (!lastDocSnapshot) {
+        console.warn("No DocumentSnapshot available for pagination");
+        console.log("Last receipt keys:", Object.keys(lastReceipt));
+        setLoadingMore(false);
+        return;
+      }
+
+      console.log(
+        "Using DocumentSnapshot for pagination, doc.id:",
+        lastDocSnapshot.id
+      );
+
+      // Fetch the next batch of receipts starting after the last document
+      const moreFirebaseData = await receiptsService.getAll({
+        orderBy: ["createdAt", "desc"],
+        startAfter: lastDocSnapshot, // Use the DocumentSnapshot for proper pagination
+        limit: 50, // Load next 50 receipts
+      });
+
+      if (moreFirebaseData.length > 0) {
+        console.log(
+          `Loaded ${moreFirebaseData.length} more receipts from Firebase`
+        );
+        console.log("First receipt ID:", moreFirebaseData[0]?.id);
+        console.log(
+          "Last receipt ID:",
+          moreFirebaseData[moreFirebaseData.length - 1]?.id
+        );
+
+        const normalized = moreFirebaseData.map((receipt, index) => {
           const receiptDate = getReceiptDate(receipt);
           const lineItems = normalizeLineItems(
             receipt.lineItems ||
@@ -497,27 +555,47 @@ export default function HistorySection({ cashier: _cashier }) {
             _receiptDate: receiptDate,
           };
 
-          return {
+          // Preserve the _docSnapshot getter for the last receipt in the batch
+          const isLastInBatch = index === moreFirebaseData.length - 1;
+          const result = {
             ...enrichedReceipt,
             _searchPool: buildSearchPool(enrichedReceipt),
           };
-        })
-        .sort((a, b) => {
-          const dateA = a._receiptDate ? a._receiptDate.getTime() : 0;
-          const dateB = b._receiptDate ? b._receiptDate.getTime() : 0;
-          return dateB - dateA;
+
+          // If this is the last receipt and it has a _docSnapshot, preserve it
+          if (isLastInBatch && receipt._docSnapshot) {
+            Object.defineProperty(result, "_docSnapshot", {
+              get() {
+                return receipt._docSnapshot;
+              },
+              enumerable: false,
+              configurable: true,
+            });
+          }
+
+          return result;
         });
 
-      setReceipts(normalized);
+        // Deduplicate: Filter out receipts that already exist
+        setReceipts((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id));
+          const newReceipts = normalized.filter((r) => !existingIds.has(r.id));
 
-      // Auto-select first receipt
-      if (normalized.length > 0 && !selectedReceipt) {
-        setSelectedReceipt(normalized[0]);
+          console.log(
+            `Adding ${newReceipts.length} new receipts (${
+              normalized.length - newReceipts.length
+            } duplicates filtered)`
+          );
+
+          return [...prev, ...newReceipts];
+        });
+      } else {
+        console.log("No more receipts to load from Firebase");
       }
     } catch (error) {
-      console.error("Error loading receipts:", error);
+      console.error("Error loading more receipts:", error);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -533,7 +611,7 @@ export default function HistorySection({ cashier: _cashier }) {
 
   // Reset display count when search changes
   useEffect(() => {
-    setDisplayCount(20);
+    setDisplayCount(50);
   }, [searchQuery]);
 
   // Lazy loaded receipts
@@ -544,20 +622,36 @@ export default function HistorySection({ cashier: _cashier }) {
   // Group receipts by date
   const groupedReceipts = useMemo(() => {
     const groups = [];
-    let currentDate = null;
+    const receiptsByDate = new Map();
 
+    // Group receipts by date
     displayedReceipts.forEach((receipt) => {
       const receiptDate = receipt._receiptDate;
       if (!receiptDate) return;
 
       const dateStr = formatDate(receiptDate, "date"); // Format: "17 November 2025"
 
-      if (dateStr !== currentDate) {
-        currentDate = dateStr;
-        groups.push({ type: "header", date: dateStr });
+      if (!receiptsByDate.has(dateStr)) {
+        receiptsByDate.set(dateStr, []);
       }
+      receiptsByDate.get(dateStr).push(receipt);
+    });
 
-      groups.push({ type: "receipt", data: receipt });
+    // Sort dates in descending order (newest first)
+    const sortedDates = Array.from(receiptsByDate.keys()).sort((a, b) => {
+      // Parse dates and compare (assuming format is "DD Month YYYY")
+      const dateA = new Date(a.replace(/(\d+) (\w+) (\d+)/, "$2 $1, $3"));
+      const dateB = new Date(b.replace(/(\d+) (\w+) (\d+)/, "$2 $1, $3"));
+      return dateB - dateA;
+    });
+
+    // Build groups with headers
+    sortedDates.forEach((dateStr) => {
+      groups.push({ type: "header", date: dateStr });
+      const dateReceipts = receiptsByDate.get(dateStr);
+      dateReceipts.forEach((receipt) => {
+        groups.push({ type: "receipt", data: receipt });
+      });
     });
 
     return groups;
@@ -573,9 +667,13 @@ export default function HistorySection({ cashier: _cashier }) {
 
       // Load more when scrolled to 80% of the content
       if (scrollTop + clientHeight >= scrollHeight * 0.8) {
-        if (displayCount < filteredReceipts.length) {
+        // If we're showing all currently loaded receipts, try to load more from Firebase
+        if (displayCount >= receipts.length && isOnline && !loadingMore) {
+          loadMoreReceipts();
+        } else if (displayCount < filteredReceipts.length) {
+          // Otherwise, just show more of the already loaded receipts
           setDisplayCount((prev) =>
-            Math.min(prev + 20, filteredReceipts.length)
+            Math.min(prev + 50, filteredReceipts.length)
           );
         }
       }
@@ -583,7 +681,13 @@ export default function HistorySection({ cashier: _cashier }) {
 
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [displayCount, filteredReceipts.length]);
+  }, [
+    displayCount,
+    filteredReceipts.length,
+    receipts.length,
+    isOnline,
+    loadingMore,
+  ]);
 
   const handleViewDetails = (receipt) => {
     setSelectedReceipt(receipt);

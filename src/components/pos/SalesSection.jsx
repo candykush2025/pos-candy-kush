@@ -32,6 +32,7 @@ import {
 } from "@/lib/firebase/firestore";
 import { discountsService } from "@/lib/firebase/discountsService";
 import { shiftsService } from "@/lib/firebase/shiftsService";
+import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
 import { dbService } from "@/lib/db/dbService";
 import db from "@/lib/db/index";
 import { Button } from "@/components/ui/button";
@@ -162,6 +163,10 @@ export default function SalesSection({ cashier }) {
     setCustomer: setCartCustomer,
     setDiscount,
     discount: cartDiscount,
+    discounts: cartDiscounts,
+    addDiscount,
+    removeDiscount,
+    clearDiscounts,
   } = useCartStore();
 
   const { createTicket } = useTicketStore();
@@ -296,6 +301,10 @@ export default function SalesSection({ cashier }) {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [availableDiscounts, setAvailableDiscounts] = useState([]);
   const [selectedDiscount, setSelectedDiscount] = useState(null);
+  const [showCustomDiscountForm, setShowCustomDiscountForm] = useState(false);
+  const [customDiscountTitle, setCustomDiscountTitle] = useState("");
+  const [customDiscountType, setCustomDiscountType] = useState("percentage");
+  const [customDiscountValue, setCustomDiscountValue] = useState("");
 
   // Initialize device ID on first load
   useEffect(() => {
@@ -1656,19 +1665,79 @@ export default function SalesSection({ cashier }) {
       return;
     }
 
-    // Apply discount to cart
-    setDiscount(discount.type, discount.value);
-    setSelectedDiscount(discount);
-    setShowDiscountModal(false);
+    // Add discount to cart (supports multiple)
+    addDiscount({
+      id: discount.id,
+      name: discount.name,
+      type: discount.type,
+      value: discount.value,
+      isCustom: false,
+    });
 
-    toast.success(`Discount "${discount.name}" applied!`);
+    toast.success(
+      `Discount "${discount.name}" applied! (${
+        cartDiscounts.length + 1
+      } total discounts)`
+    );
   };
 
-  // Remove discount
-  const handleRemoveDiscount = () => {
-    setDiscount("percentage", 0);
-    setSelectedDiscount(null);
+  // Handle custom discount
+  const handleApplyCustomDiscount = () => {
+    // Validate inputs
+    if (!customDiscountTitle.trim()) {
+      toast.error("Please enter a discount title");
+      return;
+    }
+
+    const value = parseFloat(customDiscountValue);
+    if (isNaN(value) || value <= 0) {
+      toast.error("Please enter a valid discount value");
+      return;
+    }
+
+    if (customDiscountType === "percentage" && value > 100) {
+      toast.error("Percentage discount cannot exceed 100%");
+      return;
+    }
+
+    const subtotal = getSubtotal();
+    if (customDiscountType === "amount" && value > subtotal) {
+      toast.error("Discount amount cannot exceed subtotal");
+      return;
+    }
+
+    // Add custom discount to cart
+    addDiscount({
+      name: customDiscountTitle,
+      type: customDiscountType,
+      value: value,
+      isCustom: true,
+    });
+
+    // Reset form
+    setCustomDiscountTitle("");
+    setCustomDiscountValue("");
+    setCustomDiscountType("percentage");
+    setShowCustomDiscountForm(false);
+
+    toast.success(
+      `Custom discount "${customDiscountTitle}" applied! (${
+        cartDiscounts.length + 1
+      } total discounts)`
+    );
+  };
+
+  // Remove a specific discount
+  const handleRemoveDiscount = (discountId) => {
+    removeDiscount(discountId);
     toast.success("Discount removed");
+  };
+
+  // Remove all discounts
+  const handleRemoveAllDiscounts = () => {
+    clearDiscounts();
+    setSelectedDiscount(null);
+    toast.success("All discounts removed");
   };
 
   const handleSaveTicket = () => {
@@ -1738,6 +1807,30 @@ export default function SalesSection({ cashier }) {
       return;
     }
 
+    // Check if customer is expired
+    if (cartCustomer && cartCustomer.expiryDate) {
+      if (customerApprovalService.isCustomerExpired(cartCustomer.expiryDate)) {
+        toast.error(
+          `Customer "${cartCustomer.name}" membership has expired! Please extend the expiry date before checkout.`,
+          { duration: 5000 }
+        );
+        return;
+      }
+
+      // Warn if expiring soon
+      if (customerApprovalService.isExpiringSoon(cartCustomer.expiryDate)) {
+        const expiryStatus = customerApprovalService.getExpiryStatus(
+          cartCustomer.expiryDate
+        );
+        toast.warning(
+          `Customer "${
+            cartCustomer.name
+          }" ${expiryStatus.message.toLowerCase()}`,
+          { duration: 4000 }
+        );
+      }
+    }
+
     // Open payment modal
     setShowPaymentModal(true);
     setPaymentMethod("cash");
@@ -1804,6 +1897,7 @@ export default function SalesSection({ cashier }) {
         total_money: cartData.total,
         total_tax: 0,
         total_discount: cartData.discountAmount,
+        discounts: cartData.discounts || [], // Store multiple discounts
         subtotal: cartData.subtotal,
         tip: 0,
         surcharge: 0,
@@ -2127,6 +2221,9 @@ export default function SalesSection({ cashier }) {
       }
 
       toast.success("Payment completed successfully!");
+
+      // Clear cart immediately after successful payment
+      clearCart();
     } catch (error) {
       console.error("Checkout error:", error);
       toast.error("Failed to complete order");
@@ -2338,8 +2435,17 @@ export default function SalesSection({ cashier }) {
                     placeholder="Search products by name, barcode, or SKU..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 h-12 text-lg"
+                    className="pl-10 pr-10 h-12 text-lg"
                   />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                      type="button"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -3045,30 +3151,53 @@ export default function SalesSection({ cashier }) {
           {/* Cart Summary */}
           <div className="border-t p-4 space-y-3 flex-shrink-0">
             <div className="space-y-2">
-              {/* Show applied discount */}
-              {selectedDiscount && (
-                <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
-                  <div className="flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-green-600" />
-                    <div>
-                      <p className="text-sm font-medium text-green-900">
-                        {selectedDiscount.name}
-                      </p>
-                      <p className="text-xs text-green-600">
-                        {selectedDiscount.type === "percentage"
-                          ? `${selectedDiscount.value}% off`
-                          : `${formatCurrency(selectedDiscount.value)} off`}
-                      </p>
-                    </div>
+              {/* Show applied discounts */}
+              {cartDiscounts && cartDiscounts.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium flex items-center gap-2">
+                      <Tag className="h-4 w-4" />
+                      Applied Discounts ({cartDiscounts.length})
+                    </span>
+                    {cartDiscounts.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveAllDiscounts}
+                        className="h-6 text-xs text-red-600 hover:text-red-700"
+                      >
+                        Remove All
+                      </Button>
+                    )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRemoveDiscount}
-                    className="h-6 w-6 p-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  {cartDiscounts.map((discount) => (
+                    <div
+                      key={discount.id}
+                      className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Tag className="h-4 w-4 text-green-600" />
+                        <div>
+                          <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                            {discount.name}
+                          </p>
+                          <p className="text-xs text-green-600 dark:text-green-400">
+                            {discount.type === "percentage"
+                              ? `${discount.value}% off`
+                              : `${formatCurrency(discount.value)} off`}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveDiscount(discount.id)}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -3079,9 +3208,36 @@ export default function SalesSection({ cashier }) {
                     <span>Subtotal</span>
                     <span>{formatCurrency(getSubtotal())}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Discount</span>
-                    <span className="text-red-600">
+
+                  {/* Show individual discount breakdown */}
+                  {cartDiscounts &&
+                    cartDiscounts.length > 0 &&
+                    cartDiscounts.map((discount, index) => {
+                      // Calculate this discount's amount
+                      let discountAmount = 0;
+                      if (discount.type === "percentage") {
+                        const subtotal = getSubtotal();
+                        discountAmount = (subtotal * discount.value) / 100;
+                      } else {
+                        discountAmount = discount.value;
+                      }
+
+                      return (
+                        <div
+                          key={discount.id}
+                          className="flex justify-between text-xs text-gray-600 dark:text-gray-400 pl-2"
+                        >
+                          <span>• {discount.name}</span>
+                          <span className="text-red-600 dark:text-red-400">
+                            -{formatCurrency(discountAmount)}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Total Discount</span>
+                    <span className="text-red-600 dark:text-red-400">
                       -{formatCurrency(getDiscountAmount())}
                     </span>
                   </div>
@@ -3855,12 +4011,113 @@ export default function SalesSection({ cashier }) {
             <DialogHeader>
               <DialogTitle>Available Discounts</DialogTitle>
               <DialogDescription>
-                Select a discount to apply to your cart. Subtotal:{" "}
-                {formatCurrency(getSubtotal())}
+                Select discounts to apply to your cart. You can apply multiple
+                discounts. Subtotal: {formatCurrency(getSubtotal())}
+                {cartDiscounts && cartDiscounts.length > 0 && (
+                  <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
+                    ({cartDiscounts.length} discount
+                    {cartDiscounts.length !== 1 ? "s" : ""} applied)
+                  </span>
+                )}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
+              {/* Custom Discount Button */}
+              <Button
+                variant="outline"
+                className="w-full border-dashed border-2 border-green-600 text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
+                onClick={() =>
+                  setShowCustomDiscountForm(!showCustomDiscountForm)
+                }
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Custom Discount
+              </Button>
+
+              {/* Custom Discount Form */}
+              {showCustomDiscountForm && (
+                <div className="p-4 border border-green-300 dark:border-green-700 rounded-lg bg-green-50 dark:bg-green-900/10 space-y-4">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <Tag className="h-5 w-5 text-green-600" />
+                    Custom Discount
+                  </h3>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">
+                        Discount Title
+                      </label>
+                      <Input
+                        placeholder="e.g., Special Customer Discount"
+                        value={customDiscountTitle}
+                        onChange={(e) => setCustomDiscountTitle(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">
+                          Discount Type
+                        </label>
+                        <select
+                          className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
+                          value={customDiscountType}
+                          onChange={(e) =>
+                            setCustomDiscountType(e.target.value)
+                          }
+                        >
+                          <option value="percentage">Percentage (%)</option>
+                          <option value="amount">Fixed Amount</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">
+                          Discount Value
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder={
+                            customDiscountType === "percentage"
+                              ? "e.g., 10"
+                              : "e.g., 5000"
+                          }
+                          value={customDiscountValue}
+                          onChange={(e) =>
+                            setCustomDiscountValue(e.target.value)
+                          }
+                          min="0"
+                          step={
+                            customDiscountType === "percentage" ? "1" : "100"
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setShowCustomDiscountForm(false);
+                          setCustomDiscountTitle("");
+                          setCustomDiscountValue("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        onClick={handleApplyCustomDiscount}
+                      >
+                        Apply Custom Discount
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Discount List */}
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {availableDiscounts.length === 0 ? (

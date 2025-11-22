@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
+import { jwtUtils } from "@/lib/jwt";
 import { useCartStore } from "@/store/useCartStore";
 import { useSyncStore } from "@/store/useSyncStore";
 import useOnlineStatus from "@/hooks/useOnlineStatus";
@@ -62,7 +63,7 @@ import { formatCurrency } from "@/lib/utils/format";
 export default function POSLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, user, logout } = useAuthStore();
+  const { isAuthenticated, user, logout, token } = useAuthStore();
   const { status, isOnline, lastSyncTime, pendingCount } = useSyncStore();
   const onlineStatus = useOnlineStatus();
   const [cashier, setCashier] = useState(null);
@@ -213,7 +214,7 @@ export default function POSLayout({ children }) {
 
   const handleLogout = () => {
     logout();
-    router.push("/login");
+    router.push("/admin/dashboard");
   };
 
   // Lock screen - clear cashier session but keep data and shift active
@@ -271,15 +272,15 @@ export default function POSLayout({ children }) {
       console.log("✅ Complete cleanup finished!");
       toast.success("Logged out - All data cleared");
 
-      // Logout admin user and redirect to login page
+      // Logout admin user and redirect to admin dashboard (authentication bypassed)
       logout();
-      router.push("/login");
+      router.push("/admin/dashboard");
     } catch (error) {
       console.error("❌ Error during logout cleanup:", error);
       toast.error("Logout successful, but some data may remain cached");
       // Still proceed with logout even if cleanup fails
       logout();
-      router.push("/login");
+      router.push("/admin/dashboard");
     }
   };
 
@@ -430,7 +431,21 @@ export default function POSLayout({ children }) {
     }
   };
 
-  if (!isAuthenticated) {
+  // Check JWT token validity
+  const isTokenValid =
+    isAuthenticated &&
+    user &&
+    token &&
+    (() => {
+      try {
+        return jwtUtils.isValid(token);
+      } catch (error) {
+        console.error("JWT validation error:", error);
+        return false;
+      }
+    })();
+
+  if (!isTokenValid) {
     return null;
   }
 

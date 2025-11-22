@@ -3,7 +3,8 @@ import { nanoid } from "nanoid";
 
 export const useCartStore = create((set, get) => ({
   items: [],
-  discount: { type: "percentage", value: 0 },
+  discounts: [], // Changed to array to support multiple discounts
+  discount: { type: "percentage", value: 0 }, // Keep for backward compatibility
   tax: { rate: 0, amount: 0 },
   customer: null,
   notes: "",
@@ -121,6 +122,7 @@ export const useCartStore = create((set, get) => ({
   clearCart: () => {
     set({
       items: [],
+      discounts: [],
       discount: { type: "percentage", value: 0 },
       tax: { rate: 0, amount: 0 },
       customer: null,
@@ -130,7 +132,36 @@ export const useCartStore = create((set, get) => ({
     get().syncCartToAPI();
   },
 
-  // Set cart discount
+  // Add a discount (supports multiple)
+  addDiscount: (discount) => {
+    const { discounts } = get();
+    const newDiscount = {
+      id:
+        discount.id ||
+        `discount-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: discount.name || "Discount",
+      type: discount.type, // "percentage" or "amount"
+      value: discount.value,
+      isCustom: discount.isCustom || false,
+    };
+    set({ discounts: [...discounts, newDiscount] });
+    get().syncCartToAPI();
+  },
+
+  // Remove a specific discount
+  removeDiscount: (discountId) => {
+    const { discounts } = get();
+    set({ discounts: discounts.filter((d) => d.id !== discountId) });
+    get().syncCartToAPI();
+  },
+
+  // Clear all discounts
+  clearDiscounts: () => {
+    set({ discounts: [] });
+    get().syncCartToAPI();
+  },
+
+  // Set cart discount (legacy - for backward compatibility)
   setDiscount: (type, value) => {
     set({ discount: { type, value } });
     get().syncCartToAPI();
@@ -168,15 +199,30 @@ export const useCartStore = create((set, get) => ({
     return items.reduce((sum, item) => sum + item.total, 0);
   },
 
-  // Calculate discount amount
+  // Calculate discount amount (supports multiple discounts)
   getDiscountAmount: () => {
-    const { discount } = get();
+    const { discounts } = get();
     const subtotal = get().getSubtotal();
 
-    if (discount.type === "percentage") {
-      return (subtotal * discount.value) / 100;
-    }
-    return discount.value;
+    // Calculate total discount from all discounts
+    let totalDiscount = 0;
+    let remainingSubtotal = subtotal;
+
+    // Apply discounts sequentially (percentage discounts apply to remaining amount)
+    discounts.forEach((discount) => {
+      if (discount.type === "percentage") {
+        const discountAmount = (remainingSubtotal * discount.value) / 100;
+        totalDiscount += discountAmount;
+        remainingSubtotal -= discountAmount;
+      } else {
+        // Fixed amount discount
+        const discountAmount = Math.min(discount.value, remainingSubtotal);
+        totalDiscount += discountAmount;
+        remainingSubtotal -= discountAmount;
+      }
+    });
+
+    return totalDiscount;
   },
 
   // Calculate total
@@ -199,6 +245,7 @@ export const useCartStore = create((set, get) => ({
   loadCart: (cartData) => {
     set({
       items: cartData.items || [],
+      discounts: cartData.discounts || [],
       discount: cartData.discount || { type: "percentage", value: 0 },
       tax: cartData.tax || { rate: 0, amount: 0 },
       customer: cartData.customer || null,
@@ -217,6 +264,7 @@ export const useCartStore = create((set, get) => ({
 
     return {
       items: state.items,
+      discounts: state.discounts,
       discount: state.discount,
       tax: state.tax,
       customer: state.customer,
@@ -247,14 +295,13 @@ export const useCartStore = create((set, get) => ({
 
   // Generate receipt data for thermal printing
   generateReceiptData: (paymentData) => {
-    const { items, discount, tax, customer, notes } = get();
+    const { items, discounts, discount, tax, customer, notes } = get();
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-    const discountAmount =
-      discount.type === "percentage"
-        ? subtotal * (discount.value / 100)
-        : discount.value;
+
+    // Calculate total discount from multiple discounts
+    const discountAmount = get().getDiscountAmount();
     const discountedSubtotal = subtotal - discountAmount;
     const taxAmount =
       tax.rate > 0 ? discountedSubtotal * (tax.rate / 100) : tax.amount;
@@ -291,7 +338,17 @@ export const useCartStore = create((set, get) => ({
     receipt += `Subtotal: $${subtotal.toFixed(2)}\n`;
 
     if (discountAmount > 0) {
-      receipt += `Discount: -$${discountAmount.toFixed(2)}\n`;
+      // Show individual discounts if multiple
+      if (discounts && discounts.length > 0) {
+        discounts.forEach((disc) => {
+          const discValue =
+            disc.type === "percentage"
+              ? `${disc.value}%`
+              : `$${disc.value.toFixed(2)}`;
+          receipt += `  ${disc.name} (${discValue})\n`;
+        });
+      }
+      receipt += `Total Discount: -$${discountAmount.toFixed(2)}\n`;
     }
 
     if (taxAmount > 0) {

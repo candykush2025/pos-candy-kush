@@ -11,6 +11,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   serverTimestamp,
   onSnapshot,
   getDocsFromServer,
@@ -27,7 +28,7 @@ export const COLLECTIONS = {
   USERS: "users",
   PRODUCTS: "products",
   CATEGORIES: "categories",
-  ORDERS: "orders",
+  ORDERS: "receipts",
   RECEIPTS: "receipts",
   CUSTOMERS: "customers",
   SESSIONS: "sessions",
@@ -117,6 +118,10 @@ export const getDocuments = async (collectionName, options = {}) => {
       }
     }
 
+    if (options.startAfter) {
+      q = query(q, startAfter(options.startAfter));
+    }
+
     if (options.limit) {
       q = query(q, limit(options.limit));
     }
@@ -124,17 +129,45 @@ export const getDocuments = async (collectionName, options = {}) => {
     // FORCE FETCH FROM SERVER - NOT CACHE!
     const querySnapshot = await getDocsFromServer(q);
 
-    const results = querySnapshot.docs.map((doc) => {
+    // Store the last document snapshot for pagination
+    const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+
+    const results = querySnapshot.docs.map((doc, index) => {
       const data = doc.data();
+      const isLast = index === querySnapshot.docs.length - 1;
+
       // CRITICAL: Use Firestore Document ID, not the "id" field inside the document
       // The spread operator was overwriting doc.id with data.id
-      return {
+      const result = {
         ...data,
         id: doc.id, // ✅ Force Document ID to override any "id" field in data
         _firestoreId: doc.id, // Backup: Store the real Firestore ID
         _dataId: data.id, // Backup: Store the old "id" field for reference
       };
+
+      // Store DocumentSnapshot only for the last document (for pagination)
+      // Must use Object.defineProperty because spread operator doesn't copy getters
+      if (isLast) {
+        Object.defineProperty(result, "_docSnapshot", {
+          get() {
+            return doc;
+          },
+          enumerable: false, // Won't be serialized to IndexedDB
+          configurable: true,
+        });
+      }
+
+      return result;
     });
+
+    // Attach the lastDoc to the results array for pagination
+    if (lastDoc) {
+      Object.defineProperty(results, "_lastDocSnapshot", {
+        value: lastDoc,
+        enumerable: false, // Won't be serialized
+        configurable: true,
+      });
+    }
 
     return results;
   } catch (error) {

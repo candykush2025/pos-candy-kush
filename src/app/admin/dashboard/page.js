@@ -99,6 +99,32 @@ const resolveMoneyValue = (value) => {
 };
 
 export default function AdminDashboard() {
+  // Custom tooltip component that adapts to theme
+  const CustomTooltip = ({ active, payload, label, formatter }) => {
+    if (active && payload && payload.length) {
+      const isDark = document.documentElement.classList.contains("dark");
+      return (
+        <div
+          className={`rounded-lg border p-2 shadow-md ${
+            isDark
+              ? "bg-neutral-800 border-neutral-700 text-neutral-100"
+              : "bg-white border-neutral-200 text-neutral-900"
+          }`}
+        >
+          <p className="font-medium">{`${label}`}</p>
+          {payload.map((entry, index) => (
+            <p key={index} style={{ color: entry.color }} className="text-sm">
+              {`${entry.name}: ${
+                formatter ? formatter(entry.value) : entry.value
+              }`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
   const [stats, setStats] = useState({
     totalRevenue: 0,
     todayRevenue: 0,
@@ -1411,8 +1437,11 @@ export default function AdminDashboard() {
                     />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip
-                      formatter={(value) => formatCurrency(value)}
-                      contentStyle={{ fontSize: "12px" }}
+                      content={
+                        <CustomTooltip
+                          formatter={(value) => formatCurrency(value)}
+                        />
+                      }
                     />
                     <Bar
                       dataKey="revenue"
@@ -1443,8 +1472,11 @@ export default function AdminDashboard() {
                     <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip
-                      formatter={(value) => formatCurrency(value)}
-                      contentStyle={{ fontSize: "12px" }}
+                      content={
+                        <CustomTooltip
+                          formatter={(value) => formatCurrency(value)}
+                        />
+                      }
                     />
                     <Line
                       type="monotone"

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
+import { jwtUtils } from "@/lib/jwt";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +39,7 @@ import {
 export default function AdminLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, user, logout } = useAuthStore();
+  const { isAuthenticated, user, logout, token } = useAuthStore();
   const [expandedMenus, setExpandedMenus] = useState({});
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -56,7 +57,7 @@ export default function AdminLayout({ children }) {
   }, []);
 
   // Pages that don't require authentication
-  const publicPages = ["/admin/setup", "/admin/quickfix"];
+  const publicPages = ["/admin/setup", "/admin/quickfix", "/admin/debug"];
   const isPublicPage = publicPages.includes(pathname);
 
   // Auto-expand Products menu if on a products sub-route
@@ -92,7 +93,21 @@ export default function AdminLayout({ children }) {
       return;
     }
 
-    if (!isAuthenticated) {
+    // Check JWT token validity
+    const isTokenValid =
+      isAuthenticated &&
+      user &&
+      (() => {
+        try {
+          return jwtUtils.isValid(token);
+        } catch (error) {
+          console.error("JWT validation error:", error);
+          return false;
+        }
+      })();
+
+    if (!isTokenValid) {
+      // Token invalid or expired - redirect to login
       router.push("/login");
       return;
     }
@@ -100,11 +115,11 @@ export default function AdminLayout({ children }) {
     if (user?.role !== "admin") {
       router.push("/pos/sales");
     }
-  }, [isAuthenticated, user, router, isPublicPage]);
+  }, [isAuthenticated, user, token, router, isPublicPage]);
 
   const handleLogout = () => {
     logout();
-    router.push("/login");
+    router.push("/admin/dashboard");
   };
 
   // Render public pages without layout
@@ -112,7 +127,20 @@ export default function AdminLayout({ children }) {
     return <>{children}</>;
   }
 
-  if (!isAuthenticated || user?.role !== "admin") {
+  // Check JWT token validity for rendering
+  const isTokenValid =
+    isAuthenticated &&
+    user &&
+    (() => {
+      try {
+        return jwtUtils.isValid(token);
+      } catch (error) {
+        console.error("JWT validation error:", error);
+        return false;
+      }
+    })();
+
+  if (!isTokenValid || user?.role !== "admin") {
     return null;
   }
 
