@@ -21,8 +21,9 @@ export const jwtUtils = {
         typ: "JWT",
       };
 
-      // Set expiration to 1 day from now, unless already specified
-      const exp = payload.exp || Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 1 day
+      // Set expiration to 99 days from now, unless already specified
+      const exp =
+        payload.exp || Math.floor(Date.now() / 1000) + 99 * 24 * 60 * 60; // 99 days
       const data = {
         ...payload,
         exp,

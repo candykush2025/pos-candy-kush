@@ -306,6 +306,10 @@ export default function SalesSection({ cashier }) {
   const [customDiscountType, setCustomDiscountType] = useState("percentage");
   const [customDiscountValue, setCustomDiscountValue] = useState("");
 
+  // Barcode scanner state
+  const [barcodeBuffer, setBarcodeBuffer] = useState("");
+  const [lastKeyTime, setLastKeyTime] = useState(0);
+
   // Initialize device ID on first load
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -432,6 +436,73 @@ export default function SalesSection({ cashier }) {
       window.history.replaceState({}, "", url);
     }
   }, [selectedCategory]);
+
+  // Barcode scanner listener
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTime;
+
+      // If more than 100ms since last keypress, start new barcode scan
+      if (timeDiff > 100) {
+        setBarcodeBuffer(event.key);
+      } else {
+        // Continue building barcode
+        setBarcodeBuffer((prev) => prev + event.key);
+      }
+      setLastKeyTime(currentTime);
+
+      // Check for Enter key (barcode scan complete)
+      if (event.key === "Enter") {
+        const scannedCode = barcodeBuffer.trim();
+        if (scannedCode) {
+          processScannedBarcode(scannedCode);
+        }
+        setBarcodeBuffer("");
+      }
+    };
+
+    // Only listen when component is mounted and customers are loaded
+    if (customers.length > 0) {
+      document.addEventListener("keydown", handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [customers, barcodeBuffer, lastKeyTime]);
+
+  // Cart clearing timer - check every 10 seconds if cart is empty and clear API cart
+  useEffect(() => {
+    const cartClearingTimer = setInterval(async () => {
+      // Check if cart is empty (no items and no customer)
+      const isCartEmpty = items.length === 0 && !cartCustomer;
+
+      if (isCartEmpty) {
+        try {
+          // Clear the cart API
+          const response = await fetch("/api/cart", {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (response.ok) {
+            console.log("Cart API cleared due to empty local cart");
+          } else {
+            console.warn("Failed to clear cart API:", response.status);
+          }
+        } catch (error) {
+          console.error("Error clearing cart API:", error);
+        }
+      }
+    }, 10000); // 10 seconds
+
+    return () => {
+      clearInterval(cartClearingTimer);
+    };
+  }, [items.length, cartCustomer]);
 
   const loadCustomTabsFromUser = async () => {
     if (!userId || products.length === 0) return;
@@ -893,6 +964,30 @@ export default function SalesSection({ cashier }) {
     } catch (error) {
       console.error("Error loading customers:", error);
       toast.error("Failed to load customers");
+    }
+  };
+
+  // Process scanned barcode to find matching customer
+  const processScannedBarcode = (scannedCode) => {
+    if (!scannedCode || !customers.length) return;
+
+    // Look for customer where customerId or memberId matches the scanned code
+    const matchingCustomer = customers.find(
+      (customer) =>
+        customer.customerId === scannedCode || customer.memberId === scannedCode
+    );
+
+    if (matchingCustomer) {
+      // Set the customer in the cart
+      setCartCustomer(matchingCustomer);
+      toast.success(
+        `Customer "${matchingCustomer.name}" selected via barcode scan`
+      );
+      console.log("Barcode scan matched customer:", matchingCustomer);
+    } else {
+      console.log("No customer found for barcode:", scannedCode);
+      // Optional: Could show a subtle notification that no customer was found
+      // toast.info("Customer not found for scanned barcode");
     }
   };
 

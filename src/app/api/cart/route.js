@@ -193,3 +193,46 @@ export async function PUT(request) {
     );
   }
 }
+
+export async function DELETE() {
+  try {
+    // Clear the cart
+    currentCart = {
+      items: [],
+      discount: { type: "percentage", value: 0 },
+      tax: { rate: 0, amount: 0 },
+      customer: null,
+      notes: "",
+      total: 0,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    return new NextResponse(
+      JSON.stringify({
+        success: true,
+        message: "Cart cleared successfully",
+        cart: currentCart,
+        timestamp: currentCart.lastUpdated,
+      }),
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Error clearing cart:", error);
+    return new NextResponse(
+      JSON.stringify({
+        success: false,
+        error: "Failed to clear cart",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      }
+    );
+  }
+}
