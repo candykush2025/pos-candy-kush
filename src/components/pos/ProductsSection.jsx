@@ -149,6 +149,15 @@ export default function ProductsSection() {
 
               // If there's a history entry, use its newStock value
               if (history.length > 0) {
+                // Debug only for Tyson Watermelon
+                if (product.name.includes("Tyson Watermelon")) {
+                  console.log(`🍉 TYSON - Stock from History:`, {
+                    originalStock: product.stock,
+                    originalInStock: product.inStock,
+                    historyNewStock: history[0].newStock,
+                    willUpdateTo: history[0].newStock,
+                  });
+                }
                 return {
                   ...product,
                   stock: history[0].newStock,
@@ -163,9 +172,19 @@ export default function ProductsSection() {
           }
 
           // If no stock history or not tracking stock, use the product's stock value
+          const finalStock = product.stock || product.inStock || 0;
+          // Debug only for Tyson Watermelon
+          if (product.name.includes("Tyson Watermelon")) {
+            console.log(`🍉 TYSON - Stock Fallback (no history):`, {
+              originalStock: product.stock,
+              originalInStock: product.inStock,
+              finalStock: finalStock,
+              trackStock: product.trackStock,
+            });
+          }
           return {
             ...product,
-            stock: product.stock || product.inStock || 0,
+            stock: finalStock,
           };
         })
       );
@@ -400,6 +419,22 @@ export default function ProductsSection() {
   };
 
   const handleEditProduct = (product) => {
+    // Debug only for Tyson Watermelon
+    if (product.name.includes("Tyson Watermelon")) {
+      console.log("=".repeat(80));
+      console.log("🍉 TYSON WATERMELON - EDIT CLICKED!");
+      console.log("=".repeat(80));
+      console.log("Stock Fields:", {
+        productStock: product.stock,
+        productInStock: product.inStock,
+        willSetInStockTo: product.stock || product.inStock || "",
+        trackStock: product.trackStock,
+        lowStock: product.lowStock,
+      });
+      console.log("Full Product:", product);
+      console.log("=".repeat(80));
+    }
+
     setEditingProduct(product);
     // Resolve any existing image from common fields so we don't lose it
     const existingImage =
@@ -425,7 +460,8 @@ export default function ProductsSection() {
       sku: initialSku,
       barcode: product.barcode || "",
       trackStock: product.trackStock || false,
-      inStock: product.stock || product.inStock || "",
+      inStock:
+        product.stock !== undefined ? product.stock : product.inStock || "",
       lowStock: product.lowStock || "",
       // If there's any existing image, prefer image representation
       representationType: existingImage ? "image" : "color",
@@ -925,53 +961,72 @@ export default function ProductsSection() {
                         </p>
                       </div>
                     ) : (
-                      filteredProducts.map((product) => (
-                        <div
-                          key={product.id}
-                          onClick={() => handleEditProduct(product)}
-                          className="flex items-center gap-4 p-4 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
-                        >
-                          {/* Image/Color */}
-                          {getProductDisplay(product)}
+                      filteredProducts.map((product) => {
+                        // Debug log for Tyson Watermelon
+                        if (product.name.includes("Tyson Watermelon")) {
+                          console.log(
+                            `📺 [POS DISPLAY DEBUG] Rendering "${product.name}":`,
+                            {
+                              productId: product.id,
+                              stock: product.stock,
+                              inStock: product.inStock,
+                              displayingStockValue: product.stock || 0,
+                              trackStock: product.trackStock,
+                              lowStock: product.lowStock,
+                            }
+                          );
+                        }
 
-                          {/* Product Info */}
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-lg">
-                              {product.name}
-                            </h3>
-                            <p className="text-sm text-neutral-500">
-                              {product.sku && `SKU: ${product.sku}`}
-                              {product.sku &&
-                                (product.categoryId || product.categoryName) &&
-                                " • "}
-                              {getCategoryName(
-                                product.categoryId,
-                                product.categoryName
-                              )}
-                            </p>
-                            {product.trackStock && (
-                              <p className="text-xs text-neutral-400 mt-1">
-                                Stock: {product.stock || 0}
-                                {product.lowStock &&
-                                  ` (Low: ${product.lowStock})`}
+                        return (
+                          <div
+                            key={product.id}
+                            onClick={() => handleEditProduct(product)}
+                            className="flex items-center gap-4 p-4 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
+                          >
+                            {/* Image/Color */}
+                            {getProductDisplay(product)}
+
+                            {/* Product Info */}
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-lg">
+                                {product.name}
+                              </h3>
+                              <p className="text-sm text-neutral-500">
+                                {product.sku && `SKU: ${product.sku}`}
+                                {product.sku &&
+                                  (product.categoryId ||
+                                    product.categoryName) &&
+                                  " • "}
+                                {getCategoryName(
+                                  product.categoryId,
+                                  product.categoryName
+                                )}
                               </p>
-                            )}
-                          </div>
-
-                          {/* Price */}
-                          <div className="text-right">
-                            <div className="text-xl font-bold text-green-600">
-                              {formatCurrency(product.price || 0)}
-                            </div>
-                            {product.memberPrice &&
-                              product.memberPrice !== product.price && (
-                                <div className="text-sm text-orange-600 font-medium">
-                                  Member: {formatCurrency(product.memberPrice)}
-                                </div>
+                              {product.trackStock && (
+                                <p className="text-xs text-neutral-400 mt-1">
+                                  Stock: {product.stock || 0}
+                                  {product.lowStock &&
+                                    ` (Low: ${product.lowStock})`}
+                                </p>
                               )}
+                            </div>
+
+                            {/* Price */}
+                            <div className="text-right">
+                              <div className="text-xl font-bold text-green-600">
+                                {formatCurrency(product.price || 0)}
+                              </div>
+                              {product.memberPrice &&
+                                product.memberPrice !== product.price && (
+                                  <div className="text-sm text-orange-600 font-medium">
+                                    Member:{" "}
+                                    {formatCurrency(product.memberPrice)}
+                                  </div>
+                                )}
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </>
                 )}

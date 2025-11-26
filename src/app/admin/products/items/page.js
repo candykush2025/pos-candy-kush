@@ -1074,7 +1074,7 @@ export default function ItemListPage() {
   };
 
   const handleEdit = (product) => {
-    console.log("🔍 Editing product:", {
+    console.log(" Editing product:", {
       name: product.name,
       categoryId: product.categoryId,
       availableCategories: categories.map((c) => ({ id: c.id, name: c.name })),
