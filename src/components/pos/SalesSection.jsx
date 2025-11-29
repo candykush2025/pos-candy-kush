@@ -3134,7 +3134,6 @@ export default function SalesSection({ cashier }) {
                 // Check if we should show member pricing
                 const hasCustomer = !!cartCustomer;
                 const hasMemberPrice =
-                  item.source === "kiosk" &&
                   item.memberPrice &&
                   item.originalPrice &&
                   item.memberPrice < item.originalPrice;

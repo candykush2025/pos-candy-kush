@@ -18,7 +18,6 @@ export const useCartStore = create((set, get) => ({
     // Determine price to use (member price if available and customer is attached)
     const hasCustomer = !!customer;
     const hasMemberPrice =
-      product.source === "kiosk" &&
       product.memberPrice &&
       product.memberPrice < product.price;
     const usePrice =
@@ -175,9 +174,31 @@ export const useCartStore = create((set, get) => ({
     get().syncCartToAPI();
   },
 
-  // Set customer
+  // Set customer and recalculate prices for member pricing
   setCustomer: (customer) => {
-    set({ customer });
+    const { items } = get();
+    
+    // Recalculate prices for all items based on customer status
+    const updatedItems = items.map((item) => {
+      const hasCustomer = !!customer;
+      const hasMemberPrice =
+        item.memberPrice &&
+        item.originalPrice &&
+        item.memberPrice < item.originalPrice;
+      
+      // Use member price if customer exists and member price is available
+      const newPrice = hasCustomer && hasMemberPrice 
+        ? item.memberPrice 
+        : item.originalPrice || item.price;
+      
+      return {
+        ...item,
+        price: newPrice,
+        total: (newPrice - item.discount) * item.quantity,
+      };
+    });
+    
+    set({ customer, items: updatedItems });
     get().syncCartToAPI();
   },
 
