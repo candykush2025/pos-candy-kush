@@ -15,6 +15,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -29,16 +30,19 @@ import {
   Receipt,
   ChevronLeft,
   ChevronRight,
-  Filter,
   X,
   ArrowRight,
   Clock,
   CheckCircle,
   XCircle,
   Edit2,
+  Calendar,
+  Loader2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { toast } from "sonner";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export default function AdminOrders() {
   const [receipts, setReceipts] = useState([]);
@@ -51,6 +55,7 @@ export default function AdminOrders() {
   const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState(null);
   const [editedPaymentMethod, setEditedPaymentMethod] = useState("");
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [processingRequestId, setProcessingRequestId] = useState(null); // Track which request is being processed
 
   // Filter states
   const [dateRange, setDateRange] = useState("today"); // today, yesterday, this_week, last_week, this_month, last_month, custom, all
@@ -58,9 +63,13 @@ export default function AdminOrders() {
   const [customEndDate, setCustomEndDate] = useState("");
   const [receiptTypeFilter, setReceiptTypeFilter] = useState("all"); // all, SALE, REFUND
   const [sourceFilter, setSourceFilter] = useState("all"); // all, point of sale, etc.
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState("all"); // all, Cash, Card, Transfer, Crypto
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+
+  // Date picker modal state
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [tempDateRange, setTempDateRange] = useState([null, null]);
 
   useEffect(() => {
     loadReceipts();
@@ -322,28 +331,40 @@ export default function AdminOrders() {
   };
 
   // Handle approve payment change
-  const handleApprovePaymentChange = async (receipt) => {
-    if (!receipt.pendingPaymentChange) return;
+  const handleApprovePaymentChange = async (receipt, request = null) => {
+    // If no pendingPaymentChange on receipt, use the request data directly
+    const changeData = receipt?.pendingPaymentChange || request;
+    if (!changeData) return;
 
     try {
-      const newPaymentMethod = receipt.pendingPaymentChange.newMethod;
-      const existingHistory = receipt.paymentHistory || [];
+      const newPaymentMethod =
+        changeData.newMethod || changeData.newPaymentMethod;
+      const receiptId = receipt?.id || request?.receiptId;
 
-      await receiptsService.update(receipt.id, {
+      // Fetch the actual receipt to get the latest data
+      const actualReceipt = await receiptsService.get(receiptId);
+      if (!actualReceipt) {
+        toast.error("Receipt not found");
+        return;
+      }
+
+      const existingHistory = actualReceipt.paymentHistory || [];
+
+      await receiptsService.update(receiptId, {
         payments: [
           {
             name: newPaymentMethod,
-            amount: receipt.totalMoney || receipt.total_money || 0,
+            amount: actualReceipt.totalMoney || actualReceipt.total_money || 0,
             type: newPaymentMethod.toLowerCase(),
           },
         ],
         paymentHistory: [
           ...existingHistory,
           {
-            oldMethod: receipt.pendingPaymentChange.oldMethod,
+            oldMethod: changeData.oldMethod || changeData.oldPaymentMethod,
             newMethod: newPaymentMethod,
             changedAt: new Date().toISOString(),
-            changedBy: receipt.pendingPaymentChange.requestedByName,
+            changedBy: changeData.requestedByName,
             approvedBy: "admin",
             status: "approved",
           },
@@ -353,15 +374,13 @@ export default function AdminOrders() {
       });
 
       // Update the edit request status
-      if (receipt.pendingPaymentChange.requestId) {
-        await receiptsService.updateEditRequest(
-          receipt.pendingPaymentChange.requestId,
-          {
-            status: "approved",
-            approvedAt: new Date().toISOString(),
-            approvedBy: "admin",
-          }
-        );
+      const requestId = changeData.requestId || request?.id;
+      if (requestId) {
+        await receiptsService.updateEditRequest(requestId, {
+          status: "approved",
+          approvedAt: new Date().toISOString(),
+          approvedBy: "admin",
+        });
       }
 
       toast.success("Payment method change approved");
@@ -374,25 +393,26 @@ export default function AdminOrders() {
   };
 
   // Handle decline payment change
-  const handleDeclinePaymentChange = async (receipt) => {
-    if (!receipt.pendingPaymentChange) return;
+  const handleDeclinePaymentChange = async (receipt, request = null) => {
+    const changeData = receipt?.pendingPaymentChange || request;
+    if (!changeData) return;
 
     try {
-      await receiptsService.update(receipt.id, {
+      const receiptId = receipt?.id || request?.receiptId;
+
+      await receiptsService.update(receiptId, {
         hasPendingPaymentChange: false,
         pendingPaymentChange: null,
       });
 
       // Update the edit request status
-      if (receipt.pendingPaymentChange.requestId) {
-        await receiptsService.updateEditRequest(
-          receipt.pendingPaymentChange.requestId,
-          {
-            status: "declined",
-            declinedAt: new Date().toISOString(),
-            declinedBy: "admin",
-          }
-        );
+      const requestId = changeData.requestId || request?.id;
+      if (requestId) {
+        await receiptsService.updateEditRequest(requestId, {
+          status: "declined",
+          declinedAt: new Date().toISOString(),
+          declinedBy: "admin",
+        });
       }
 
       toast.success("Payment method change declined");
@@ -416,27 +436,33 @@ export default function AdminOrders() {
     if (!selectedReceiptForEdit || !editedPaymentMethod) return;
 
     try {
-      const existingHistory = selectedReceiptForEdit.paymentHistory || [];
+      // Fetch the actual receipt to get the latest data
+      const actualReceipt = await receiptsService.get(
+        selectedReceiptForEdit.id
+      );
+      if (!actualReceipt) {
+        toast.error("Receipt not found");
+        return;
+      }
+
+      const existingHistory = actualReceipt.paymentHistory || [];
+      const pendingChange = selectedReceiptForEdit.pendingPaymentChange;
 
       await receiptsService.update(selectedReceiptForEdit.id, {
         payments: [
           {
             name: editedPaymentMethod,
-            amount:
-              selectedReceiptForEdit.totalMoney ||
-              selectedReceiptForEdit.total_money ||
-              0,
+            amount: actualReceipt.totalMoney || actualReceipt.total_money || 0,
             type: editedPaymentMethod.toLowerCase(),
           },
         ],
         paymentHistory: [
           ...existingHistory,
           {
-            oldMethod: selectedReceiptForEdit.pendingPaymentChange.oldMethod,
+            oldMethod: pendingChange?.oldMethod || "Unknown",
             newMethod: editedPaymentMethod,
             changedAt: new Date().toISOString(),
-            changedBy:
-              selectedReceiptForEdit.pendingPaymentChange.requestedByName,
+            changedBy: pendingChange?.requestedByName || "Unknown",
             approvedBy: "admin",
             status: "approved_edited",
           },
@@ -446,16 +472,13 @@ export default function AdminOrders() {
       });
 
       // Update the edit request status
-      if (selectedReceiptForEdit.pendingPaymentChange.requestId) {
-        await receiptsService.updateEditRequest(
-          selectedReceiptForEdit.pendingPaymentChange.requestId,
-          {
-            status: "approved",
-            approvedAt: new Date().toISOString(),
-            approvedBy: "admin",
-            finalPaymentMethod: editedPaymentMethod,
-          }
-        );
+      if (pendingChange?.requestId) {
+        await receiptsService.updateEditRequest(pendingChange.requestId, {
+          status: "approved",
+          approvedAt: new Date().toISOString(),
+          approvedBy: "admin",
+          finalPaymentMethod: editedPaymentMethod,
+        });
       }
 
       toast.success("Payment method updated successfully");
@@ -504,6 +527,33 @@ export default function AdminOrders() {
     // Source filter
     const sourceMatch = sourceFilter === "all" || r.source === sourceFilter;
 
+    // Payment type filter
+    const getPaymentMethod = (receipt) => {
+      if (receipt.payments && receipt.payments.length > 0) {
+        return (
+          receipt.payments[0].name ||
+          receipt.payments[0].payment_type?.name ||
+          "Cash"
+        );
+      }
+      return receipt.paymentMethod || receipt.paymentTypeName || "Cash";
+    };
+    const receiptPaymentMethod = getPaymentMethod(r);
+
+    // Normalize payment method for comparison (handle Transfer/Bank Transfer variations)
+    const normalizePaymentMethod = (method) => {
+      const lowerMethod = method.toLowerCase();
+      if (lowerMethod.includes("transfer") || lowerMethod.includes("bank")) {
+        return "transfer";
+      }
+      return lowerMethod;
+    };
+
+    const paymentMatch =
+      paymentTypeFilter === "all" ||
+      normalizePaymentMethod(receiptPaymentMethod) ===
+        normalizePaymentMethod(paymentTypeFilter);
+
     // Amount range filter
     const totalAmount = r.totalMoney || r.total_money || 0;
     const minAmountMatch = !minAmount || totalAmount >= parseFloat(minAmount);
@@ -513,6 +563,7 @@ export default function AdminOrders() {
       searchMatch &&
       typeMatch &&
       sourceMatch &&
+      paymentMatch &&
       minAmountMatch &&
       maxAmountMatch
     );
@@ -527,7 +578,14 @@ export default function AdminOrders() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, receiptTypeFilter, sourceFilter, minAmount, maxAmount]);
+  }, [
+    searchQuery,
+    receiptTypeFilter,
+    sourceFilter,
+    paymentTypeFilter,
+    minAmount,
+    maxAmount,
+  ]);
 
   // Get unique sources for filter dropdown
   const uniqueSources = [
@@ -670,69 +728,67 @@ export default function AdminOrders() {
                       size="sm"
                       variant="outline"
                       className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      disabled={processingRequestId === request.id}
                       onClick={async () => {
-                        // Find the receipt and approve
-                        const receipt = receipts.find(
-                          (r) => r.id === request.receiptId
-                        );
-                        if (receipt) {
-                          await handleApprovePaymentChange({
-                            ...receipt,
-                            pendingPaymentChange: {
-                              oldMethod: request.oldPaymentMethod,
-                              newMethod: request.newPaymentMethod,
-                              requestedByName: request.requestedByName,
-                              requestId: request.id,
-                            },
-                          });
+                        setProcessingRequestId(request.id);
+                        try {
+                          await handleApprovePaymentChange(null, request);
+                        } finally {
+                          setProcessingRequestId(null);
                         }
                       }}
                     >
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Approve
+                      {processingRequestId === request.id ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                      )}
+                      {processingRequestId === request.id
+                        ? "Processing..."
+                        : "Approve"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      disabled={processingRequestId === request.id}
                       onClick={async () => {
-                        // Find the receipt and decline
-                        const receipt = receipts.find(
-                          (r) => r.id === request.receiptId
-                        );
-                        if (receipt) {
-                          await handleDeclinePaymentChange({
-                            ...receipt,
-                            pendingPaymentChange: {
-                              requestId: request.id,
-                            },
-                          });
+                        setProcessingRequestId(request.id);
+                        try {
+                          await handleDeclinePaymentChange(null, request);
+                        } finally {
+                          setProcessingRequestId(null);
                         }
                       }}
                     >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Decline
+                      {processingRequestId === request.id ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mr-1" />
+                      )}
+                      {processingRequestId === request.id
+                        ? "Processing..."
+                        : "Decline"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      disabled={processingRequestId === request.id}
                       onClick={() => {
-                        // Find the receipt and edit
-                        const receipt = receipts.find(
-                          (r) => r.id === request.receiptId
-                        );
-                        if (receipt) {
-                          handleEditPaymentChange({
-                            ...receipt,
-                            pendingPaymentChange: {
-                              oldMethod: request.oldPaymentMethod,
-                              newMethod: request.newPaymentMethod,
-                              requestedByName: request.requestedByName,
-                              requestId: request.id,
-                            },
-                          });
-                        }
+                        // For edit, we need the receipt for the amount display
+                        handleEditPaymentChange({
+                          id: request.receiptId,
+                          receiptNumber: request.receiptNumber,
+                          totalMoney:
+                            request.amount || request.originalAmount || 0,
+                          pendingPaymentChange: {
+                            oldMethod: request.oldPaymentMethod,
+                            newMethod: request.newPaymentMethod,
+                            requestedByName: request.requestedByName,
+                            requestId: request.id,
+                          },
+                        });
                       }}
                     >
                       <Edit2 className="h-4 w-4 mr-1" />
@@ -746,200 +802,274 @@ export default function AdminOrders() {
         </Card>
       )}
 
-      {/* Date Range Selection */}
+      {/* Unified Search & Filters */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-          {/* Quick Date Range Tabs */}
-          <div>
-            <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
-              Quick Date Range
-            </label>
-            <Tabs
-              value={dateRange}
-              onValueChange={setDateRange}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8">
-                <TabsTrigger value="today">Today</TabsTrigger>
-                <TabsTrigger value="yesterday">Yesterday</TabsTrigger>
-                <TabsTrigger value="this_week">This Week</TabsTrigger>
-                <TabsTrigger value="last_week">Last Week</TabsTrigger>
-                <TabsTrigger value="this_month">This Month</TabsTrigger>
-                <TabsTrigger value="last_month">Last Month</TabsTrigger>
-                <TabsTrigger value="custom">Custom</TabsTrigger>
-                <TabsTrigger value="all">All</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          {/* Custom Date Range Picker */}
-          {dateRange === "custom" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div>
-                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
-                  Start Date
-                </label>
-                <Input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  max={customEndDate || new Date().toISOString().split("T")[0]}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
-                  End Date
-                </label>
-                <Input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  min={customStartDate}
-                  max={new Date().toISOString().split("T")[0]}
-                  className="w-full"
-                />
-              </div>
-              {customStartDate && customEndDate && (
-                <div className="md:col-span-2 text-sm text-blue-700 dark:text-blue-400 bg-white dark:bg-blue-900/20 p-2 rounded border border-blue-200 dark:border-blue-800">
-                  📅 Showing receipts from{" "}
-                  {new Date(customStartDate).toLocaleDateString()} to{" "}
-                  {new Date(customEndDate).toLocaleDateString()}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Date Range Info */}
-          {dateRange !== "custom" && dateRange !== "all" && (
-            <div className="text-sm text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-gray-800 p-3 rounded-lg">
-              📅 <strong>Showing:</strong>{" "}
-              {dateRange === "today"
-                ? "Today's receipts"
-                : dateRange === "yesterday"
-                ? "Yesterday's receipts"
-                : dateRange === "this_week"
-                ? "This week's receipts (Sunday - Today)"
-                : dateRange === "last_week"
-                ? "Last week's receipts (Sunday - Saturday)"
-                : dateRange === "this_month"
-                ? "This month's receipts"
-                : dateRange === "last_month"
-                ? "Last month's receipts"
-                : ""}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Search & Filters */}
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          {/* Search Bar */}
-          <div className="flex gap-2">
+          {/* Search Bar Row */}
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400 dark:text-neutral-500" />
               <Input
-                placeholder="Search by receipt ID, customer, employee, source..."
+                placeholder="Search by receipt ID, customer, employee..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
             </div>
-            <Button
-              variant={showFilters ? "default" : "outline"}
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filters
-            </Button>
-          </div>
 
-          {/* Advanced Filters */}
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-neutral-50 dark:bg-gray-800 rounded-lg">
-              {/* Receipt Type Filter */}
-              <div>
-                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
-                  Receipt Type
-                </label>
-                <select
-                  value={receiptTypeFilter}
-                  onChange={(e) => setReceiptTypeFilter(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm"
-                >
-                  <option value="all">All Types</option>
-                  <option value="SALE">Sale</option>
-                  <option value="REFUND">Refund</option>
-                </select>
-              </div>
+            {/* Quick Date Range Dropdown for Mobile / Tabs for Desktop */}
+            <div className="hidden lg:block">
+              <Tabs
+                value={dateRange}
+                onValueChange={(value) => {
+                  if (value === "custom") {
+                    // Open date picker modal immediately
+                    setTempDateRange([
+                      customStartDate ? new Date(customStartDate) : null,
+                      customEndDate ? new Date(customEndDate) : null,
+                    ]);
+                    setShowDatePickerModal(true);
+                  } else {
+                    setDateRange(value);
+                    // Clear custom dates when switching to other options
+                    setCustomStartDate("");
+                    setCustomEndDate("");
+                  }
+                }}
+                className="w-auto"
+              >
+                <TabsList className="grid grid-cols-8 h-9">
+                  <TabsTrigger value="today" className="text-xs px-2">
+                    Today
+                  </TabsTrigger>
+                  <TabsTrigger value="yesterday" className="text-xs px-2">
+                    Yesterday
+                  </TabsTrigger>
+                  <TabsTrigger value="this_week" className="text-xs px-2">
+                    This Week
+                  </TabsTrigger>
+                  <TabsTrigger value="last_week" className="text-xs px-2">
+                    Last Week
+                  </TabsTrigger>
+                  <TabsTrigger value="this_month" className="text-xs px-2">
+                    This Month
+                  </TabsTrigger>
+                  <TabsTrigger value="last_month" className="text-xs px-2">
+                    Last Month
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="custom"
+                    className="text-xs px-2"
+                    onClick={() => {
+                      // Always open modal when clicking custom tab (even if already selected)
+                      if (dateRange === "custom") {
+                        setTempDateRange([
+                          customStartDate ? new Date(customStartDate) : null,
+                          customEndDate ? new Date(customEndDate) : null,
+                        ]);
+                        setShowDatePickerModal(true);
+                      }
+                    }}
+                  >
+                    {dateRange === "custom" &&
+                    customStartDate &&
+                    customEndDate ? (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {new Date(customStartDate).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                        {" - "}
+                        {new Date(customEndDate).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    ) : (
+                      "Custom"
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="all" className="text-xs px-2">
+                    All
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
 
-              {/* Source Filter */}
-              <div>
-                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
-                  Source
-                </label>
-                <select
-                  value={sourceFilter}
-                  onChange={(e) => setSourceFilter(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm"
-                >
-                  <option value="all">All Sources</option>
-                  {uniqueSources.map((source) => (
-                    <option key={source} value={source}>
-                      {source}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Min Amount */}
-              <div>
-                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
-                  Min Amount (฿)
-                </label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={minAmount}
-                  onChange={(e) => setMinAmount(e.target.value)}
-                  className="text-sm"
-                />
-              </div>
-
-              {/* Max Amount */}
-              <div>
-                <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2 block">
-                  Max Amount (฿)
-                </label>
-                <Input
-                  type="number"
-                  placeholder="∞"
-                  value={maxAmount}
-                  onChange={(e) => setMaxAmount(e.target.value)}
-                  className="text-sm"
-                />
-              </div>
-
-              {/* Clear Filters */}
-              <div className="md:col-span-4 flex justify-end">
+            {/* Mobile Date Range Select */}
+            <div className="lg:hidden flex gap-2">
+              <select
+                value={dateRange}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === "custom") {
+                    setTempDateRange([
+                      customStartDate ? new Date(customStartDate) : null,
+                      customEndDate ? new Date(customEndDate) : null,
+                    ]);
+                    setShowDatePickerModal(true);
+                  } else {
+                    setDateRange(value);
+                    setCustomStartDate("");
+                    setCustomEndDate("");
+                  }
+                }}
+                className="w-full sm:w-auto px-3 py-2 border rounded-md text-sm bg-background"
+              >
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="this_week">This Week</option>
+                <option value="last_week">Last Week</option>
+                <option value="this_month">This Month</option>
+                <option value="last_month">Last Month</option>
+                <option value="custom">
+                  {dateRange === "custom" && customStartDate && customEndDate
+                    ? `${new Date(customStartDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })} - ${new Date(customEndDate).toLocaleDateString(
+                        "en-US",
+                        { month: "short", day: "numeric" }
+                      )}`
+                    : "Custom Range"}
+                </option>
+                <option value="all">All Time</option>
+              </select>
+              {/* Edit button for custom date on mobile */}
+              {dateRange === "custom" && customStartDate && customEndDate && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   onClick={() => {
-                    setReceiptTypeFilter("all");
-                    setSourceFilter("all");
-                    setMinAmount("");
-                    setMaxAmount("");
-                    setSearchQuery("");
+                    setTempDateRange([
+                      new Date(customStartDate),
+                      new Date(customEndDate),
+                    ]);
+                    setShowDatePickerModal(true);
                   }}
+                  className="px-2"
                 >
-                  <X className="h-4 w-4 mr-2" />
-                  Clear All Filters
+                  <Calendar className="h-4 w-4" />
                 </Button>
-              </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Filter Pills Row */}
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Receipt Type */}
+            <select
+              value={receiptTypeFilter}
+              onChange={(e) => setReceiptTypeFilter(e.target.value)}
+              className={`px-3 py-1.5 border rounded-full text-sm transition-colors ${
+                receiptTypeFilter !== "all"
+                  ? "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300"
+                  : "bg-background hover:bg-neutral-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              <option value="all">All Types</option>
+              <option value="SALE">🛒 Sale</option>
+              <option value="REFUND">↩️ Refund</option>
+            </select>
+
+            {/* Payment Type */}
+            <select
+              value={paymentTypeFilter}
+              onChange={(e) => setPaymentTypeFilter(e.target.value)}
+              className={`px-3 py-1.5 border rounded-full text-sm transition-colors ${
+                paymentTypeFilter !== "all"
+                  ? "bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300"
+                  : "bg-background hover:bg-neutral-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              <option value="all">All Payments</option>
+              <option value="Cash">💵 Cash</option>
+              <option value="Card">💳 Card</option>
+              <option value="Transfer">🏦 Transfer</option>
+              <option value="Crypto">₿ Crypto</option>
+            </select>
+
+            {/* Source */}
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className={`px-3 py-1.5 border rounded-full text-sm transition-colors ${
+                sourceFilter !== "all"
+                  ? "bg-purple-100 border-purple-300 text-purple-800 dark:bg-purple-900/30 dark:border-purple-700 dark:text-purple-300"
+                  : "bg-background hover:bg-neutral-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              <option value="all">All Sources</option>
+              {uniqueSources.map((source) => (
+                <option key={source} value={source}>
+                  📍 {source}
+                </option>
+              ))}
+            </select>
+
+            {/* Amount Range */}
+            <div className="flex items-center gap-1 px-2 py-1 border rounded-full bg-background">
+              <span className="text-xs text-neutral-500">฿</span>
+              <Input
+                type="number"
+                placeholder="Min"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+                className="w-16 h-6 text-xs border-0 p-0 focus-visible:ring-0 bg-transparent"
+              />
+              <span className="text-neutral-400">-</span>
+              <Input
+                type="number"
+                placeholder="Max"
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+                className="w-16 h-6 text-xs border-0 p-0 focus-visible:ring-0 bg-transparent"
+              />
+            </div>
+
+            {/* Clear Filters - only show when filters are active */}
+            {(receiptTypeFilter !== "all" ||
+              sourceFilter !== "all" ||
+              paymentTypeFilter !== "all" ||
+              minAmount ||
+              maxAmount ||
+              searchQuery) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setReceiptTypeFilter("all");
+                  setSourceFilter("all");
+                  setPaymentTypeFilter("all");
+                  setMinAmount("");
+                  setMaxAmount("");
+                  setSearchQuery("");
+                }}
+                className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Clear
+              </Button>
+            )}
+
+            {/* Results Count */}
+            <div className="ml-auto text-sm text-neutral-500 dark:text-neutral-400">
+              {filteredReceipts.length} receipt
+              {filteredReceipts.length !== 1 ? "s" : ""}
+              {dateRange !== "all" && dateRange !== "custom" && (
+                <span className="hidden sm:inline">
+                  {" "}
+                  •{" "}
+                  {dateRange === "today"
+                    ? "Today"
+                    : dateRange === "yesterday"
+                    ? "Yesterday"
+                    : dateRange.replace("_", " ")}
+                </span>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -1409,6 +1539,76 @@ export default function AdminOrders() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Date Range Picker Modal */}
+      <Dialog open={showDatePickerModal} onOpenChange={setShowDatePickerModal}>
+        <DialogContent className="sm:max-w-sm p-4">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-center">Select Date Range</DialogTitle>
+            <DialogDescription className="text-center text-sm">
+              Click start date, then end date
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center px-0">
+            <DatePicker
+              selectsRange={true}
+              startDate={tempDateRange[0]}
+              endDate={tempDateRange[1]}
+              onChange={(update) => {
+                setTempDateRange(update);
+              }}
+              maxDate={new Date()}
+              inline
+              monthsShown={1}
+            />
+          </div>
+          {tempDateRange[0] && tempDateRange[1] && (
+            <div className="text-center text-sm text-blue-600 dark:text-blue-400 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              📅{" "}
+              {tempDateRange[0].toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+              })}
+              {" → "}
+              {tempDateRange[1].toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </div>
+          )}
+          <DialogFooter className="flex gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDatePickerModal(false);
+                setTempDateRange([null, null]);
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!tempDateRange[0] || !tempDateRange[1]}
+              onClick={() => {
+                if (tempDateRange[0] && tempDateRange[1]) {
+                  setCustomStartDate(
+                    tempDateRange[0].toISOString().split("T")[0]
+                  );
+                  setCustomEndDate(
+                    tempDateRange[1].toISOString().split("T")[0]
+                  );
+                  setDateRange("custom"); // Set dateRange to custom so the tab shows the dates
+                  setShowDatePickerModal(false);
+                }
+              }}
+              className="flex-1"
+            >
+              Apply
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

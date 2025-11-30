@@ -775,7 +775,33 @@ export default function HistorySection({ cashier: _cashier }) {
   const handleChangePaymentRequest = async () => {
     if (!selectedReceipt || !newPaymentMethod) return;
 
+    // Check if there's already a pending request for this receipt
+    if (selectedReceipt.hasPendingPaymentChange) {
+      alert(
+        "This receipt already has a pending payment change request. Please wait for admin approval before making another request."
+      );
+      return;
+    }
+
     try {
+      // Double-check by querying existing pending requests for this receipt
+      const existingRequests = await receiptsService.getEditRequests({
+        orderBy: ["requestedAt", "desc"],
+      });
+      const hasPendingRequest = existingRequests.some(
+        (r) =>
+          r.receiptId === selectedReceipt.id &&
+          r.status === "pending" &&
+          r.type === "payment_change"
+      );
+
+      if (hasPendingRequest) {
+        alert(
+          "This receipt already has a pending payment change request. Please wait for admin approval."
+        );
+        return;
+      }
+
       setSubmittingChangeRequest(true);
       const oldPaymentMethod = getPaymentSummary(selectedReceipt);
 
@@ -979,12 +1005,45 @@ export default function HistorySection({ cashier: _cashier }) {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowChangePaymentModal(true)}
-                    className="flex items-center gap-2"
+                    disabled={selectedReceipt.hasPendingPaymentChange}
+                    className={`flex items-center gap-2 ${
+                      selectedReceipt.hasPendingPaymentChange
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                    title={
+                      selectedReceipt.hasPendingPaymentChange
+                        ? "Waiting for admin approval"
+                        : ""
+                    }
                   >
                     <Edit2 className="h-4 w-4" />
-                    Change Payment
+                    {selectedReceipt.hasPendingPaymentChange
+                      ? "Pending Approval"
+                      : "Change Payment"}
                   </Button>
                 </div>
+
+                {/* Pending Payment Change Warning */}
+                {selectedReceipt.hasPendingPaymentChange && (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
+                      <span className="text-lg">⏳</span>
+                      <span>
+                        <strong>Payment change pending:</strong> A request to
+                        change payment from{" "}
+                        <strong>
+                          {selectedReceipt.pendingPaymentChange?.oldMethod}
+                        </strong>{" "}
+                        to{" "}
+                        <strong>
+                          {selectedReceipt.pendingPaymentChange?.newMethod}
+                        </strong>{" "}
+                        is waiting for admin approval.
+                      </span>
+                    </p>
+                  </div>
+                )}
 
                 {/* Total Amount - Center */}
                 <div className="text-center py-6">
