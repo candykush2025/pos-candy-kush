@@ -876,15 +876,35 @@ export default function AdminOrders() {
                     customEndDate ? (
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {new Date(customStartDate).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                        {" - "}
-                        {new Date(customEndDate).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {customStartDate === customEndDate ? (
+                          // Single day selected
+                          new Date(customStartDate).toLocaleDateString(
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                            }
+                          )
+                        ) : (
+                          // Date range selected
+                          <>
+                            {new Date(customStartDate).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                              }
+                            )}
+                            {" - "}
+                            {new Date(customEndDate).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                              }
+                            )}
+                          </>
+                        )}
                       </span>
                     ) : (
                       "Custom"
@@ -1548,7 +1568,7 @@ export default function AdminOrders() {
           <DialogHeader className="pb-2">
             <DialogTitle className="text-center">Select Date Range</DialogTitle>
             <DialogDescription className="text-center text-sm">
-              Click start date, then end date
+              Click a date twice for single day, or select start & end
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-center px-0">
@@ -1557,7 +1577,20 @@ export default function AdminOrders() {
               startDate={tempDateRange[0]}
               endDate={tempDateRange[1]}
               onChange={(update) => {
-                setTempDateRange(update);
+                const [start, end] = update;
+                // If user clicks the same date as start (and no end yet), set both to same date
+                if (
+                  start &&
+                  !end &&
+                  tempDateRange[0] &&
+                  start.toDateString() === tempDateRange[0].toDateString() &&
+                  !tempDateRange[1]
+                ) {
+                  // Double click on same date - set as single day range
+                  setTempDateRange([start, start]);
+                } else {
+                  setTempDateRange(update);
+                }
               }}
               maxDate={new Date()}
               inline
@@ -1567,16 +1600,29 @@ export default function AdminOrders() {
           {tempDateRange[0] && tempDateRange[1] && (
             <div className="text-center text-sm text-blue-600 dark:text-blue-400 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
               📅{" "}
-              {tempDateRange[0].toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })}
-              {" → "}
-              {tempDateRange[1].toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
+              {tempDateRange[0].toDateString() ===
+              tempDateRange[1].toDateString() ? (
+                // Single day
+                tempDateRange[0].toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              ) : (
+                // Date range
+                <>
+                  {tempDateRange[0].toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                  {" → "}
+                  {tempDateRange[1].toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </>
+              )}
             </div>
           )}
           <DialogFooter className="flex gap-2 sm:gap-2">
@@ -1594,12 +1640,15 @@ export default function AdminOrders() {
               disabled={!tempDateRange[0] || !tempDateRange[1]}
               onClick={() => {
                 if (tempDateRange[0] && tempDateRange[1]) {
-                  setCustomStartDate(
-                    tempDateRange[0].toISOString().split("T")[0]
-                  );
-                  setCustomEndDate(
-                    tempDateRange[1].toISOString().split("T")[0]
-                  );
+                  // Use local date format to avoid timezone issues
+                  const formatLocalDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, "0");
+                    const day = String(date.getDate()).padStart(2, "0");
+                    return `${year}-${month}-${day}`;
+                  };
+                  setCustomStartDate(formatLocalDate(tempDateRange[0]));
+                  setCustomEndDate(formatLocalDate(tempDateRange[1]));
                   setDateRange("custom"); // Set dateRange to custom so the tab shows the dates
                   setShowDatePickerModal(false);
                 }

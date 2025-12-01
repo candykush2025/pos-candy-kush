@@ -39,7 +39,7 @@ import {
 export default function AdminLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, user, logout, token } = useAuthStore();
+  const { isAuthenticated, user, logout, token, _hasHydrated } = useAuthStore();
   const [expandedMenus, setExpandedMenus] = useState({});
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -93,6 +93,11 @@ export default function AdminLayout({ children }) {
       return;
     }
 
+    // Wait for hydration to complete before checking auth
+    if (!_hasHydrated) {
+      return;
+    }
+
     // Check JWT token validity
     const isTokenValid =
       isAuthenticated &&
@@ -115,7 +120,7 @@ export default function AdminLayout({ children }) {
     if (user?.role !== "admin") {
       router.push("/pos/sales");
     }
-  }, [isAuthenticated, user, token, router, isPublicPage]);
+  }, [isAuthenticated, user, token, router, isPublicPage, _hasHydrated]);
 
   const handleLogout = () => {
     logout();
@@ -125,6 +130,18 @@ export default function AdminLayout({ children }) {
   // Render public pages without layout
   if (isPublicPage) {
     return <>{children}</>;
+  }
+
+  // Wait for hydration before rendering - show loading state
+  if (!_hasHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-neutral-950">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   // Check JWT token validity for rendering

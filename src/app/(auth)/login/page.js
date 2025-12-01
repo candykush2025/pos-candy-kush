@@ -20,7 +20,7 @@ import { APKInstallPrompt } from "@/components/APKInstallPrompt";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated, user, setAuth, setLoading, setError, token } =
+  const { isAuthenticated, user, setAuth, setLoading, setError, token, _hasHydrated } =
     useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,28 +29,28 @@ export default function LoginPage() {
 
   // Check if user is already authenticated on mount
   useEffect(() => {
-    // Small delay to ensure Zustand persist has hydrated
-    const timer = setTimeout(() => {
-      // Check if JWT token is valid
-      const isTokenValid = token && jwtUtils.isValid(token);
+    // Wait for Zustand persist to hydrate
+    if (!_hasHydrated) {
+      return;
+    }
 
-      if (isAuthenticated && user && isTokenValid) {
-        console.log(
-          "User already authenticated with valid JWT, redirecting..."
-        );
-        // Redirect based on role
-        if (user.role === "admin") {
-          router.push("/admin/dashboard");
-        } else {
-          router.push("/sales");
-        }
+    // Check if JWT token is valid
+    const isTokenValid = token && jwtUtils.isValid(token);
+
+    if (isAuthenticated && user && isTokenValid) {
+      console.log(
+        "User already authenticated with valid JWT, redirecting..."
+      );
+      // Redirect based on role
+      if (user.role === "admin") {
+        router.push("/admin/dashboard");
       } else {
-        setIsCheckingAuth(false);
+        router.push("/sales");
       }
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [isAuthenticated, user, token, router]);
+    } else {
+      setIsCheckingAuth(false);
+    }
+  }, [isAuthenticated, user, token, router, _hasHydrated]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

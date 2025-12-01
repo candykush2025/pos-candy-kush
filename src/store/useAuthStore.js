@@ -12,6 +12,12 @@ export const useAuthStore = create(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      _hasHydrated: false, // Track hydration status
+
+      // Set hydration complete
+      setHasHydrated: (state) => {
+        set({ _hasHydrated: state });
+      },
 
       // Initialize auth state from stored token
       initializeAuth: () => {
@@ -136,6 +142,10 @@ export const useAuthStore = create(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Called when hydration is complete
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
