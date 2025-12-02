@@ -20,8 +20,15 @@ import { APKInstallPrompt } from "@/components/APKInstallPrompt";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated, user, setAuth, setLoading, setError, token, _hasHydrated } =
-    useAuthStore();
+  const {
+    isAuthenticated,
+    user,
+    setAuth,
+    setLoading,
+    setError,
+    token,
+    _hasHydrated,
+  } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -38,9 +45,7 @@ export default function LoginPage() {
     const isTokenValid = token && jwtUtils.isValid(token);
 
     if (isAuthenticated && user && isTokenValid) {
-      console.log(
-        "User already authenticated with valid JWT, redirecting..."
-      );
+      console.log("User already authenticated with valid JWT, redirecting...");
       // Redirect based on role
       if (user.role === "admin") {
         router.push("/admin/dashboard");
