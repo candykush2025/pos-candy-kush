@@ -367,7 +367,7 @@ export default function CustomersPage() {
       dateOfBirth: customer.dateOfBirth || "",
       email: customer.email || "",
       cell: customer.cell || customer.phone || "",
-      memberId: customer.memberId || customer.customerId || "",
+      memberId: customer.customerId || customer.memberId || "",
       customPoints: customer.customPoints || 0,
       isNoMember: customer.isNoMember || false,
       isActive: customer.isActive !== false,
@@ -452,17 +452,17 @@ export default function CustomersPage() {
     }
 
     try {
-      // Generate customerId for new customers
-      let customerId = editingCustomer?.customerId;
+      // Generate customerId for new customers, or use the form value if editing
+      let customerId = formData.memberId || editingCustomer?.customerId;
       if (!customerId) {
         const customerCount = customers.length + 1;
         customerId = `CK-${customerCount.toString().padStart(4, "0")}`;
       }
 
       const customerData = {
-        // Customer Identification
+        // Customer Identification - both fields should be the same
         customerId: customerId,
-        memberId: formData.memberId || customerId,
+        memberId: customerId,
 
         // Personal Information (required)
         name: formData.name.trim(),
