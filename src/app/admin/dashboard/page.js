@@ -623,14 +623,18 @@ export default function AdminDashboard() {
         // Create a map of item_id -> categoryId for quick lookup
         const itemCategoryMap = {};
         products.forEach((product) => {
-          if (product.id && product.categoryId) {
-            itemCategoryMap[product.id] = product.categoryId;
+          // Support both categoryId (camelCase) and category_id (snake_case)
+          const catId = product.categoryId || product.category_id;
+          if (product.id && catId) {
+            itemCategoryMap[product.id] = catId;
           }
         });
 
         receipts = receipts.filter((receipt) => {
-          if (receipt.lineItems && Array.isArray(receipt.lineItems)) {
-            const hasCategory = receipt.lineItems.some((item) => {
+          // Handle both lineItems (camelCase) and line_items (snake_case)
+          const items = receipt.lineItems || receipt.line_items || [];
+          if (items && Array.isArray(items) && items.length > 0) {
+            const hasCategory = items.some((item) => {
               // Get category from product using item_id
               const itemCategory = itemCategoryMap[item.item_id];
               const matches = itemCategory === selectedCategory;

@@ -65,14 +65,21 @@ export const shiftsService = {
 
     // If multiple active shifts exist (legacy issue), close them all
     if (activeShifts.length > 1) {
-      console.log(`Found ${activeShifts.length} active shifts for user ${userName}, auto-closing all...`);
+      console.log(
+        `Found ${activeShifts.length} active shifts for user ${userName}, auto-closing all...`
+      );
       for (const shift of activeShifts) {
-        await this.autoCloseShift(shift.id, "Auto-closed: Multiple shifts detected");
+        await this.autoCloseShift(
+          shift.id,
+          "Auto-closed: Multiple shifts detected"
+        );
       }
       // After closing all, proceed to create a new shift
     } else if (activeShifts.length === 1) {
       // If exactly one active shift exists, return it (continue with existing shift)
-      console.log(`User ${userName} already has an active shift, continuing with existing shift`);
+      console.log(
+        `User ${userName} already has an active shift, continuing with existing shift`
+      );
       return activeShifts[0];
     }
 

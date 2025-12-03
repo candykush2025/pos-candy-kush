@@ -117,9 +117,10 @@ export default function ShiftsSection({ cashier }) {
       setShowStartShiftModal(false);
       setStartingCash("");
       loadShifts();
-      
+
       // Check if this is an existing shift
-      const isExistingShift = shift.transactionCount > 0 || shift.totalSales > 0;
+      const isExistingShift =
+        shift.transactionCount > 0 || shift.totalSales > 0;
       if (isExistingShift) {
         toast.success("Continuing existing shift!");
       } else {

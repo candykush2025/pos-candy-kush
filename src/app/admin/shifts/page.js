@@ -369,11 +369,14 @@ export default function AdminShifts() {
       setSelectedUser(null);
       setStartingCash("");
       loadShifts();
-      
+
       // Check if this is an existing shift
-      const isExistingShift = shift.transactionCount > 0 || shift.totalSales > 0;
+      const isExistingShift =
+        shift.transactionCount > 0 || shift.totalSales > 0;
       if (isExistingShift) {
-        toast.success(`${selectedUser.name} already has an active shift - continuing it`);
+        toast.success(
+          `${selectedUser.name} already has an active shift - continuing it`
+        );
       } else {
         toast.success(`Shift opened for ${selectedUser.name}`);
       }

@@ -160,11 +160,14 @@ function CashierLogin({ onLogin }) {
         // Login cashier with shift
         onLogin(pendingCashier, shift);
         setShowStartingCashModal(false);
-        
+
         // Check if this is an existing shift (has transactions or different starting cash)
-        const isExistingShift = shift.transactionCount > 0 || shift.totalSales > 0;
+        const isExistingShift =
+          shift.transactionCount > 0 || shift.totalSales > 0;
         if (isExistingShift) {
-          toast.success(`Welcome back, ${pendingCashier.name}! Continuing existing shift.`);
+          toast.success(
+            `Welcome back, ${pendingCashier.name}! Continuing existing shift.`
+          );
         } else {
           toast.success(`Shift started! Welcome, ${pendingCashier.name}!`);
         }
