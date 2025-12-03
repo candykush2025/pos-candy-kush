@@ -593,7 +593,8 @@ export default function POSNewProductPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                          Low Stock Alert <span className="text-red-500">*</span>
+                          Low Stock Alert{" "}
+                          <span className="text-red-500">*</span>
                         </label>
                         <Input
                           type="number"

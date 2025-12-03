@@ -15,8 +15,68 @@ import { db } from "./config";
 const COLLECTION_NAME = "shifts";
 
 export const shiftsService = {
-  // Create a new shift when cashier logs in
+  // Get all active shifts for a user
+  async getActiveShifts(userId) {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where("userId", "==", userId),
+      where("status", "==", "active")
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+  },
+
+  // Auto-close a shift with expected cash (for cleaning up old shifts)
+  async autoCloseShift(shiftId, reason = "Auto-closed due to new shift") {
+    const docRef = doc(db, COLLECTION_NAME, shiftId);
+    const shiftSnap = await getDoc(docRef);
+
+    if (!shiftSnap.exists()) {
+      return null;
+    }
+
+    const shift = shiftSnap.data();
+    const expectedCash = shift.expectedCash || shift.startingCash || 0;
+
+    const updateData = {
+      endTime: Timestamp.now(),
+      actualCash: expectedCash, // Use expected cash as actual
+      endingCash: expectedCash,
+      variance: 0, // No variance when auto-closing
+      status: "completed",
+      notes: shift.notes ? `${shift.notes} | ${reason}` : reason,
+      updatedAt: Timestamp.now(),
+      autoClosedAt: Timestamp.now(),
+      autoCloseReason: reason,
+    };
+
+    await updateDoc(docRef, updateData);
+    return { id: shiftId, ...shift, ...updateData };
+  },
+
+  // Create a new shift OR return existing active shift
   async createShift(shiftData, userId, userName) {
+    // Get all active shifts for this user
+    const activeShifts = await this.getActiveShifts(userId);
+
+    // If multiple active shifts exist (legacy issue), close them all
+    if (activeShifts.length > 1) {
+      console.log(`Found ${activeShifts.length} active shifts for user ${userName}, auto-closing all...`);
+      for (const shift of activeShifts) {
+        await this.autoCloseShift(shift.id, "Auto-closed: Multiple shifts detected");
+      }
+      // After closing all, proceed to create a new shift
+    } else if (activeShifts.length === 1) {
+      // If exactly one active shift exists, return it (continue with existing shift)
+      console.log(`User ${userName} already has an active shift, continuing with existing shift`);
+      return activeShifts[0];
+    }
+
+    // Create new shift
     const docRef = doc(collection(db, COLLECTION_NAME));
     const shift = {
       ...shiftData,

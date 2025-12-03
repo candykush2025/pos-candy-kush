@@ -11,6 +11,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -30,6 +31,8 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export default function AdminShifts() {
   const [shifts, setShifts] = useState([]);
@@ -53,6 +56,10 @@ export default function AdminShifts() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [userReport, setUserReport] = useState(null);
+
+  // Date picker modal state
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [tempDateRange, setTempDateRange] = useState([null, null]);
 
   useEffect(() => {
     loadShifts();
@@ -352,7 +359,7 @@ export default function AdminShifts() {
         return;
       }
 
-      await shiftsService.createShift(
+      const shift = await shiftsService.createShift(
         { startingCash: parseFloat(startingCash) },
         selectedUser.id,
         selectedUser.name
@@ -362,10 +369,17 @@ export default function AdminShifts() {
       setSelectedUser(null);
       setStartingCash("");
       loadShifts();
-      toast.success(`Shift opened for ${selectedUser.name}`);
+      
+      // Check if this is an existing shift
+      const isExistingShift = shift.transactionCount > 0 || shift.totalSales > 0;
+      if (isExistingShift) {
+        toast.success(`${selectedUser.name} already has an active shift - continuing it`);
+      } else {
+        toast.success(`Shift opened for ${selectedUser.name}`);
+      }
     } catch (error) {
       console.error("Error opening shift:", error);
-      toast.error("Failed to open shift");
+      toast.error(error.message || "Failed to open shift");
     }
   };
 
@@ -613,7 +627,7 @@ export default function AdminShifts() {
             </div>
 
             {/* User and Date Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* User Filter */}
               <div>
                 <label className="text-sm font-medium mb-2 block">
@@ -638,45 +652,67 @@ export default function AdminShifts() {
                 <label className="text-sm font-medium mb-2 block">
                   Date Range
                 </label>
-                <select
-                  value={dateFilterType}
-                  onChange={(e) => setDateFilterType(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                >
-                  <option value="all">All Time</option>
-                  <option value="today">Today</option>
-                  <option value="week">Last 7 Days</option>
-                  <option value="month">This Month</option>
-                  <option value="year">This Year</option>
-                  <option value="custom">Custom Range</option>
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={dateFilterType}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === "custom") {
+                        setTempDateRange([
+                          startDate ? new Date(startDate) : null,
+                          endDate ? new Date(endDate) : null,
+                        ]);
+                        setShowDatePickerModal(true);
+                      } else {
+                        setDateFilterType(value);
+                        setStartDate("");
+                        setEndDate("");
+                      }
+                    }}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  >
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="week">Last 7 Days</option>
+                    <option value="month">This Month</option>
+                    <option value="year">This Year</option>
+                    <option value="custom">
+                      {dateFilterType === "custom" && startDate && endDate
+                        ? startDate === endDate
+                          ? new Date(startDate).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          : `${new Date(startDate).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })} - ${new Date(endDate).toLocaleDateString(
+                              "en-US",
+                              { month: "short", day: "numeric" }
+                            )}`
+                        : "Custom Range"}
+                    </option>
+                  </select>
+                  {/* Edit button for custom date */}
+                  {dateFilterType === "custom" && startDate && endDate && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setTempDateRange([
+                          new Date(startDate),
+                          new Date(endDate),
+                        ]);
+                        setShowDatePickerModal(true);
+                      }}
+                      className="px-2 h-9"
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
-
-              {/* Custom Date Range */}
-              {dateFilterType === "custom" && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      Start Date
-                    </label>
-                    <Input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      End Date
-                    </label>
-                    <Input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                </>
-              )}
             </div>
           </div>
         </CardContent>
@@ -1293,6 +1329,105 @@ export default function AdminShifts() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Date Range Picker Modal */}
+      <Dialog open={showDatePickerModal} onOpenChange={setShowDatePickerModal}>
+        <DialogContent className="sm:max-w-sm p-4">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-center">Select Date Range</DialogTitle>
+            <DialogDescription className="text-center text-sm">
+              Click a date twice for single day, or select start & end
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center px-0">
+            <DatePicker
+              selectsRange={true}
+              startDate={tempDateRange[0]}
+              endDate={tempDateRange[1]}
+              onChange={(update) => {
+                const [start, end] = update;
+                // If user clicks the same date as start (and no end yet), set both to same date
+                if (
+                  start &&
+                  !end &&
+                  tempDateRange[0] &&
+                  start.toDateString() === tempDateRange[0].toDateString() &&
+                  !tempDateRange[1]
+                ) {
+                  // Double click on same date - set as single day range
+                  setTempDateRange([start, start]);
+                } else {
+                  setTempDateRange(update);
+                }
+              }}
+              maxDate={new Date()}
+              inline
+              monthsShown={1}
+            />
+          </div>
+          {tempDateRange[0] && tempDateRange[1] && (
+            <div className="text-center text-sm text-blue-600 dark:text-blue-400 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              📅{" "}
+              {tempDateRange[0].toDateString() ===
+              tempDateRange[1].toDateString() ? (
+                // Single day
+                tempDateRange[0].toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              ) : (
+                // Date range
+                <>
+                  {tempDateRange[0].toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                  {" → "}
+                  {tempDateRange[1].toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </>
+              )}
+            </div>
+          )}
+          <DialogFooter className="flex gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDatePickerModal(false);
+                setTempDateRange([null, null]);
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!tempDateRange[0] || !tempDateRange[1]}
+              onClick={() => {
+                if (tempDateRange[0] && tempDateRange[1]) {
+                  // Use local date format to avoid timezone issues
+                  const formatLocalDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, "0");
+                    const day = String(date.getDate()).padStart(2, "0");
+                    return `${year}-${month}-${day}`;
+                  };
+                  setStartDate(formatLocalDate(tempDateRange[0]));
+                  setEndDate(formatLocalDate(tempDateRange[1]));
+                  setDateFilterType("custom");
+                  setShowDatePickerModal(false);
+                }
+              }}
+              className="flex-1"
+            >
+              Apply
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

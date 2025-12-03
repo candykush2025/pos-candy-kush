@@ -150,7 +150,7 @@ function CashierLogin({ onLogin }) {
       setLoading(true);
 
       if (startingCash && parseFloat(startingCash) >= 0) {
-        // Create new shift with starting cash
+        // Create new shift with starting cash (or get existing active shift)
         const shift = await shiftsService.createShift(
           { startingCash: parseFloat(startingCash) },
           pendingCashier.id,
@@ -160,7 +160,14 @@ function CashierLogin({ onLogin }) {
         // Login cashier with shift
         onLogin(pendingCashier, shift);
         setShowStartingCashModal(false);
-        toast.success(`Shift started! Welcome, ${pendingCashier.name}!`);
+        
+        // Check if this is an existing shift (has transactions or different starting cash)
+        const isExistingShift = shift.transactionCount > 0 || shift.totalSales > 0;
+        if (isExistingShift) {
+          toast.success(`Welcome back, ${pendingCashier.name}! Continuing existing shift.`);
+        } else {
+          toast.success(`Shift started! Welcome, ${pendingCashier.name}!`);
+        }
       } else {
         // Skip shift creation - login without shift (view-only mode)
         onLogin(pendingCashier, null);
@@ -171,7 +178,7 @@ function CashierLogin({ onLogin }) {
       }
     } catch (error) {
       console.error("Error starting shift:", error);
-      toast.error("Failed to start shift. Please try again.");
+      toast.error(error.message || "Failed to start shift. Please try again.");
     } finally {
       setLoading(false);
     }
