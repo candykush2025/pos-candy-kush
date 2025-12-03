@@ -22,6 +22,7 @@ import {
   CreditCard,
   Clock,
   ShoppingCart,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,6 +33,8 @@ export default function KioskOrdersPanel({ currentUser }) {
   const [showModal, setShowModal] = useState(false);
   const [previousCount, setPreviousCount] = useState(0);
   const [showSentOrders, setShowSentOrders] = useState(false);
+  const [sendingOrderId, setSendingOrderId] = useState(null);
+  const [rejectingOrderId, setRejectingOrderId] = useState(null);
 
   useEffect(() => {
     // Listen to pending orders in real-time
@@ -91,7 +94,9 @@ export default function KioskOrdersPanel({ currentUser }) {
   }, []);
 
   const sendToCart = async (order) => {
+    if (sendingOrderId) return; // Prevent double-click
     try {
+      setSendingOrderId(order.id);
       const { addItem, setCustomer, clearCart, setKioskOrderId } =
         useCartStore.getState();
 
@@ -151,11 +156,15 @@ export default function KioskOrdersPanel({ currentUser }) {
     } catch (error) {
       console.error("❌ Error sending order to cart:", error);
       toast.error("Failed to send order to cart: " + error.message);
+    } finally {
+      setSendingOrderId(null);
     }
   };
 
   const rejectOrder = async (orderId, reason) => {
+    if (rejectingOrderId) return; // Prevent double-click
     try {
+      setRejectingOrderId(orderId);
       const orderRef = doc(db, "kioskOrders", orderId);
 
       await updateDoc(orderRef, {
@@ -173,6 +182,8 @@ export default function KioskOrdersPanel({ currentUser }) {
     } catch (error) {
       console.error("❌ Error rejecting order:", error);
       toast.error("Failed to reject order: " + error.message);
+    } finally {
+      setRejectingOrderId(null);
     }
   };
 
@@ -229,6 +240,8 @@ export default function KioskOrdersPanel({ currentUser }) {
                 onSendToCart={() => sendToCart(order)}
                 onReject={(reason) => rejectOrder(order.id, reason)}
                 currentUser={currentUser}
+                isSending={sendingOrderId === order.id}
+                isRejecting={rejectingOrderId === order.id}
               />
             ))}
           </div>
@@ -246,13 +259,23 @@ export default function KioskOrdersPanel({ currentUser }) {
           onSendToCart={() => sendToCart(selectedOrder)}
           onReject={(reason) => rejectOrder(selectedOrder.id, reason)}
           currentUser={currentUser}
+          isSending={sendingOrderId === selectedOrder.id}
+          isRejecting={rejectingOrderId === selectedOrder.id}
         />
       )}
     </>
   );
 }
 
-function OrderCard({ order, onView, onSendToCart, onReject, currentUser }) {
+function OrderCard({
+  order,
+  onView,
+  onSendToCart,
+  onReject,
+  currentUser,
+  isSending,
+  isRejecting,
+}) {
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
@@ -407,17 +430,27 @@ function OrderCard({ order, onView, onSendToCart, onReject, currentUser }) {
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
             className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            disabled={isRejecting}
           />
           <div className="flex gap-2">
             <button
               onClick={handleReject}
-              className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold"
+              disabled={isRejecting}
+              className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              Confirm Reject
+              {isRejecting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                "Confirm Reject"
+              )}
             </button>
             <button
               onClick={() => setShowRejectInput(false)}
-              className="flex-1 px-3 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 text-sm font-semibold"
+              disabled={isRejecting}
+              className="flex-1 px-3 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 text-sm font-semibold disabled:opacity-50"
             >
               Cancel
             </button>
@@ -437,14 +470,24 @@ function OrderCard({ order, onView, onSendToCart, onReject, currentUser }) {
           </button>
           <button
             onClick={onSendToCart}
+            disabled={isSending}
             className={`flex-1 px-3 py-2 ${
               isSent
                 ? "bg-blue-600 hover:bg-blue-700"
                 : "bg-green-600 hover:bg-green-700"
-            } text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold`}
+            } text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50`}
           >
-            <ShoppingCart className="w-4 h-4" />
-            {isSent ? "Resend to Cart" : "Send to Cart"}
+            {isSending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Sending...
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="w-4 h-4" />
+                {isSent ? "Resend to Cart" : "Send to Cart"}
+              </>
+            )}
           </button>
           {!isSent && (
             <button
@@ -466,6 +509,8 @@ function OrderDetailsModal({
   onSendToCart,
   onReject,
   currentUser,
+  isSending,
+  isRejecting,
 }) {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
@@ -684,6 +729,7 @@ function OrderDetailsModal({
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={3}
                 className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                disabled={isRejecting}
               />
             </div>
           )}
@@ -694,10 +740,20 @@ function OrderDetailsModal({
               <>
                 <button
                   onClick={onSendToCart}
-                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold text-lg flex items-center justify-center gap-2"
+                  disabled={isSending}
+                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <ShoppingCart className="w-5 h-5" />
-                  Send to Cart
+                  {isSending ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-5 h-5" />
+                      Send to Cart
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => setShowRejectInput(true)}
@@ -711,13 +767,22 @@ function OrderDetailsModal({
               <>
                 <button
                   onClick={handleReject}
-                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold text-lg"
+                  disabled={isRejecting}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Confirm Rejection
+                  {isRejecting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Rejecting...
+                    </>
+                  ) : (
+                    "Confirm Rejection"
+                  )}
                 </button>
                 <button
                   onClick={() => setShowRejectInput(false)}
-                  className="px-6 py-3 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 font-bold text-lg"
+                  disabled={isRejecting}
+                  className="px-6 py-3 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 font-bold text-lg disabled:opacity-50"
                 >
                   Cancel
                 </button>

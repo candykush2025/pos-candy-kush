@@ -56,6 +56,7 @@ export default function AdminOrders() {
   const [editedPaymentMethod, setEditedPaymentMethod] = useState("");
   const [pendingRequests, setPendingRequests] = useState([]);
   const [processingRequestId, setProcessingRequestId] = useState(null); // Track which request is being processed
+  const [editPaymentLoading, setEditPaymentLoading] = useState(false); // Loading state for edit payment
 
   // Filter states
   const [dateRange, setDateRange] = useState("today"); // today, yesterday, this_week, last_week, this_month, last_month, custom, all
@@ -434,8 +435,10 @@ export default function AdminOrders() {
   // Handle submit edited payment change
   const handleSubmitEditedPayment = async () => {
     if (!selectedReceiptForEdit || !editedPaymentMethod) return;
+    if (editPaymentLoading) return; // Prevent double-click
 
     try {
+      setEditPaymentLoading(true);
       // Fetch the actual receipt to get the latest data
       const actualReceipt = await receiptsService.get(
         selectedReceiptForEdit.id
@@ -490,6 +493,8 @@ export default function AdminOrders() {
     } catch (error) {
       console.error("Error updating payment method:", error);
       toast.error("Failed to update payment method");
+    } finally {
+      setEditPaymentLoading(false);
     }
   };
 
@@ -1546,15 +1551,23 @@ export default function AdminOrders() {
                     setEditedPaymentMethod("");
                   }}
                   className="flex-1"
+                  disabled={editPaymentLoading}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleSubmitEditedPayment}
                   className="flex-1"
-                  disabled={!editedPaymentMethod}
+                  disabled={!editedPaymentMethod || editPaymentLoading}
                 >
-                  Approve with Changes
+                  {editPaymentLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Approving...
+                    </>
+                  ) : (
+                    "Approve with Changes"
+                  )}
                 </Button>
               </div>
             </div>

@@ -28,6 +28,7 @@ import {
   Wallet,
   ArrowUpCircle,
   ArrowDownCircle,
+  Loader2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -46,6 +47,9 @@ export default function ShiftsSection({ cashier }) {
   const [cashManagementAmount, setCashManagementAmount] = useState("");
   const [cashManagementDetails, setCashManagementDetails] = useState("");
   const [cashManagementType, setCashManagementType] = useState("payin"); // payin or payout
+  const [startingShift, setStartingShift] = useState(false);
+  const [closingShiftLoading, setClosingShiftLoading] = useState(false);
+  const [cashManagementLoading, setCashManagementLoading] = useState(false);
 
   useEffect(() => {
     if (cashier?.id) {
@@ -98,7 +102,9 @@ export default function ShiftsSection({ cashier }) {
   };
 
   const handleStartShift = async () => {
+    if (startingShift) return; // Prevent double-click
     try {
+      setStartingShift(true);
       if (!startingCash || parseFloat(startingCash) < 0) {
         toast.error("Please enter a valid starting cash amount");
         return;
@@ -129,11 +135,15 @@ export default function ShiftsSection({ cashier }) {
     } catch (error) {
       console.error("Error starting shift:", error);
       toast.error(error.message || "Failed to start shift");
+    } finally {
+      setStartingShift(false);
     }
   };
 
   const handleCloseShift = async () => {
+    if (closingShiftLoading) return; // Prevent double-click
     try {
+      setClosingShiftLoading(true);
       if (!closingCash || parseFloat(closingCash) < 0) {
         toast.error("Please enter a valid closing cash amount");
         return;
@@ -157,11 +167,15 @@ export default function ShiftsSection({ cashier }) {
     } catch (error) {
       console.error("Error closing shift:", error);
       toast.error("Failed to close shift");
+    } finally {
+      setClosingShiftLoading(false);
     }
   };
 
   const handleCashManagement = async () => {
+    if (cashManagementLoading) return; // Prevent double-click
     try {
+      setCashManagementLoading(true);
       const amount = parseFloat(cashManagementAmount);
       if (!amount || amount <= 0) {
         toast.error("Please enter a valid amount");
@@ -207,6 +221,8 @@ export default function ShiftsSection({ cashier }) {
     } catch (error) {
       console.error("Error recording cash movement:", error);
       toast.error("Failed to record cash movement");
+    } finally {
+      setCashManagementLoading(false);
     }
   };
 
@@ -908,15 +924,23 @@ export default function ShiftsSection({ cashier }) {
                   setStartingCash("");
                 }}
                 className="flex-1"
+                disabled={startingShift}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleStartShift}
-                disabled={!startingCash}
+                disabled={!startingCash || startingShift}
                 className="flex-1 bg-green-600 hover:bg-green-700"
               >
-                Start Shift
+                {startingShift ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  "Start Shift"
+                )}
               </Button>
             </div>
           </div>
@@ -1038,16 +1062,24 @@ export default function ShiftsSection({ cashier }) {
                   setCloseNotes("");
                 }}
                 className="flex-1"
+                disabled={closingShiftLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleCloseShift}
-                disabled={!closingCash}
+                disabled={!closingCash || closingShiftLoading}
                 variant="destructive"
                 className="flex-1"
               >
-                Close Shift
+                {closingShiftLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Closing...
+                  </>
+                ) : (
+                  "Close Shift"
+                )}
               </Button>
             </div>
           </div>
@@ -1145,17 +1177,25 @@ export default function ShiftsSection({ cashier }) {
                   setCashManagementType("payin");
                 }}
                 className="flex-1"
+                disabled={cashManagementLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleCashManagement}
                 disabled={
-                  !cashManagementAmount || !cashManagementDetails.trim()
+                  !cashManagementAmount ||
+                  !cashManagementDetails.trim() ||
+                  cashManagementLoading
                 }
                 className="flex-1"
               >
-                {cashManagementType === "payin" ? (
+                {cashManagementLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Recording...
+                  </>
+                ) : cashManagementType === "payin" ? (
                   <>
                     <ArrowUpCircle className="mr-2 h-4 w-4" />
                     Record Pay In

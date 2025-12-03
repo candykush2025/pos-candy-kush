@@ -367,7 +367,7 @@ export default function CustomersPage() {
       dateOfBirth: customer.dateOfBirth || "",
       email: customer.email || "",
       cell: customer.cell || customer.phone || "",
-      memberId: customer.memberId || "",
+      memberId: customer.memberId || customer.customerId || "",
       customPoints: customer.customPoints || 0,
       isNoMember: customer.isNoMember || false,
       isActive: customer.isActive !== false,

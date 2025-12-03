@@ -28,6 +28,7 @@ import {
   Download,
   Plus,
   XCircle,
+  Loader2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -60,6 +61,8 @@ export default function AdminShifts() {
   // Date picker modal state
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
   const [tempDateRange, setTempDateRange] = useState([null, null]);
+  const [openingShiftLoading, setOpeningShiftLoading] = useState(false);
+  const [closingShiftLoading, setClosingShiftLoading] = useState(false);
 
   useEffect(() => {
     loadShifts();
@@ -349,7 +352,9 @@ export default function AdminShifts() {
   };
 
   const handleOpenShift = async () => {
+    if (openingShiftLoading) return; // Prevent double-click
     try {
+      setOpeningShiftLoading(true);
       if (!selectedUser) {
         toast.error("Please select a user");
         return;
@@ -383,11 +388,15 @@ export default function AdminShifts() {
     } catch (error) {
       console.error("Error opening shift:", error);
       toast.error(error.message || "Failed to open shift");
+    } finally {
+      setOpeningShiftLoading(false);
     }
   };
 
   const handleCloseShift = async () => {
+    if (closingShiftLoading) return; // Prevent double-click
     try {
+      setClosingShiftLoading(true);
       if (!closingCash || parseFloat(closingCash) < 0) {
         toast.error("Please enter a valid closing cash amount");
         return;
@@ -407,6 +416,8 @@ export default function AdminShifts() {
     } catch (error) {
       console.error("Error closing shift:", error);
       toast.error("Failed to close shift");
+    } finally {
+      setClosingShiftLoading(false);
     }
   };
 
@@ -1179,15 +1190,23 @@ export default function AdminShifts() {
                   setStartingCash("");
                 }}
                 className="flex-1"
+                disabled={openingShiftLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleOpenShift}
-                disabled={!selectedUser || !startingCash}
+                disabled={!selectedUser || !startingCash || openingShiftLoading}
                 className="flex-1 bg-green-600 hover:bg-green-700"
               >
-                Open Shift
+                {openingShiftLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Opening...
+                  </>
+                ) : (
+                  "Open Shift"
+                )}
               </Button>
             </div>
           </div>
@@ -1319,16 +1338,24 @@ export default function AdminShifts() {
                   setCloseNotes("");
                 }}
                 className="flex-1"
+                disabled={closingShiftLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleCloseShift}
-                disabled={!closingCash}
+                disabled={!closingCash || closingShiftLoading}
                 variant="destructive"
                 className="flex-1"
               >
-                Force Close Shift
+                {closingShiftLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Closing...
+                  </>
+                ) : (
+                  "Force Close Shift"
+                )}
               </Button>
             </div>
           </div>
