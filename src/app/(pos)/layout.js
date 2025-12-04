@@ -728,7 +728,7 @@ export default function POSLayout({ children }) {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden">{children}</main>
+      <main className="flex-1 overflow-auto">{children}</main>
 
       {/* End Shift Modal */}
       <Dialog open={showEndShiftModal} onOpenChange={setShowEndShiftModal}>

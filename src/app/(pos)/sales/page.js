@@ -113,10 +113,9 @@ function CashierLogin({ onLogin }) {
       );
 
       if (cashier) {
-        // Always show starting cash modal to allow multiple shifts per day
-        // Check if user has today's shifts to display info
-        const todayShifts = await shiftsService.getTodayShifts(cashier.id);
-        const activeShift = todayShifts.find((s) => s.status === "active");
+        // Check if user has any active shift (not limited to today)
+        const activeShifts = await shiftsService.getActiveShifts(cashier.id);
+        const activeShift = activeShifts.length > 0 ? activeShifts[0] : null;
 
         if (activeShift) {
           // Has active shift - resume it
