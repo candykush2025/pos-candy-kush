@@ -1,11 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { productsService } from "@/lib/firebase/firestore";
+import { productsService, categoriesService } from "@/lib/firebase/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Search,
   Package,
@@ -15,30 +22,40 @@ import {
   ArrowDown,
   Eye,
   EyeOff,
+  Filter,
+  X,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 
 export default function StockManagementSection() {
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedProduct, setSelectedProduct] = useState("all");
+  const [stockFilter, setStockFilter] = useState("all"); // all, in-stock, low-stock, out-of-stock
   const [sortField, setSortField] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
   const [hideZeroStock, setHideZeroStock] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
+    fetchData();
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const productsData = await productsService.getAll();
+      const [productsData, categoriesData] = await Promise.all([
+        productsService.getAll(),
+        categoriesService.getAll(),
+      ]);
       // Only show products that track stock
       const stockTrackedProducts = productsData.filter((p) => p.trackStock);
       setProducts(stockTrackedProducts);
+      setCategories(categoriesData);
     } catch (error) {
-      console.error("Error fetching products:", error);
+      console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
@@ -54,8 +71,49 @@ export default function StockManagementSection() {
     const matchesZeroFilter =
       !hideZeroStock || (product.stock && product.stock > 0);
 
-    return matchesSearch && matchesZeroFilter;
+    // Category filter
+    const matchesCategory =
+      selectedCategory === "all" || product.categoryId === selectedCategory;
+
+    // Product filter (specific product selection)
+    const matchesProduct =
+      selectedProduct === "all" || product.id === selectedProduct;
+
+    // Stock status filter
+    let matchesStockFilter = true;
+    if (stockFilter === "in-stock") {
+      matchesStockFilter = product.stock && product.stock > 0 && 
+        (!product.lowStock || product.stock > product.lowStock);
+    } else if (stockFilter === "low-stock") {
+      matchesStockFilter = product.lowStock && product.stock <= product.lowStock && product.stock > 0;
+    } else if (stockFilter === "out-of-stock") {
+      matchesStockFilter = !product.stock || product.stock === 0;
+    }
+
+    return matchesSearch && matchesZeroFilter && matchesCategory && matchesProduct && matchesStockFilter;
   });
+
+  // Get products for the product dropdown (filtered by category if selected)
+  const productsForDropdown = selectedCategory === "all" 
+    ? products 
+    : products.filter(p => p.categoryId === selectedCategory);
+
+  // Get category name helper
+  const getCategoryName = (categoryId) => {
+    const category = categories.find(c => c.id === categoryId);
+    return category?.name || "Uncategorized";
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedCategory("all");
+    setSelectedProduct("all");
+    setStockFilter("all");
+    setHideZeroStock(false);
+  };
+
+  const hasActiveFilters = searchQuery || selectedCategory !== "all" || selectedProduct !== "all" || stockFilter !== "all" || hideZeroStock;
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     let aVal = a[sortField];
@@ -192,33 +250,160 @@ export default function StockManagementSection() {
       {/* Search & Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
-              <Input
-                placeholder="Search by name, SKU, or barcode..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+          <div className="space-y-4">
+            {/* Search Row */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
+                <Input
+                  placeholder="Search by name, SKU, or barcode..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Button
+                variant={hideZeroStock ? "default" : "outline"}
+                onClick={() => setHideZeroStock(!hideZeroStock)}
+                className="whitespace-nowrap"
+              >
+                {hideZeroStock ? (
+                  <>
+                    <Eye className="h-4 w-4 mr-2" />
+                    Show Zero Stock
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-4 w-4 mr-2" />
+                    Hide Zero Stock
+                  </>
+                )}
+              </Button>
             </div>
-            <Button
-              variant={hideZeroStock ? "default" : "outline"}
-              onClick={() => setHideZeroStock(!hideZeroStock)}
-              className="whitespace-nowrap"
-            >
-              {hideZeroStock ? (
-                <>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Show Zero Stock
-                </>
-              ) : (
-                <>
-                  <EyeOff className="h-4 w-4 mr-2" />
-                  Hide Zero Stock
-                </>
-              )}
-            </Button>
+
+            {/* Filter Row */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              {/* Category Filter */}
+              <div className="flex-1">
+                <label className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-1 block">
+                  Filter by Category
+                </label>
+                <Select
+                  value={selectedCategory}
+                  onValueChange={(value) => {
+                    setSelectedCategory(value);
+                    setSelectedProduct("all"); // Reset product when category changes
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Product Filter */}
+              <div className="flex-1">
+                <label className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-1 block">
+                  Filter by Product
+                </label>
+                <Select
+                  value={selectedProduct}
+                  onValueChange={setSelectedProduct}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Products" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Products</SelectItem>
+                    {productsForDropdown.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Stock Status Filter */}
+              <div className="flex-1">
+                <label className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-1 block">
+                  Stock Status
+                </label>
+                <Select
+                  value={stockFilter}
+                  onValueChange={setStockFilter}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="in-stock">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        In Stock
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="low-stock">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                        Low Stock
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="out-of-stock">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                        Out of Stock
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Active Filters & Clear */}
+            {hasActiveFilters && (
+              <div className="flex items-center justify-between pt-2 border-t dark:border-gray-700">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Filter className="h-4 w-4 text-neutral-500" />
+                  <span className="text-sm text-neutral-500 dark:text-neutral-400">
+                    Showing {sortedProducts.length} of {products.length} products
+                  </span>
+                  {selectedCategory !== "all" && (
+                    <Badge variant="secondary" className="text-xs">
+                      Category: {getCategoryName(selectedCategory)}
+                    </Badge>
+                  )}
+                  {selectedProduct !== "all" && (
+                    <Badge variant="secondary" className="text-xs">
+                      Product: {products.find(p => p.id === selectedProduct)?.name}
+                    </Badge>
+                  )}
+                  {stockFilter !== "all" && (
+                    <Badge variant="secondary" className="text-xs">
+                      Status: {stockFilter.replace("-", " ")}
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear Filters
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -250,6 +435,9 @@ export default function StockManagementSection() {
                         Product Name
                         {getSortIcon("name")}
                       </div>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Category
                     </th>
                     <th
                       className="px-4 py-3 text-left text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer hover:bg-neutral-100 dark:hover:bg-gray-700"
@@ -309,6 +497,11 @@ export default function StockManagementSection() {
                               Barcode: {product.barcode}
                             </div>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline" className="text-xs">
+                            {getCategoryName(product.categoryId)}
+                          </Badge>
                         </td>
                         <td className="px-4 py-3 text-sm text-neutral-700 dark:text-neutral-300">
                           {product.sku || "-"}
