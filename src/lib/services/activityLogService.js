@@ -41,6 +41,14 @@ export const LOG_ACTIONS = {
   SALE_COMPLETED: "sale_completed",
   SALE_VOIDED: "sale_voided",
   DISCOUNT_APPLIED: "discount_applied",
+
+  // Print actions
+  PRINT_JOB_CREATED: "print_job_created",
+  PRINT_JOB_SENT: "print_job_sent",
+  PRINT_JOB_SUCCESS: "print_job_success",
+  PRINT_JOB_FAILED: "print_job_failed",
+  PRINT_REPRINT: "print_reprint",
+  PRINT_CANCELLED: "print_cancelled",
 };
 
 // Category for filtering logs
@@ -49,6 +57,7 @@ export const LOG_CATEGORIES = {
   STOCK: "stock",
   PRODUCT: "product",
   SALE: "sale",
+  PRINT: "print",
 };
 
 /**

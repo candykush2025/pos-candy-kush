@@ -33,6 +33,16 @@ import {
 import { discountsService } from "@/lib/firebase/discountsService";
 import { shiftsService } from "@/lib/firebase/shiftsService";
 import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
+import {
+  printJobsService,
+  PRINT_STATUS,
+  PRINT_TYPE,
+} from "@/lib/firebase/printJobsService";
+import {
+  createLog,
+  LOG_ACTIONS,
+  LOG_CATEGORIES,
+} from "@/lib/services/activityLogService";
 import { dbService } from "@/lib/db/dbService";
 import db from "@/lib/db/index";
 import { Button } from "@/components/ui/button";
@@ -78,6 +88,12 @@ import {
   Tag,
   Mail,
   Phone,
+  Clock,
+  RotateCcw,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
@@ -291,6 +307,13 @@ export default function SalesSection({ cashier }) {
   // Receipt modal state
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
+
+  // Print Jobs state
+  const [showPrintJobsModal, setShowPrintJobsModal] = useState(false);
+  const [printJobs, setPrintJobs] = useState([]);
+  const [printJobsLoading, setPrintJobsLoading] = useState(false);
+  const [selectedPrintJob, setSelectedPrintJob] = useState(null);
+  const [reprintingJobId, setReprintingJobId] = useState(null);
 
   // Customer selection state (modals only - actual customer is in cart store)
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -2414,10 +2437,176 @@ export default function SalesSection({ cashier }) {
     }
   };
 
+  // Load print jobs for current cashier
+  const loadPrintJobs = async () => {
+    if (!cashier?.id) return;
+
+    setPrintJobsLoading(true);
+    try {
+      const jobs = await printJobsService.getPrintJobsByCashier(cashier.id, 50);
+      setPrintJobs(jobs);
+    } catch (error) {
+      console.error("Error loading print jobs:", error);
+      toast.error("Failed to load print jobs");
+    } finally {
+      setPrintJobsLoading(false);
+    }
+  };
+
+  // Get print job status color and icon
+  const getPrintJobStatusInfo = (status) => {
+    switch (status) {
+      case PRINT_STATUS.SUCCESS:
+        return {
+          color:
+            "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
+          icon: CheckCircle,
+          label: "Success",
+        };
+      case PRINT_STATUS.FAILED:
+        return {
+          color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100",
+          icon: XCircle,
+          label: "Failed",
+        };
+      case PRINT_STATUS.PENDING:
+        return {
+          color:
+            "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100",
+          icon: Clock,
+          label: "Pending",
+        };
+      case PRINT_STATUS.SENT:
+        return {
+          color:
+            "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
+          icon: RefreshCw,
+          label: "Sent",
+        };
+      case PRINT_STATUS.CANCELLED:
+        return {
+          color:
+            "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-100",
+          icon: X,
+          label: "Cancelled",
+        };
+      default:
+        return {
+          color: "bg-gray-100 text-gray-800",
+          icon: Clock,
+          label: status,
+        };
+    }
+  };
+
+  // Handle reprint
+  const handleReprint = async (job) => {
+    if (!job || reprintingJobId) return;
+
+    setReprintingJobId(job.id);
+    try {
+      // Record the reprint attempt
+      await printJobsService.recordReprint(
+        job.id,
+        cashier?.id,
+        cashier?.name || "Staff",
+        "Manual reprint from print jobs panel"
+      );
+
+      // Log the reprint activity
+      await createLog({
+        userId: cashier?.id,
+        userName: cashier?.name || "Staff",
+        action: LOG_ACTIONS.PRINT_REPRINT,
+        category: LOG_CATEGORIES.PRINT,
+        targetId: job.id,
+        targetName: job.receiptNumber,
+        details: `Reprinted receipt ${job.receiptNumber}`,
+        previousValue: { attemptsBefore: job.attempts || 1 },
+        newValue: { attemptsAfter: (job.attempts || 1) + 1 },
+      });
+
+      // Send to print API
+      const response = await fetch("/api/print", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: job.orderData,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await printJobsService.updatePrintJobStatus(job.id, PRINT_STATUS.SENT);
+        toast.success("Receipt sent to printer (Reprint)");
+
+        // Mark as success after a delay (simulating printer confirmation)
+        setTimeout(async () => {
+          await printJobsService.updatePrintJobStatus(
+            job.id,
+            PRINT_STATUS.SUCCESS
+          );
+          loadPrintJobs(); // Refresh the list
+        }, 2000);
+      } else {
+        await printJobsService.updatePrintJobStatus(
+          job.id,
+          PRINT_STATUS.FAILED,
+          result.error || "Print API error"
+        );
+        toast.error("Failed to send receipt to printer");
+      }
+
+      // Refresh print jobs list
+      loadPrintJobs();
+    } catch (error) {
+      console.error("Error reprinting:", error);
+      toast.error("Failed to reprint receipt");
+      await printJobsService.updatePrintJobStatus(
+        job.id,
+        PRINT_STATUS.FAILED,
+        error.message
+      );
+    } finally {
+      setReprintingJobId(null);
+    }
+  };
+
   const handlePrintReceipt = async () => {
     if (!completedOrder) return;
 
+    let printJob = null;
+
     try {
+      // Create print job record in Firebase
+      printJob = await printJobsService.createPrintJob({
+        receiptNumber: completedOrder.receiptNumber,
+        orderId: completedOrder.id,
+        orderData: {
+          order: completedOrder,
+          cashier: cashier?.name || completedOrder.cashierName || "Staff",
+          timestamp: new Date().toISOString(),
+          type: "receipt",
+        },
+        cashierId: cashier?.id,
+        cashierName: cashier?.name || "Staff",
+        type: PRINT_TYPE.RECEIPT,
+      });
+
+      // Log the print job creation
+      await createLog({
+        userId: cashier?.id,
+        userName: cashier?.name || "Staff",
+        action: LOG_ACTIONS.PRINT_JOB_CREATED,
+        category: LOG_CATEGORIES.PRINT,
+        targetId: printJob.id,
+        targetName: completedOrder.receiptNumber,
+        details: `Created print job for receipt ${completedOrder.receiptNumber}`,
+      });
+
       // Send receipt data to print API for Android printing
       const response = await fetch("/api/print", {
         method: "POST",
@@ -2437,15 +2626,89 @@ export default function SalesSection({ cashier }) {
       const result = await response.json();
 
       if (result.success) {
+        // Update print job status to sent
+        await printJobsService.updatePrintJobStatus(
+          printJob.id,
+          PRINT_STATUS.SENT
+        );
+
+        // Log success
+        await createLog({
+          userId: cashier?.id,
+          userName: cashier?.name || "Staff",
+          action: LOG_ACTIONS.PRINT_JOB_SENT,
+          category: LOG_CATEGORIES.PRINT,
+          targetId: printJob.id,
+          targetName: completedOrder.receiptNumber,
+          details: `Print job sent to printer for receipt ${completedOrder.receiptNumber}`,
+        });
+
         toast.success("Receipt sent to printer");
+
+        // Mark as success after a delay (simulating printer confirmation)
+        setTimeout(async () => {
+          await printJobsService.updatePrintJobStatus(
+            printJob.id,
+            PRINT_STATUS.SUCCESS
+          );
+          await createLog({
+            userId: cashier?.id,
+            userName: cashier?.name || "Staff",
+            action: LOG_ACTIONS.PRINT_JOB_SUCCESS,
+            category: LOG_CATEGORIES.PRINT,
+            targetId: printJob.id,
+            targetName: completedOrder.receiptNumber,
+            details: `Print job completed for receipt ${completedOrder.receiptNumber}`,
+          });
+        }, 2000);
+
         // Start new transaction after sending to printer
         handleNewTransaction();
       } else {
+        // Update print job status to failed
+        await printJobsService.updatePrintJobStatus(
+          printJob.id,
+          PRINT_STATUS.FAILED,
+          result.error || "Print API error"
+        );
+
+        // Log failure
+        await createLog({
+          userId: cashier?.id,
+          userName: cashier?.name || "Staff",
+          action: LOG_ACTIONS.PRINT_JOB_FAILED,
+          category: LOG_CATEGORIES.PRINT,
+          targetId: printJob.id,
+          targetName: completedOrder.receiptNumber,
+          details: `Print job failed for receipt ${
+            completedOrder.receiptNumber
+          }: ${result.error || "Unknown error"}`,
+        });
+
         toast.error("Failed to send receipt to printer");
         console.error("Print API error:", result.error);
       }
     } catch (error) {
       console.error("Error sending receipt to printer:", error);
+
+      // Update print job status to failed if it was created
+      if (printJob?.id) {
+        await printJobsService.updatePrintJobStatus(
+          printJob.id,
+          PRINT_STATUS.FAILED,
+          error.message
+        );
+        await createLog({
+          userId: cashier?.id,
+          userName: cashier?.name || "Staff",
+          action: LOG_ACTIONS.PRINT_JOB_FAILED,
+          category: LOG_CATEGORIES.PRINT,
+          targetId: printJob.id,
+          targetName: completedOrder.receiptNumber,
+          details: `Print job failed: ${error.message}`,
+        });
+      }
+
       toast.error("Failed to send receipt to printer");
     }
   };
@@ -3155,12 +3418,27 @@ export default function SalesSection({ cashier }) {
                   Cart
                 </h2>
               </div>
-              <Badge
-                variant="secondary"
-                className="text-lg px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-              >
-                {getItemCount()} items
-              </Badge>
+              <div className="flex items-center gap-2">
+                {/* Print Jobs Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowPrintJobsModal(true);
+                    loadPrintJobs();
+                  }}
+                  className="h-9 px-3 gap-1.5"
+                >
+                  <Printer className="h-4 w-4" />
+                  <span className="hidden sm:inline">Print Jobs</span>
+                </Button>
+                <Badge
+                  variant="secondary"
+                  className="text-lg px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                >
+                  {getItemCount()} items
+                </Badge>
+              </div>
             </div>
 
             {/* Customer Selection */}
@@ -4854,6 +5132,246 @@ export default function SalesSection({ cashier }) {
                 className="w-full"
               >
                 Reset to Default Blue
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Print Jobs Modal */}
+        <Dialog open={showPrintJobsModal} onOpenChange={setShowPrintJobsModal}>
+          <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Printer className="h-5 w-5" />
+                Print Jobs
+              </DialogTitle>
+              <DialogDescription>
+                View print history, status, and retry failed prints
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto py-4">
+              {printJobsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-500">
+                    Loading print jobs...
+                  </span>
+                </div>
+              ) : printJobs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Printer className="h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No print jobs found
+                  </p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">
+                    Print jobs will appear here after processing transactions
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {printJobs.map((job) => {
+                    const statusInfo = getPrintJobStatusInfo(job.status);
+                    const StatusIcon = statusInfo.icon;
+                    const createdAt = job.createdAt?.toDate
+                      ? job.createdAt.toDate()
+                      : new Date(job.createdAt);
+                    const hasReprints = job.reprints && job.reprints.length > 0;
+
+                    return (
+                      <div
+                        key={job.id}
+                        className={cn(
+                          "border rounded-lg p-4 transition-colors",
+                          selectedPrintJob?.id === job.id
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                        )}
+                      >
+                        {/* Header Row */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-gray-500" />
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                              {job.receiptNumber || "N/A"}
+                            </span>
+                          </div>
+                          <Badge className={cn("text-xs", statusInfo.color)}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {statusInfo.label}
+                          </Badge>
+                        </div>
+
+                        {/* Details Row */}
+                        <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>{createdAt.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            <span>{job.cashierName || "Staff"}</span>
+                          </div>
+                        </div>
+
+                        {/* Order Amount */}
+                        {job.orderData?.order?.total && (
+                          <div className="text-sm mb-3">
+                            <span className="text-gray-500">Amount: </span>
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                              {formatCurrency(job.orderData.order.total)}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Attempts & Reprints Info */}
+                        {(job.attempts > 1 || hasReprints) && (
+                          <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs">
+                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                              <RotateCcw className="h-3 w-3" />
+                              <span>Attempts: {job.attempts || 1}</span>
+                              {hasReprints && (
+                                <span className="text-gray-400">•</span>
+                              )}
+                              {hasReprints && (
+                                <span>Reprints: {job.reprints.length}</span>
+                              )}
+                            </div>
+                            {hasReprints && (
+                              <button
+                                onClick={() =>
+                                  setSelectedPrintJob(
+                                    selectedPrintJob?.id === job.id ? null : job
+                                  )
+                                }
+                                className="flex items-center gap-1 mt-1 text-primary hover:underline"
+                              >
+                                {selectedPrintJob?.id === job.id ? (
+                                  <>
+                                    <ChevronUp className="h-3 w-3" />
+                                    Hide reprint history
+                                  </>
+                                ) : (
+                                  <>
+                                    <ChevronDown className="h-3 w-3" />
+                                    View reprint history
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Expanded Reprint History */}
+                        {selectedPrintJob?.id === job.id && hasReprints && (
+                          <div className="mb-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700 space-y-2">
+                            {job.reprints.map((reprint, idx) => (
+                              <div
+                                key={idx}
+                                className="text-xs text-gray-500 dark:text-gray-400"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <RotateCcw className="h-3 w-3" />
+                                  <span>Reprint #{reprint.attemptNumber}</span>
+                                </div>
+                                <div className="ml-5">
+                                  <div>By: {reprint.reprintedByName}</div>
+                                  <div>
+                                    At:{" "}
+                                    {new Date(
+                                      reprint.reprintedAt
+                                    ).toLocaleString()}
+                                  </div>
+                                  {reprint.reason && (
+                                    <div>Reason: {reprint.reason}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Error Message */}
+                        {job.status === PRINT_STATUS.FAILED &&
+                          job.errorMessage && (
+                            <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs text-red-600 dark:text-red-400">
+                              <div className="flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                <span>Error: {job.errorMessage}</span>
+                              </div>
+                            </div>
+                          )}
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleReprint(job)}
+                            disabled={reprintingJobId === job.id}
+                          >
+                            {reprintingJobId === job.id ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                Reprinting...
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw className="h-4 w-4 mr-1" />
+                                Reprint
+                              </>
+                            )}
+                          </Button>
+                          {job.status === PRINT_STATUS.PENDING && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={async () => {
+                                await printJobsService.cancelPrintJob(job.id);
+                                await createLog({
+                                  userId: cashier?.id,
+                                  userName: cashier?.name || "Staff",
+                                  action: LOG_ACTIONS.PRINT_CANCELLED,
+                                  category: LOG_CATEGORIES.PRINT,
+                                  targetId: job.id,
+                                  targetName: job.receiptNumber,
+                                  details: `Cancelled print job for receipt ${job.receiptNumber}`,
+                                });
+                                loadPrintJobs();
+                                toast.success("Print job cancelled");
+                              }}
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Cancel
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center pt-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadPrintJobs}
+                disabled={printJobsLoading}
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-4 w-4 mr-1",
+                    printJobsLoading && "animate-spin"
+                  )}
+                />
+                Refresh
+              </Button>
+              <Button onClick={() => setShowPrintJobsModal(false)}>
+                Close
               </Button>
             </div>
           </DialogContent>
