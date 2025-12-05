@@ -1,18 +1,24 @@
-// src/app/api/cart/route.js
+﻿// src/app/api/cart/route.js
 import { NextResponse } from "next/server";
+import { db } from "@/lib/firebase/config";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
-// Simple in-memory cart store (in production, use database)
-let currentCart = {
+const CART_DOC_ID = "current_cart";
+const CART_COLLECTION = "posCart";
+
+const getEmptyCart = () => ({
   items: [],
+  discounts: [],
   discount: { type: "percentage", value: 0 },
   tax: { rate: 0, amount: 0 },
   customer: null,
   notes: "",
+  subtotal: 0,
+  discountAmount: 0,
   total: 0,
-  lastUpdated: null,
-};
+  lastUpdated: new Date().toISOString(),
+});
 
-// CORS headers for Android app access
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -20,39 +26,30 @@ const corsHeaders = {
 };
 
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: corsHeaders,
-  });
+  return new NextResponse(null, { status: 200, headers: corsHeaders });
 }
 
 export async function GET() {
   try {
+    const cartRef = doc(db, CART_COLLECTION, CART_DOC_ID);
+    const cartSnap = await getDoc(cartRef);
+    let cart = cartSnap.exists() ? cartSnap.data() : getEmptyCart();
     return new NextResponse(
       JSON.stringify({
         success: true,
-        cart: currentCart,
+        cart,
         timestamp: new Date().toISOString(),
       }),
       {
         status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (error) {
-    console.error("Error getting cart:", error);
+    console.error("[Cart API] Error:", error);
     return new NextResponse(
-      JSON.stringify({
-        success: false,
-        error: "Failed to get cart",
-      }),
-      {
-        status: 500,
-        headers: corsHeaders,
-      }
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: corsHeaders }
     );
   }
 }
@@ -60,179 +57,63 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-
-    // Update cart data
-    if (body.items !== undefined) currentCart.items = body.items;
-    if (body.discount !== undefined) currentCart.discount = body.discount;
-    if (body.tax !== undefined) currentCart.tax = body.tax;
-    if (body.customer !== undefined) currentCart.customer = body.customer;
-    if (body.notes !== undefined) currentCart.notes = body.notes;
-    if (body.total !== undefined) currentCart.total = body.total;
-
-    currentCart.lastUpdated = new Date().toISOString();
-
+    const cartData = {
+      items: body.items || [],
+      discounts: body.discounts || [],
+      discount: body.discount || { type: "percentage", value: 0 },
+      tax: body.tax || { rate: 0, amount: 0 },
+      customer: body.customer || null,
+      notes: body.notes || "",
+      subtotal: body.subtotal || 0,
+      discountAmount: body.discountAmount || 0,
+      total: body.total || 0,
+      kioskOrderId: body.kioskOrderId || null,
+      lastUpdated: new Date().toISOString(),
+    };
+    const cartRef = doc(db, CART_COLLECTION, CART_DOC_ID);
+    await setDoc(cartRef, cartData);
     return new NextResponse(
       JSON.stringify({
         success: true,
-        message: "Cart updated successfully",
-        cart: currentCart,
-        timestamp: currentCart.lastUpdated,
+        message: "Cart updated",
+        cart: cartData,
+        timestamp: cartData.lastUpdated,
       }),
       {
         status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (error) {
-    console.error("Error updating cart:", error);
+    console.error("[Cart API] Error:", error);
     return new NextResponse(
-      JSON.stringify({
-        success: false,
-        error: "Failed to update cart",
-      }),
-      {
-        status: 500,
-        headers: corsHeaders,
-      }
-    );
-  }
-}
-
-export async function PUT(request) {
-  try {
-    const body = await request.json();
-    const { action, paymentData } = body;
-
-    if (action === "process_payment") {
-      // Update payment status via internal API call
-      const paymentResponse = await fetch(
-        `${request.nextUrl.origin}/api/cart/payment`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            status: "processing",
-            amount: paymentData.amount,
-            method: paymentData.method,
-            transactionId: paymentData.transactionId,
-          }),
-        }
-      );
-
-      if (!paymentResponse.ok) {
-        throw new Error("Failed to update payment status");
-      }
-
-      // Clear cart after successful payment
-      currentCart = {
-        items: [],
-        discount: { type: "percentage", value: 0 },
-        tax: { rate: 0, amount: 0 },
-        customer: null,
-        notes: "",
-        total: 0,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      // Mark payment as completed
-      await fetch(`${request.nextUrl.origin}/api/cart/payment`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: "completed",
-          amount: paymentData.amount,
-          method: paymentData.method,
-          transactionId: paymentData.transactionId,
-        }),
-      });
-
-      return new NextResponse(
-        JSON.stringify({
-          success: true,
-          message: "Payment processed successfully",
-          cart: currentCart,
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    return new NextResponse(
-      JSON.stringify({
-        success: false,
-        error: "Invalid action",
-      }),
-      {
-        status: 400,
-        headers: corsHeaders,
-      }
-    );
-  } catch (error) {
-    console.error("Error processing payment:", error);
-    return new NextResponse(
-      JSON.stringify({
-        success: false,
-        error: "Failed to process payment",
-      }),
-      {
-        status: 500,
-        headers: corsHeaders,
-      }
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: corsHeaders }
     );
   }
 }
 
 export async function DELETE() {
   try {
-    // Clear the cart
-    currentCart = {
-      items: [],
-      discount: { type: "percentage", value: 0 },
-      tax: { rate: 0, amount: 0 },
-      customer: null,
-      notes: "",
-      total: 0,
-      lastUpdated: new Date().toISOString(),
-    };
-
+    const emptyCart = getEmptyCart();
+    const cartRef = doc(db, CART_COLLECTION, CART_DOC_ID);
+    await setDoc(cartRef, emptyCart);
     return new NextResponse(
       JSON.stringify({
         success: true,
-        message: "Cart cleared successfully",
-        cart: currentCart,
-        timestamp: currentCart.lastUpdated,
+        message: "Cart cleared",
+        cart: emptyCart,
       }),
       {
         status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (error) {
-    console.error("Error clearing cart:", error);
+    console.error("[Cart API] Error:", error);
     return new NextResponse(
-      JSON.stringify({
-        success: false,
-        error: "Failed to clear cart",
-      }),
-      {
-        status: 500,
-        headers: corsHeaders,
-      }
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: corsHeaders }
     );
   }
 }

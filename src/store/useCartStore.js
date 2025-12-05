@@ -297,20 +297,38 @@ export const useCartStore = create((set, get) => ({
     };
   },
 
-  // Sync cart to API
+  // Sync cart to API (for Android app)
   syncCartToAPI: async () => {
+    // Only run in browser
+    if (typeof window === "undefined") return;
+
     const cartData = get().getCartData();
     try {
+      console.log("[CartStore] Syncing cart to API:", {
+        itemCount: cartData.items.length,
+        total: cartData.total,
+      });
+
       const response = await fetch("/api/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cartData),
       });
+
       if (!response.ok) {
-        console.error("Failed to sync cart to API");
+        console.error(
+          "[CartStore] Failed to sync cart to API:",
+          response.status
+        );
+      } else {
+        const result = await response.json();
+        console.log("[CartStore] Cart synced successfully:", {
+          itemCount: result.cart?.items?.length || 0,
+          total: result.cart?.total || 0,
+        });
       }
     } catch (error) {
-      console.error("Error syncing cart to API:", error);
+      console.error("[CartStore] Error syncing cart to API:", error);
     }
   },
 

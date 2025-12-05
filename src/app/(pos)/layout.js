@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   Clock,
   Bell,
+  Printer,
   Menu,
   X as CloseIcon,
 } from "lucide-react";
@@ -649,6 +650,24 @@ export default function POSLayout({ children }) {
                 </Badge>
               )}
             </div>
+
+            {/* Print Jobs Button - Only show on sales page */}
+            {pathname === "/sales" && cashier && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  // Dispatch custom event to open print jobs modal in SalesSection
+                  window.dispatchEvent(
+                    new CustomEvent("open-print-jobs-modal")
+                  );
+                }}
+                title="Print Jobs"
+              >
+                <Printer className="h-3.5 w-3.5" />
+              </Button>
+            )}
 
             {/* Sync Button */}
             <Button

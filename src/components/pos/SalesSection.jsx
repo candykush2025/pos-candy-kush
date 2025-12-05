@@ -315,6 +315,22 @@ export default function SalesSection({ cashier }) {
   const [selectedPrintJob, setSelectedPrintJob] = useState(null);
   const [reprintingJobId, setReprintingJobId] = useState(null);
 
+  // Listen for print jobs modal open event from header
+  useEffect(() => {
+    const handleOpenPrintJobsModal = () => {
+      loadPrintJobs();
+      setShowPrintJobsModal(true);
+    };
+
+    window.addEventListener("open-print-jobs-modal", handleOpenPrintJobsModal);
+    return () => {
+      window.removeEventListener(
+        "open-print-jobs-modal",
+        handleOpenPrintJobsModal
+      );
+    };
+  }, []);
+
   // Customer selection state (modals only - actual customer is in cart store)
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showCustomerSelectModal, setShowCustomerSelectModal] = useState(false);
@@ -2580,18 +2596,25 @@ export default function SalesSection({ cashier }) {
 
     let printJob = null;
 
+    // Get receipt number - try different field names
+    const receiptNum =
+      completedOrder.receipt_number ||
+      completedOrder.receiptNumber ||
+      completedOrder.orderNumber ||
+      "Unknown";
+
     try {
       // Create print job record in Firebase
       printJob = await printJobsService.createPrintJob({
-        receiptNumber: completedOrder.receiptNumber,
-        orderId: completedOrder.id,
+        receiptNumber: receiptNum,
+        orderId: completedOrder.id || completedOrder.orderNumber || null,
         orderData: {
           order: completedOrder,
           cashier: cashier?.name || completedOrder.cashierName || "Staff",
           timestamp: new Date().toISOString(),
           type: "receipt",
         },
-        cashierId: cashier?.id,
+        cashierId: cashier?.id || null,
         cashierName: cashier?.name || "Staff",
         type: PRINT_TYPE.RECEIPT,
       });
@@ -2603,8 +2626,8 @@ export default function SalesSection({ cashier }) {
         action: LOG_ACTIONS.PRINT_JOB_CREATED,
         category: LOG_CATEGORIES.PRINT,
         targetId: printJob.id,
-        targetName: completedOrder.receiptNumber,
-        details: `Created print job for receipt ${completedOrder.receiptNumber}`,
+        targetName: receiptNum,
+        details: `Created print job for receipt ${receiptNum}`,
       });
 
       // Send receipt data to print API for Android printing
@@ -3418,27 +3441,12 @@ export default function SalesSection({ cashier }) {
                   Cart
                 </h2>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Print Jobs Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowPrintJobsModal(true);
-                    loadPrintJobs();
-                  }}
-                  className="h-9 px-3 gap-1.5"
-                >
-                  <Printer className="h-4 w-4" />
-                  <span className="hidden sm:inline">Print Jobs</span>
-                </Button>
-                <Badge
-                  variant="secondary"
-                  className="text-lg px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                >
-                  {getItemCount()} items
-                </Badge>
-              </div>
+              <Badge
+                variant="secondary"
+                className="text-lg px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+              >
+                {getItemCount()} items
+              </Badge>
             </div>
 
             {/* Customer Selection */}
