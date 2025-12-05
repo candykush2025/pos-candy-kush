@@ -1,7 +1,7 @@
 ﻿// src/app/api/print/route.js
 import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase/config";
-import { collection, doc, getDoc, setDoc, getDocs, deleteDoc, query, where, orderBy, limit } from "firebase/firestore";
+import { collection, doc, getDoc, setDoc, getDocs, deleteDoc, query, where } from "firebase/firestore";
 
 const PRINT_COLLECTION = "printQueue";
 
@@ -59,7 +59,8 @@ export async function GET(request) {
       });
     }
     
-    const q = query(jobsRef, where("status", "==", "pending"), orderBy("createdAt", "asc"), limit(1));
+    // Get all pending jobs and sort by createdAt (avoiding composite index requirement)
+    const q = query(jobsRef, where("status", "==", "pending"));
     const snapshot = await getDocs(q);
     
     if (snapshot.empty) {
@@ -69,8 +70,10 @@ export async function GET(request) {
       });
     }
     
-    const jobDoc = snapshot.docs[0];
-    const job = jobDoc.data();
+    // Sort by createdAt and get the oldest job
+    const pendingJobs = snapshot.docs.map(d => d.data());
+    pendingJobs.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    const job = pendingJobs[0];
     
     // Mark as processing
     await setDoc(doc(db, PRINT_COLLECTION, job.jobId), {

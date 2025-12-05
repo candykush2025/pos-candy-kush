@@ -623,8 +623,9 @@ curl -X DELETE https://pos-candy-kush.vercel.app/api/print
 
 **Job stuck in "processing":**
 
-- Call `DELETE /api/print` to clear all jobs
-- Or wait for server restart (clears in-memory queue)
+- Go to Firebase Console → Firestore → `printQueue` collection
+- Delete the stuck job document
+- Or call `DELETE /api/print` to clear all jobs
 
 **Duplicate prints:**
 
