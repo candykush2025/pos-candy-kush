@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { shiftsService } from "@/lib/firebase/shiftsService";
-import { getDocuments } from "@/lib/firebase/firestore";
+import { getDocuments, receiptsService } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,10 @@ import {
   Plus,
   XCircle,
   Loader2,
+  ChevronDown,
+  ChevronUp,
+  Package,
+  Tag,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -63,6 +67,11 @@ export default function AdminShifts() {
   const [tempDateRange, setTempDateRange] = useState([null, null]);
   const [openingShiftLoading, setOpeningShiftLoading] = useState(false);
   const [closingShiftLoading, setClosingShiftLoading] = useState(false);
+
+  // Expanded shift details state
+  const [expandedShifts, setExpandedShifts] = useState({});
+  const [shiftDetails, setShiftDetails] = useState({});
+  const [loadingDetails, setLoadingDetails] = useState({});
 
   useEffect(() => {
     loadShifts();
@@ -110,6 +119,152 @@ export default function AdminShifts() {
     } catch (error) {
       console.error("Error loading users:", error);
       toast.error("Failed to load users");
+    }
+  };
+
+  // Toggle expanded shift and load details
+  const toggleShiftExpanded = async (shiftId, shift) => {
+    const isExpanded = expandedShifts[shiftId];
+
+    if (isExpanded) {
+      // Collapse
+      setExpandedShifts((prev) => ({ ...prev, [shiftId]: false }));
+    } else {
+      // Expand and load details if not already loaded
+      setExpandedShifts((prev) => ({ ...prev, [shiftId]: true }));
+
+      if (!shiftDetails[shiftId]) {
+        await loadShiftDetails(shiftId, shift);
+      }
+    }
+  };
+
+  // Load detailed sales data for a shift
+  const loadShiftDetails = async (shiftId, shift) => {
+    try {
+      setLoadingDetails((prev) => ({ ...prev, [shiftId]: true }));
+
+      // Get shift start and end times
+      const startTime =
+        shift.startTime?.toDate?.() || new Date(shift.startTime);
+      const endTime =
+        shift.endTime?.toDate?.() ||
+        (shift.status === "active" ? new Date() : new Date(shift.endTime));
+
+      // Fetch receipts, products, and categories in parallel
+      const [allReceipts, products, categories] = await Promise.all([
+        receiptsService.getAll(),
+        getDocuments("products"),
+        getDocuments("categories"),
+      ]);
+
+      // Create lookup maps
+      // Map: product.id -> categoryId
+      const productCategoryMap = {};
+      products.forEach((product) => {
+        const catId = product.categoryId || product.category_id;
+        if (product.id && catId) {
+          productCategoryMap[product.id] = catId;
+        }
+      });
+
+      // Map: categoryId -> categoryName
+      const categoryNameMap = {};
+      categories.forEach((category) => {
+        if (category.id) {
+          categoryNameMap[category.id] = category.name || "Unknown Category";
+        }
+      });
+
+      // Filter receipts that belong to this shift (by time range and cashier)
+      const shiftReceipts = allReceipts.filter((receipt) => {
+        const receiptDate =
+          receipt.receipt_date?.toDate?.() ||
+          (receipt.receipt_date ? new Date(receipt.receipt_date) : null) ||
+          receipt.createdAt?.toDate?.() ||
+          (receipt.createdAt ? new Date(receipt.createdAt) : null);
+
+        if (!receiptDate) return false;
+
+        // Check if receipt is within shift time range
+        const isInTimeRange =
+          receiptDate >= startTime && receiptDate <= endTime;
+
+        // Check if receipt belongs to this cashier (if cashierId is available)
+        const matchesCashier =
+          !receipt.cashierId || receipt.cashierId === shift.userId;
+
+        return isInTimeRange && matchesCashier;
+      });
+
+      // Calculate category sales
+      const categorySales = {};
+      const productSales = {};
+
+      shiftReceipts.forEach((receipt) => {
+        const items = receipt.lineItems || receipt.line_items || [];
+        if (items && Array.isArray(items)) {
+          items.forEach((item) => {
+            const itemName = item.item_name || item.name || "Unknown Product";
+            const quantity = item.quantity || 0;
+            const revenue = item.total_money || item.total || 0;
+
+            // Get category name by looking up: item_id -> categoryId -> categoryName
+            const itemId = item.item_id || item.id;
+            const categoryId = item.category_id || productCategoryMap[itemId];
+            const categoryName = categoryId
+              ? categoryNameMap[categoryId] || "Unknown Category"
+              : "Uncategorized";
+
+            // Aggregate by category
+            if (!categorySales[categoryName]) {
+              categorySales[categoryName] = {
+                quantity: 0,
+                revenue: 0,
+                items: 0,
+              };
+            }
+            categorySales[categoryName].quantity += quantity;
+            categorySales[categoryName].revenue += revenue;
+            categorySales[categoryName].items += 1;
+
+            // Aggregate by product
+            if (!productSales[itemName]) {
+              productSales[itemName] = {
+                quantity: 0,
+                revenue: 0,
+                category: categoryName,
+              };
+            }
+            productSales[itemName].quantity += quantity;
+            productSales[itemName].revenue += revenue;
+          });
+        }
+      });
+
+      // Convert to sorted arrays
+      const categoryList = Object.entries(categorySales)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.revenue - a.revenue);
+
+      const productList = Object.entries(productSales)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.revenue - a.revenue);
+
+      setShiftDetails((prev) => ({
+        ...prev,
+        [shiftId]: {
+          receipts: shiftReceipts,
+          categorySales: categoryList,
+          productSales: productList,
+          totalTransactions: shiftReceipts.length,
+        },
+      }));
+    } catch (error) {
+      console.error("Error loading shift details:", error);
+      toast.error("Failed to load shift details");
+    } finally {
+      setLoadingDetails((prev) => ({ ...prev, [shiftId]: false }));
     }
   };
 
@@ -1076,6 +1231,161 @@ export default function AdminShifts() {
                         <span className="font-medium">Notes:</span>{" "}
                         {shift.notes}
                       </p>
+                    </div>
+                  )}
+
+                  {/* Expand/Collapse Button */}
+                  <div className="mt-4 pt-4 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full flex items-center justify-center gap-2 text-neutral-600 hover:text-neutral-900"
+                      onClick={() => toggleShiftExpanded(shift.id, shift)}
+                    >
+                      {expandedShifts[shift.id] ? (
+                        <>
+                          <ChevronUp className="h-4 w-4" />
+                          Hide Sales Details
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4" />
+                          Show Sales Details
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Expanded Sales Details */}
+                  {expandedShifts[shift.id] && (
+                    <div className="mt-4 pt-4 border-t space-y-6">
+                      {loadingDetails[shift.id] ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                          <span className="ml-2 text-neutral-500">
+                            Loading sales details...
+                          </span>
+                        </div>
+                      ) : shiftDetails[shift.id] ? (
+                        <>
+                          {/* Category Sales */}
+                          <div>
+                            <h4 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                              <Tag className="h-4 w-4 text-blue-600" />
+                              Category Sales
+                            </h4>
+                            {shiftDetails[shift.id].categorySales.length > 0 ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {shiftDetails[shift.id].categorySales.map(
+                                  (category, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-100 dark:border-blue-800"
+                                    >
+                                      <p className="font-medium text-blue-900 dark:text-blue-100 truncate">
+                                        {category.name}
+                                      </p>
+                                      <div className="mt-1 flex justify-between text-sm">
+                                        <span className="text-blue-600 dark:text-blue-300">
+                                          {category.quantity} items
+                                        </span>
+                                        <span className="font-semibold text-blue-800 dark:text-blue-200">
+                                          {formatCurrency(category.revenue)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-neutral-500 italic">
+                                No category sales data
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Product Sales */}
+                          <div>
+                            <h4 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                              <Package className="h-4 w-4 text-green-600" />
+                              Product Sales (
+                              {shiftDetails[shift.id].productSales.length}{" "}
+                              products)
+                            </h4>
+                            {shiftDetails[shift.id].productSales.length > 0 ? (
+                              <div className="max-h-64 overflow-y-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-neutral-100 dark:bg-neutral-800 sticky top-0">
+                                    <tr>
+                                      <th className="text-left p-2 font-medium">
+                                        Product
+                                      </th>
+                                      <th className="text-left p-2 font-medium">
+                                        Category
+                                      </th>
+                                      <th className="text-center p-2 font-medium">
+                                        Qty
+                                      </th>
+                                      <th className="text-right p-2 font-medium">
+                                        Revenue
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+                                    {shiftDetails[shift.id].productSales.map(
+                                      (product, idx) => (
+                                        <tr
+                                          key={idx}
+                                          className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                                        >
+                                          <td
+                                            className="p-2 font-medium truncate max-w-[200px]"
+                                            title={product.name}
+                                          >
+                                            {product.name}
+                                          </td>
+                                          <td
+                                            className="p-2 text-neutral-500 truncate max-w-[120px]"
+                                            title={product.category}
+                                          >
+                                            {product.category}
+                                          </td>
+                                          <td className="p-2 text-center">
+                                            {product.quantity}
+                                          </td>
+                                          <td className="p-2 text-right font-medium text-green-600">
+                                            {formatCurrency(product.revenue)}
+                                          </td>
+                                        </tr>
+                                      )
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-neutral-500 italic">
+                                No product sales data
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Summary */}
+                          <div className="bg-neutral-100 dark:bg-neutral-800 rounded-lg p-3">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-neutral-600 dark:text-neutral-400">
+                                Total Receipts in Shift:
+                              </span>
+                              <span className="font-semibold">
+                                {shiftDetails[shift.id].totalTransactions}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-neutral-500 italic text-center py-4">
+                          No sales details available
+                        </p>
+                      )}
                     </div>
                   )}
                 </CardContent>

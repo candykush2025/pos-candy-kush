@@ -19,26 +19,45 @@ import {
   Edit,
   Trash2,
   UserCircle,
-  Mail,
-  Phone,
-  MapPin,
   Calendar,
   DollarSign,
   ShoppingBag,
   Award,
   AlertCircle,
-  CheckCircle,
-  Upload,
   RefreshCw,
-  Download,
   Clock,
   AlertTriangle,
+  ChevronLeft,
 } from "lucide-react";
 import { toast } from "sonner";
-import { dbService } from "@/lib/db/dbService";
 import { customersService } from "@/lib/firebase/firestore";
 import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
 import { formatCurrency } from "@/lib/utils/format";
+import { dbService } from "@/lib/db/dbService";
+
+// Helper function to safely get points as a number
+const getPointsValue = (customer) => {
+  if (!customer) return 0;
+  const points =
+    customer.points || customer.customPoints || customer.totalPoints;
+  if (typeof points === "number") return points;
+  if (Array.isArray(points)) {
+    return points.reduce((sum, p) => {
+      if (typeof p === "number") return sum + p;
+      if (typeof p === "object" && p.amount !== undefined)
+        return sum + (p.amount || 0);
+      return sum;
+    }, 0);
+  }
+  if (
+    typeof points === "object" &&
+    points !== null &&
+    points.amount !== undefined
+  ) {
+    return points.amount || 0;
+  }
+  return 0;
+};
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
@@ -48,19 +67,14 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState("list"); // "list", "detail", or "edit"
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
-  const [syncingCustomers, setSyncingCustomers] = useState({});
   const [isForceFetching, setIsForceFetching] = useState(false);
-  const [isFetchingFromKiosk, setIsFetchingFromKiosk] = useState(false);
 
-  // Source filters
-  const [sourceFilters, setSourceFilters] = useState({
-    loyverse: true,
-    kiosk: true,
-    local: true,
-  });
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     // Required
@@ -89,7 +103,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     filterCustomers();
-  }, [searchQuery, customers, sourceFilters]);
+  }, [searchQuery, customers]);
 
   const loadCategoriesFromKiosk = async () => {
     try {
@@ -306,12 +320,6 @@ export default function CustomersPage() {
   const filterCustomers = () => {
     let filtered = customers;
 
-    // Filter by source
-    filtered = filtered.filter((customer) => {
-      const source = customer.source || "local";
-      return sourceFilters[source] === true;
-    });
-
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -330,12 +338,115 @@ export default function CustomersPage() {
     setFilteredCustomers(filtered);
   };
 
-  const handleSourceFilterChange = (source) => {
-    setSourceFilters((prev) => ({
-      ...prev,
-      [source]: !prev[source],
-    }));
+  // Bulk selection handlers
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredCustomers.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredCustomers.map((c) => c.id));
+    }
   };
+
+  const handleSelectCustomer = (customerId) => {
+    setSelectedIds((prev) =>
+      prev.includes(customerId)
+        ? prev.filter((id) => id !== customerId)
+        : [...prev, customerId]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      toast.error("No customers selected");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Are you sure you want to delete ${selectedIds.length} customer(s)? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await Promise.all(selectedIds.map((id) => customersService.delete(id)));
+      toast.success(`${selectedIds.length} customer(s) deleted successfully`);
+      setSelectedIds([]);
+      loadCustomers();
+    } catch (error) {
+      console.error("Error deleting customers:", error);
+      toast.error("Failed to delete some customers");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const formatExpiryDate = (expiryDate) => {
+    if (!expiryDate) return "-";
+    const date = new Date(expiryDate);
+    return date.toLocaleDateString();
+  };
+
+  const getExpiryStatus = (expiryDate) => {
+    if (!expiryDate) return null;
+    if (customerApprovalService.isCustomerExpired(expiryDate)) return "expired";
+    if (customerApprovalService.isExpiringSoon(expiryDate)) return "expiring";
+    return "active";
+  };
+
+  // Calculate remaining days until expiry
+  const getRemainingDays = (expiryDate) => {
+    if (!expiryDate) return null;
+    const now = new Date();
+    const expiry = new Date(expiryDate);
+    const diffTime = expiry - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  // Format remaining days for display
+  const formatRemainingDays = (expiryDate) => {
+    const days = getRemainingDays(expiryDate);
+    if (days === null) return "-";
+    if (days < 0) return `${Math.abs(days)}d ago`;
+    if (days === 0) return "Today";
+    if (days === 1) return "1 day";
+    return `${days} days`;
+  };
+
+  // Categorize customers into Active, Expired, and Not Set
+  const categorizeCustomers = (customersList) => {
+    const active = [];
+    const expired = [];
+    const notSet = [];
+
+    customersList.forEach((customer) => {
+      if (!customer.expiryDate) {
+        notSet.push(customer);
+      } else if (
+        customerApprovalService.isCustomerExpired(customer.expiryDate)
+      ) {
+        expired.push(customer);
+      } else {
+        active.push(customer);
+      }
+    });
+
+    // Sort active by soonest expiry first
+    active.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+    // Sort expired by most recently expired first
+    expired.sort((a, b) => new Date(b.expiryDate) - new Date(a.expiryDate));
+
+    return { active, expired, notSet };
+  };
+
+  const {
+    active: activeCustomers,
+    expired: expiredCustomers,
+    notSet: notSetCustomers,
+  } = categorizeCustomers(filteredCustomers);
 
   const handleAdd = () => {
     setEditingCustomer(null);
@@ -344,6 +455,7 @@ export default function CustomersPage() {
       lastName: "",
       nickname: "",
       nationality: "",
+      passportNumber: "",
       dateOfBirth: "",
       email: "",
       cell: "",
@@ -357,13 +469,14 @@ export default function CustomersPage() {
     setIsModalOpen(true);
   };
 
-  const handleEdit = (customer) => {
+  const handleEdit = (customer, useModal = false) => {
     setEditingCustomer(customer);
     setFormData({
       name: customer.name || "",
       lastName: customer.lastName || "",
       nickname: customer.nickname || "",
       nationality: customer.nationality || "",
+      passportNumber: customer.passportNumber || "",
       dateOfBirth: customer.dateOfBirth || "",
       email: customer.email || "",
       cell: customer.cell || customer.phone || "",
@@ -374,7 +487,13 @@ export default function CustomersPage() {
       allowedCategories: customer.allowedCategories || [],
       expiryDate: customer.expiryDate || "",
     });
-    setIsModalOpen(true);
+    if (useModal) {
+      setIsModalOpen(true);
+    } else {
+      // Use in-page edit mode
+      setSelectedCustomer(customer);
+      setViewMode("edit");
+    }
   };
 
   const handleDelete = async (customer) => {
@@ -469,6 +588,7 @@ export default function CustomersPage() {
         lastName: formData.lastName.trim(),
         nickname: formData.nickname.trim(),
         nationality: formData.nationality.trim(),
+        passportNumber: formData.passportNumber.trim(),
         dateOfBirth: formData.dateOfBirth,
 
         // Contact Information
@@ -488,6 +608,9 @@ export default function CustomersPage() {
 
         // Kiosk Permissions
         allowedCategories: formData.allowedCategories,
+
+        // Expiry Date
+        expiryDate: formData.expiryDate || "",
 
         // Timestamps
         updatedAt: new Date().toISOString(),
@@ -536,6 +659,7 @@ export default function CustomersPage() {
             lastName: customerData.lastName || "",
             nickname: customerData.nickname || "",
             nationality: customerData.nationality || "",
+            passportNumber: customerData.passportNumber || "",
             dateOfBirth: customerData.dateOfBirth || "",
             email: customerData.email || "",
             cell: customerData.cell || "",
@@ -579,6 +703,13 @@ export default function CustomersPage() {
       }
 
       setIsModalOpen(false);
+      // If we were editing in-page, go back to detail view with updated customer
+      if (viewMode === "edit" && editingCustomer) {
+        const updatedCustomer = { ...editingCustomer, ...customerData };
+        setSelectedCustomer(updatedCustomer);
+        setViewMode("detail");
+        setEditingCustomer(null);
+      }
       loadCustomers();
     } catch (error) {
       console.error("Error saving customer:", error);
@@ -588,18 +719,559 @@ export default function CustomersPage() {
 
   const handleViewDetails = (customer) => {
     setSelectedCustomer(customer);
-    setIsDetailModalOpen(true);
+    setViewMode("detail");
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+  const handleBackToList = () => {
+    setSelectedCustomer(null);
+    setViewMode("list");
   };
 
+  const handleSetExpiry = async (customer, duration) => {
+    try {
+      const expiry = customerApprovalService.calculateExpiryDate(duration);
+      await customersService.update(customer.id, {
+        ...customer,
+        expiryDate: expiry,
+      });
+      toast.success(
+        `Expiry date set to ${
+          duration === "10days" ? "10 days" : "6 months"
+        } from now`
+      );
+      // Update selected customer with new expiry
+      setSelectedCustomer({ ...customer, expiryDate: expiry });
+      loadCustomers();
+    } catch (error) {
+      console.error("Error setting expiry:", error);
+      toast.error("Failed to set expiry date");
+    }
+  };
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "N/A";
+    try {
+      // Handle Firebase Timestamp
+      if (dateValue?.toDate) {
+        return dateValue.toDate().toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      }
+      // Handle seconds (Firebase Timestamp object format)
+      if (dateValue?.seconds) {
+        return new Date(dateValue.seconds * 1000).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      }
+      // Handle regular date string or Date object
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return "N/A";
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return "N/A";
+    }
+  };
+
+  // Detail View Component
+  if (viewMode === "detail" && selectedCustomer) {
+    return (
+      <div className="space-y-6">
+        {/* Header with Back Button */}
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={handleBackToList}>
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Back to Customers
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold">
+              {selectedCustomer.name} {selectedCustomer.lastName || ""}
+            </h1>
+            <p className="text-neutral-500">
+              Member ID:{" "}
+              {selectedCustomer.memberId ||
+                selectedCustomer.customerId ||
+                "N/A"}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => handleEdit(selectedCustomer)}
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => handleDelete(selectedCustomer)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Customer Info */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <ShoppingBag className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+                  <p className="text-2xl font-bold">
+                    {selectedCustomer.totalVisits ||
+                      selectedCustomer.visits ||
+                      0}
+                  </p>
+                  <p className="text-sm text-neutral-500">Total Visits</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <DollarSign className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                  <p className="text-2xl font-bold">
+                    {formatCurrency(
+                      selectedCustomer.totalSpent || selectedCustomer.spent || 0
+                    )}
+                  </p>
+                  <p className="text-sm text-neutral-500">Total Spent</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <Award className="h-8 w-8 text-purple-500 mx-auto mb-2" />
+                  <p className="text-2xl font-bold">
+                    {getPointsValue(selectedCustomer)}
+                  </p>
+                  <p className="text-sm text-neutral-500">Points</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Contact Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Contact Information</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-neutral-500">Email</p>
+                  <p className="font-medium">
+                    {selectedCustomer.email || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-neutral-500">Phone</p>
+                  <p className="font-medium">
+                    {selectedCustomer.phone || selectedCustomer.cell || "N/A"}
+                  </p>
+                </div>
+                {selectedCustomer.nationality && (
+                  <div>
+                    <p className="text-sm text-neutral-500">Nationality</p>
+                    <p className="font-medium">
+                      {selectedCustomer.nationality}
+                    </p>
+                  </div>
+                )}
+                {selectedCustomer.passportNumber && (
+                  <div>
+                    <p className="text-sm text-neutral-500">Passport Number</p>
+                    <p className="font-medium">
+                      {selectedCustomer.passportNumber}
+                    </p>
+                  </div>
+                )}
+                {selectedCustomer.dateOfBirth && (
+                  <div>
+                    <p className="text-sm text-neutral-500">Date of Birth</p>
+                    <p className="font-medium">
+                      {selectedCustomer.dateOfBirth}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Record Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Record Information</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-neutral-500">Created</p>
+                  <p className="font-medium">
+                    {formatDate(selectedCustomer.createdAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-neutral-500">Last Updated</p>
+                  <p className="font-medium">
+                    {formatDate(selectedCustomer.updatedAt)}
+                  </p>
+                </div>
+                {selectedCustomer.firstVisit && (
+                  <div>
+                    <p className="text-sm text-neutral-500">First Visit</p>
+                    <p className="font-medium">
+                      {formatDate(selectedCustomer.firstVisit)}
+                    </p>
+                  </div>
+                )}
+                {selectedCustomer.lastVisit && (
+                  <div>
+                    <p className="text-sm text-neutral-500">Last Visit</p>
+                    <p className="font-medium">
+                      {formatDate(selectedCustomer.lastVisit)}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column - Expiry Management */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Membership Expiry
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Current Expiry Status */}
+                <div className="p-4 rounded-lg bg-neutral-100 dark:bg-neutral-800">
+                  <p className="text-sm text-neutral-500 mb-2">
+                    Current Expiry Date
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {selectedCustomer.expiryDate ? (
+                      <>
+                        <p className="text-lg font-bold">
+                          {formatExpiryDate(selectedCustomer.expiryDate)}
+                        </p>
+                        {getExpiryStatus(selectedCustomer.expiryDate) ===
+                          "expired" && (
+                          <Badge variant="destructive">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Expired
+                          </Badge>
+                        )}
+                        {getExpiryStatus(selectedCustomer.expiryDate) ===
+                          "expiring" && (
+                          <Badge
+                            variant="outline"
+                            className="text-yellow-600 border-yellow-600"
+                          >
+                            <Clock className="h-3 w-3 mr-1" />
+                            Expiring Soon
+                          </Badge>
+                        )}
+                        {getExpiryStatus(selectedCustomer.expiryDate) ===
+                          "active" && (
+                          <Badge variant="default" className="bg-green-600">
+                            Active
+                          </Badge>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-lg font-medium text-neutral-400">
+                        No Expiry Set
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Set Buttons */}
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Quick Set Expiry</p>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => handleSetExpiry(selectedCustomer, "10days")}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Set to 10 Days from Now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => handleSetExpiry(selectedCustomer, "6months")}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Set to 6 Months from Now
+                  </Button>
+                </div>
+
+                {/* Info */}
+                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+                  <p className="text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    Expiry date controls customer access. Expired customers
+                    cannot make purchases.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Notes */}
+            {selectedCustomer.note && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                    {selectedCustomer.note}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Edit View Component (in-page)
+  if (viewMode === "edit" && selectedCustomer) {
+    return (
+      <div className="space-y-6">
+        {/* Header with Back Button */}
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setViewMode("detail");
+              setEditingCustomer(null);
+            }}
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Back to Details
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold">
+              Edit Customer: {selectedCustomer.name}{" "}
+              {selectedCustomer.lastName || ""}
+            </h1>
+            <p className="text-neutral-500">Update customer information</p>
+          </div>
+        </div>
+
+        {/* Edit Form */}
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Personal Information Section */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg border-b pb-2">
+                  Personal Information
+                </h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Name - Required */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      First Name <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      placeholder="John"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+
+                  {/* Last Name */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Last Name
+                    </label>
+                    <Input
+                      placeholder="Doe"
+                      value={formData.lastName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, lastName: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  {/* Nickname */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Nickname
+                    </label>
+                    <Input
+                      placeholder="JD"
+                      value={formData.nickname}
+                      onChange={(e) =>
+                        setFormData({ ...formData, nickname: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  {/* Nationality */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Nationality
+                    </label>
+                    <Input
+                      placeholder="Thai"
+                      value={formData.nationality}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          nationality: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  {/* Passport Number */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Passport Number
+                    </label>
+                    <Input
+                      placeholder="A12345678"
+                      value={formData.passportNumber}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          passportNumber: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  {/* Date of Birth */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Date of Birth
+                    </label>
+                    <Input
+                      type="date"
+                      value={formData.dateOfBirth}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          dateOfBirth: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  {/* Phone */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Phone Number
+                    </label>
+                    <Input
+                      type="tel"
+                      placeholder="+66 123 456 789"
+                      value={formData.cell}
+                      onChange={(e) =>
+                        setFormData({ ...formData, cell: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Member Information Section */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg border-b pb-2">
+                  Member Information
+                </h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Member ID */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Member ID
+                    </label>
+                    <Input
+                      placeholder="Auto-generated if empty"
+                      value={formData.memberId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, memberId: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  {/* Points */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Custom Points
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={formData.customPoints}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          customPoints: parseInt(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </div>
+
+                  {/* Expiry Date */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Expiry Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={
+                        formData.expiryDate
+                          ? formData.expiryDate.split("T")[0]
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setFormData({ ...formData, expiryDate: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setViewMode("detail");
+                    setEditingCustomer(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">Save Changes</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // List View
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -611,18 +1283,16 @@ export default function CustomersPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleFetchFromKiosk}
-            disabled={isFetchingFromKiosk}
-          >
-            <Download
-              className={`mr-2 h-4 w-4 ${
-                isFetchingFromKiosk ? "animate-bounce" : ""
-              }`}
-            />
-            {isFetchingFromKiosk ? "Importing..." : "Import from Kiosk"}
-          </Button>
+          {selectedIds.length > 0 && (
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete ({selectedIds.length})
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={handleForceFetchFromFirebase}
@@ -633,7 +1303,7 @@ export default function CustomersPage() {
                 isForceFetching ? "animate-spin" : ""
               }`}
             />
-            {isForceFetching ? "Fetching..." : "Force Fetch"}
+            {isForceFetching ? "Refreshing..." : "Refresh"}
           </Button>
           <Button onClick={handleAdd}>
             <Plus className="mr-2 h-4 w-4" />
@@ -643,7 +1313,7 @@ export default function CustomersPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -652,52 +1322,6 @@ export default function CustomersPage() {
                 <p className="text-2xl font-bold">{customers.length}</p>
               </div>
               <UserCircle className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Loyverse</p>
-                <p className="text-2xl font-bold">
-                  {customers.filter((c) => c.source === "loyverse").length}
-                </p>
-              </div>
-              <Badge variant="secondary">Loyverse</Badge>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Kiosk</p>
-                <p className="text-2xl font-bold">
-                  {customers.filter((c) => c.source === "kiosk").length}
-                </p>
-              </div>
-              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
-                Kiosk
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-500">Local</p>
-                <p className="text-2xl font-bold">
-                  {
-                    customers.filter((c) => !c.source || c.source === "local")
-                      .length
-                  }
-                </p>
-              </div>
-              <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100">
-                Local
-              </Badge>
             </div>
           </CardContent>
         </Card>
@@ -719,6 +1343,25 @@ export default function CustomersPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-neutral-500">Expiring Soon</p>
+                <p className="text-2xl font-bold">
+                  {
+                    customers.filter(
+                      (c) =>
+                        c.expiryDate &&
+                        customerApprovalService.isExpiringSoon(c.expiryDate)
+                    ).length
+                  }
+                </p>
+              </div>
+              <AlertTriangle className="h-8 w-8 text-yellow-500" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Search */}
@@ -736,68 +1379,7 @@ export default function CustomersPage() {
         </CardContent>
       </Card>
 
-      {/* Source Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-6">
-            <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              Filter by Source:
-            </span>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={sourceFilters.loyverse}
-                  onChange={() => handleSourceFilterChange("loyverse")}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm">Loyverse</span>
-                <Badge variant="secondary" className="ml-1">
-                  {customers.filter((c) => c.source === "loyverse").length}
-                </Badge>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={sourceFilters.kiosk}
-                  onChange={() => handleSourceFilterChange("kiosk")}
-                  className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                />
-                <span className="text-sm">Kiosk</span>
-                <Badge
-                  variant="secondary"
-                  className="ml-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                >
-                  {customers.filter((c) => c.source === "kiosk").length}
-                </Badge>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={sourceFilters.local}
-                  onChange={() => handleSourceFilterChange("local")}
-                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                />
-                <span className="text-sm">Local</span>
-                <Badge
-                  variant="secondary"
-                  className="ml-1 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
-                >
-                  {
-                    customers.filter((c) => !c.source || c.source === "local")
-                      .length
-                  }
-                </Badge>
-              </label>
-            </div>
-            <div className="ml-auto text-sm text-neutral-500">
-              Showing {filteredCustomers.length} of {customers.length} customers
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Customers List */}
+      {/* Customers Tables */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <p className="text-neutral-500">Loading customers...</p>
@@ -818,179 +1400,446 @@ export default function CustomersPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>All Customers ({filteredCustomers.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {filteredCustomers.map((customer) => (
-                <div
-                  key={customer.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
-                >
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center space-x-3">
-                      <UserCircle className="h-10 w-10 text-neutral-400" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">
-                            {customer.name}
-                          </h3>
-                          {customer.source && (
+        <div className="space-y-6">
+          {/* Active Customers Table */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                <Award className="h-5 w-5" />
+                Active Customers ({activeCustomers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {activeCustomers.length === 0 ? (
+                <div className="py-8 text-center text-neutral-500">
+                  No active customers
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-green-50 dark:bg-green-900/20">
+                      <tr>
+                        <th className="w-12 px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={
+                              activeCustomers.every((c) =>
+                                selectedIds.includes(c.id)
+                              ) && activeCustomers.length > 0
+                            }
+                            onChange={() => {
+                              const allSelected = activeCustomers.every((c) =>
+                                selectedIds.includes(c.id)
+                              );
+                              if (allSelected) {
+                                setSelectedIds((prev) =>
+                                  prev.filter(
+                                    (id) =>
+                                      !activeCustomers.find((c) => c.id === id)
+                                  )
+                                );
+                              } else {
+                                setSelectedIds((prev) => [
+                                  ...new Set([
+                                    ...prev,
+                                    ...activeCustomers.map((c) => c.id),
+                                  ]),
+                                ]);
+                              }
+                            }}
+                            className="rounded border-gray-300 dark:border-gray-600"
+                          />
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Name
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Member ID
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Points
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Visits
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Total Spent
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Remaining
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+                      {activeCustomers.map((customer) => (
+                        <tr
+                          key={customer.id}
+                          className="hover:bg-neutral-50 dark:hover:bg-neutral-900 cursor-pointer transition-colors"
+                          onClick={() => handleViewDetails(customer)}
+                        >
+                          <td
+                            className="px-4 py-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(customer.id)}
+                              onChange={() => handleSelectCustomer(customer.id)}
+                              className="rounded border-gray-300 dark:border-gray-600"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                <UserCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-neutral-900 dark:text-neutral-100">
+                                  {customer.name} {customer.lastName || ""}
+                                </p>
+                                {customer.email && (
+                                  <p className="text-xs text-neutral-500">
+                                    {customer.email}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-sm text-primary">
+                              {customer.memberId || customer.customerId || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                              {getPointsValue(customer)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                              {customer.totalVisits || customer.visits || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                              {formatCurrency(
+                                customer.totalSpent || customer.spent || 0
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
                             <Badge
                               variant={
-                                customer.source === "loyverse"
-                                  ? "secondary"
-                                  : customer.source === "kiosk"
-                                  ? "default"
-                                  : "outline"
+                                getRemainingDays(customer.expiryDate) <= 7
+                                  ? "destructive"
+                                  : getRemainingDays(customer.expiryDate) <= 30
+                                  ? "outline"
+                                  : "secondary"
                               }
                               className={
-                                customer.source === "kiosk"
-                                  ? "text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                                  : customer.source === "local"
-                                  ? "text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
-                                  : "text-xs"
+                                getRemainingDays(customer.expiryDate) <= 7
+                                  ? ""
+                                  : getRemainingDays(customer.expiryDate) <= 30
+                                  ? "text-yellow-600 border-yellow-600"
+                                  : "text-green-600"
                               }
                             >
-                              {customer.source}
+                              {formatRemainingDays(customer.expiryDate)}
                             </Badge>
-                          )}
-                          {customer.source === "kiosk" ||
-                          customer.syncedToKiosk ? (
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Expired Customers Table */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <AlertTriangle className="h-5 w-5" />
+                Expired Customers ({expiredCustomers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {expiredCustomers.length === 0 ? (
+                <div className="py-8 text-center text-neutral-500">
+                  No expired customers
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-red-50 dark:bg-red-900/20">
+                      <tr>
+                        <th className="w-12 px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={
+                              expiredCustomers.every((c) =>
+                                selectedIds.includes(c.id)
+                              ) && expiredCustomers.length > 0
+                            }
+                            onChange={() => {
+                              const allSelected = expiredCustomers.every((c) =>
+                                selectedIds.includes(c.id)
+                              );
+                              if (allSelected) {
+                                setSelectedIds((prev) =>
+                                  prev.filter(
+                                    (id) =>
+                                      !expiredCustomers.find((c) => c.id === id)
+                                  )
+                                );
+                              } else {
+                                setSelectedIds((prev) => [
+                                  ...new Set([
+                                    ...prev,
+                                    ...expiredCustomers.map((c) => c.id),
+                                  ]),
+                                ]);
+                              }
+                            }}
+                            className="rounded border-gray-300 dark:border-gray-600"
+                          />
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Name
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Member ID
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Points
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Visits
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Total Spent
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Expired
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+                      {expiredCustomers.map((customer) => (
+                        <tr
+                          key={customer.id}
+                          className="hover:bg-neutral-50 dark:hover:bg-neutral-900 cursor-pointer transition-colors bg-red-50/30 dark:bg-red-900/10"
+                          onClick={() => handleViewDetails(customer)}
+                        >
+                          <td
+                            className="px-4 py-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(customer.id)}
+                              onChange={() => handleSelectCustomer(customer.id)}
+                              className="rounded border-gray-300 dark:border-gray-600"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                                <UserCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-neutral-900 dark:text-neutral-100">
+                                  {customer.name} {customer.lastName || ""}
+                                </p>
+                                {customer.email && (
+                                  <p className="text-xs text-neutral-500">
+                                    {customer.email}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-sm text-primary">
+                              {customer.memberId || customer.customerId || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                              {getPointsValue(customer)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                              {customer.totalVisits || customer.visits || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                              {formatCurrency(
+                                customer.totalSpent || customer.spent || 0
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="destructive" className="text-xs">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              {formatRemainingDays(customer.expiryDate)}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Not Set Customers Table */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-neutral-600 dark:text-neutral-400">
+                <Clock className="h-5 w-5" />
+                No Expiry Set ({notSetCustomers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {notSetCustomers.length === 0 ? (
+                <div className="py-8 text-center text-neutral-500">
+                  All customers have expiry dates set
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-neutral-100 dark:bg-neutral-800">
+                      <tr>
+                        <th className="w-12 px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={
+                              notSetCustomers.every((c) =>
+                                selectedIds.includes(c.id)
+                              ) && notSetCustomers.length > 0
+                            }
+                            onChange={() => {
+                              const allSelected = notSetCustomers.every((c) =>
+                                selectedIds.includes(c.id)
+                              );
+                              if (allSelected) {
+                                setSelectedIds((prev) =>
+                                  prev.filter(
+                                    (id) =>
+                                      !notSetCustomers.find((c) => c.id === id)
+                                  )
+                                );
+                              } else {
+                                setSelectedIds((prev) => [
+                                  ...new Set([
+                                    ...prev,
+                                    ...notSetCustomers.map((c) => c.id),
+                                  ]),
+                                ]);
+                              }
+                            }}
+                            className="rounded border-gray-300 dark:border-gray-600"
+                          />
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Name
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Member ID
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Points
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Visits
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Total Spent
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+                      {notSetCustomers.map((customer) => (
+                        <tr
+                          key={customer.id}
+                          className="hover:bg-neutral-50 dark:hover:bg-neutral-900 cursor-pointer transition-colors"
+                          onClick={() => handleViewDetails(customer)}
+                        >
+                          <td
+                            className="px-4 py-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(customer.id)}
+                              onChange={() => handleSelectCustomer(customer.id)}
+                              className="rounded border-gray-300 dark:border-gray-600"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center flex-shrink-0">
+                                <UserCircle className="h-5 w-5 text-neutral-500" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-neutral-900 dark:text-neutral-100">
+                                  {customer.name} {customer.lastName || ""}
+                                </p>
+                                {customer.email && (
+                                  <p className="text-xs text-neutral-500">
+                                    {customer.email}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-sm text-primary">
+                              {customer.memberId || customer.customerId || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                              {getPointsValue(customer)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                              {customer.totalVisits || customer.visits || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                              {formatCurrency(
+                                customer.totalSpent || customer.spent || 0
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
                             <Badge
                               variant="outline"
-                              className="text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                              className="text-xs text-neutral-500"
                             >
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Synced to Kiosk
+                              Not Set
                             </Badge>
-                          ) : (
-                            customer.source !== "kiosk" && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs bg-yellow-50 dark:bg-yellow-950 border-yellow-500 text-yellow-700 dark:text-yellow-400"
-                              >
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Not Synced
-                              </Badge>
-                            )
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-neutral-500">
-                          {customer.customerId && (
-                            <span className="font-mono font-semibold text-primary">
-                              {customer.customerId}
-                            </span>
-                          )}
-                          {customer.customerCode && !customer.customerId && (
-                            <span>{customer.customerCode}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-4 text-sm text-neutral-600 ml-13">
-                      {customer.email && (
-                        <div className="flex items-center gap-1">
-                          <Mail className="h-4 w-4" />
-                          {customer.email}
-                        </div>
-                      )}
-                      {customer.phone && (
-                        <div className="flex items-center gap-1">
-                          <Phone className="h-4 w-4" />
-                          {customer.phone}
-                        </div>
-                      )}
-                      {(customer.city || customer.province) && (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          {[customer.city, customer.province]
-                            .filter(Boolean)
-                            .join(", ")}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex gap-4 text-sm ml-13">
-                      <div className="flex items-center gap-1 text-neutral-600">
-                        <ShoppingBag className="h-4 w-4" />
-                        <span>
-                          {customer.totalVisits || customer.visits || 0} visits
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 text-green-600">
-                        <DollarSign className="h-4 w-4" />
-                        <span>
-                          {formatCurrency(
-                            customer.totalSpent || customer.spent || 0
-                          )}{" "}
-                          spent
-                        </span>
-                      </div>
-                      {(customer.totalPoints || customer.points || 0) > 0 && (
-                        <div className="flex items-center gap-1 text-purple-600">
-                          <Award className="h-4 w-4" />
-                          <span>
-                            {customer.totalPoints || customer.points} points
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex space-x-2">
-                    {!customer.syncedToKiosk && customer.source !== "kiosk" && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleSyncToKiosk(customer)}
-                        disabled={syncingCustomers[customer.id]}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        {syncingCustomers[customer.id] ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Syncing...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 mr-1" />
-                            Sync to Kiosk
-                          </>
-                        )}
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewDetails(customer)}
-                    >
-                      View
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleEdit(customer)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleDelete(customer)}
-                      disabled={customer.source === "loyverse"}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Add/Edit Customer Modal */}
@@ -1165,38 +2014,6 @@ export default function CustomersPage() {
                       setFormData({ ...formData, customPoints: e.target.value })
                     }
                   />
-                </div>
-
-                {/* Is No Member */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isNoMember"
-                    checked={formData.isNoMember}
-                    onChange={(e) =>
-                      setFormData({ ...formData, isNoMember: e.target.checked })
-                    }
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isNoMember" className="text-sm font-medium">
-                    Non-Member
-                  </label>
-                </div>
-
-                {/* Is Active */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={formData.isActive}
-                    onChange={(e) =>
-                      setFormData({ ...formData, isActive: e.target.checked })
-                    }
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isActive" className="text-sm font-medium">
-                    Active Account
-                  </label>
                 </div>
               </div>
             </div>
@@ -1414,206 +2231,6 @@ export default function CustomersPage() {
               </Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Customer Detail Modal */}
-      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Customer Details</DialogTitle>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-6">
-              {/* Customer Info */}
-              <div className="flex items-start gap-4">
-                <UserCircle className="h-16 w-16 text-neutral-400" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h2 className="text-2xl font-bold">
-                      {selectedCustomer.name}
-                    </h2>
-                    {selectedCustomer.source && (
-                      <Badge
-                        variant={
-                          selectedCustomer.source === "loyverse"
-                            ? "secondary"
-                            : "default"
-                        }
-                      >
-                        {selectedCustomer.source}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-neutral-500">
-                    {selectedCustomer.customerCode}
-                  </p>
-                </div>
-              </div>
-
-              {/* Contact Information */}
-              <div>
-                <h3 className="font-semibold mb-3">Contact Information</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-neutral-500">Email</p>
-                    <p className="font-medium">
-                      {selectedCustomer.email || "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-neutral-500">Phone</p>
-                    <p className="font-medium">
-                      {selectedCustomer.phone || "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Address */}
-              {(selectedCustomer.address ||
-                selectedCustomer.city ||
-                selectedCustomer.province) && (
-                <div>
-                  <h3 className="font-semibold mb-3">Address</h3>
-                  <div className="text-sm space-y-1">
-                    {selectedCustomer.address && (
-                      <p>{selectedCustomer.address}</p>
-                    )}
-                    <p>
-                      {[
-                        selectedCustomer.city,
-                        selectedCustomer.province,
-                        selectedCustomer.postalCode,
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </p>
-                    {(selectedCustomer.countryCode ||
-                      selectedCustomer.country) && (
-                      <p>
-                        {selectedCustomer.countryCode ||
-                          selectedCustomer.country}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Statistics */}
-              <div>
-                <h3 className="font-semibold mb-3">Statistics</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <ShoppingBag className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">
-                        {selectedCustomer.totalVisits ||
-                          selectedCustomer.visits ||
-                          0}
-                      </p>
-                      <p className="text-sm text-neutral-500">Total Visits</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <DollarSign className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">
-                        {formatCurrency(
-                          selectedCustomer.totalSpent ||
-                            selectedCustomer.spent ||
-                            0
-                        )}
-                      </p>
-                      <p className="text-sm text-neutral-500">Total Spent</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <Award className="h-8 w-8 text-purple-500 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">
-                        {selectedCustomer.totalPoints ||
-                          selectedCustomer.points ||
-                          0}
-                      </p>
-                      <p className="text-sm text-neutral-500">Loyalty Points</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-
-              {/* Visit History */}
-              {(selectedCustomer.firstVisit || selectedCustomer.lastVisit) && (
-                <div>
-                  <h3 className="font-semibold mb-3">Visit History</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-neutral-500">First Visit</p>
-                      <p className="font-medium">
-                        {formatDate(selectedCustomer.firstVisit)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-neutral-500">Last Visit</p>
-                      <p className="font-medium">
-                        {formatDate(selectedCustomer.lastVisit)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              {selectedCustomer.note && (
-                <div>
-                  <h3 className="font-semibold mb-3">Notes</h3>
-                  <p className="text-sm text-neutral-600">
-                    {selectedCustomer.note}
-                  </p>
-                </div>
-              )}
-
-              {/* Timestamps */}
-              <div>
-                <h3 className="font-semibold mb-3">Record Information</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-neutral-500">Created</p>
-                    <p className="font-medium">
-                      {formatDate(selectedCustomer.createdAt)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-neutral-500">Last Updated</p>
-                    <p className="font-medium">
-                      {formatDate(selectedCustomer.updatedAt)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsDetailModalOpen(false);
-                    handleEdit(selectedCustomer);
-                  }}
-                  className="flex-1"
-                >
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit Customer
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDetailModalOpen(false)}
-                  className="flex-1"
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>

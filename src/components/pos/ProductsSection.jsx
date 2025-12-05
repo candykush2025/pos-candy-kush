@@ -34,6 +34,11 @@ import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/useAuthStore";
+import {
+  canAddProduct,
+  canEditProduct,
+  canDeleteProduct,
+} from "@/lib/services/userPermissionsService";
 
 export default function ProductsSection() {
   const { user } = useAuthStore();
@@ -339,14 +344,26 @@ export default function ProductsSection() {
   };
 
   const handleAddProduct = () => {
+    if (!canAddProduct(user)) {
+      toast.error("You don't have permission to add products");
+      return;
+    }
     router.push("/sales/products/new");
   };
 
   const handleEditProduct = (product) => {
+    if (!canEditProduct(user)) {
+      toast.error("You don't have permission to edit products");
+      return;
+    }
     router.push(`/sales/products/new?edit=${product.id}`);
   };
 
   const handleDeleteProduct = async (id) => {
+    if (!canDeleteProduct(user)) {
+      toast.error("You don't have permission to delete products");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this product?")) return;
     try {
       await productsService.delete(id);
@@ -566,7 +583,7 @@ export default function ProductsSection() {
           </div>
 
           {/* Add Button */}
-          {activeMenu === "products" && (
+          {activeMenu === "products" && canAddProduct(user) && (
             <Button size="lg" onClick={handleAddProduct}>
               <Plus className="h-5 w-5 mr-2" />
               Add Product
@@ -624,8 +641,15 @@ export default function ProductsSection() {
                         return (
                           <div
                             key={product.id}
-                            onClick={() => handleEditProduct(product)}
-                            className="flex items-center gap-4 p-4 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
+                            onClick={() =>
+                              canEditProduct(user) && handleEditProduct(product)
+                            }
+                            className={cn(
+                              "flex items-center gap-4 p-4 transition-colors",
+                              canEditProduct(user)
+                                ? "hover:bg-neutral-50 dark:hover:bg-neutral-900 cursor-pointer"
+                                : "cursor-default"
+                            )}
                           >
                             {/* Image/Color */}
                             {getProductDisplay(product)}

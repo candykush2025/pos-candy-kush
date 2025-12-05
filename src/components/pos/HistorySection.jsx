@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { receiptsService } from "@/lib/firebase/firestore";
 import { dbService } from "@/lib/db/dbService";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { canVoidSale } from "@/lib/services/userPermissionsService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -738,6 +739,12 @@ export default function HistorySection({ cashier: _cashier }) {
   const handleRefundRequest = async () => {
     if (!selectedReceipt) return;
 
+    // Check permission
+    if (!canVoidSale(_cashier)) {
+      alert("You don't have permission to request refunds/voids");
+      return;
+    }
+
     try {
       setSubmittingRefundRequest(true);
       const editRequest = {
@@ -992,15 +999,17 @@ export default function HistorySection({ cashier: _cashier }) {
               <div className="max-w-2xl mx-auto space-y-6">
                 {/* Action Buttons - Top Right */}
                 <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowRefundModal(true)}
-                    className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Refund
-                  </Button>
+                  {canVoidSale(_cashier) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowRefundModal(true)}
+                      className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Refund
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

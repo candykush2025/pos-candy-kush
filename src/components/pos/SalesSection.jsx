@@ -82,6 +82,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
+import { canApplyDiscount } from "@/lib/services/userPermissionsService";
 
 // Sortable Tab Component
 function SortableTab({
@@ -1202,12 +1203,19 @@ export default function SalesSection({ cashier }) {
     const availableForSale = isProductAvailable(product);
     const stock = getProductStock(product);
 
+    // Check if product uses recipe mode (doesn't reduce own stock)
+    const hasStockReductions =
+      product.stockReductions && product.stockReductions.length > 0;
+    const reduceOwnStock = product.reduceOwnStock !== false; // Default true
+    const isRecipeMode = hasStockReductions && !reduceOwnStock;
+
     if (!availableForSale) {
       toast.error("Product is not available for sale");
       return;
     }
 
-    if (trackStock && stock <= 0) {
+    // Allow sale if in recipe mode (own stock doesn't matter)
+    if (trackStock && stock <= 0 && !isRecipeMode) {
       toast.error("Product out of stock");
       return;
     }
@@ -2115,28 +2123,107 @@ export default function SalesSection({ cashier }) {
               shortage: item.quantity - currentStock,
             });
           }
-          const newStock = Math.max(0, currentStock - item.quantity);
 
-          // Update product stock
-          await productsService.update(product.id, {
-            stock: newStock,
-          });
+          // Check if this product has stock reductions configured
+          const hasStockReductions =
+            product.stockReductions && product.stockReductions.length > 0;
 
-          // Log stock history
-          await stockHistoryService.logStockMovement({
-            productId: product.id,
-            productName: product.name,
-            sku: product.sku || null,
-            type: "sale",
-            quantity: -item.quantity, // Negative for sale
-            previousStock: currentStock,
-            newStock: newStock,
-            referenceId: orderNumber,
-            referenceType: "receipt",
-            userId: cashier?.id || null,
-            userName: cashier?.name || "Unknown",
-            notes: `Sale: ${item.quantity}x ${product.name}`,
-          });
+          if (hasStockReductions) {
+            // RECIPE/BUNDLE SYSTEM: Reduce stock from configured products
+            for (const reduction of product.stockReductions) {
+              const reductionProduct = await productsService.get(
+                reduction.productId
+              );
+              if (!reductionProduct) {
+                console.warn(
+                  "⚠️ Stock reduction product not found:",
+                  reduction.productId
+                );
+                continue;
+              }
+
+              const reductionCurrentStock =
+                reductionProduct.stock ?? reductionProduct.inStock ?? 0;
+              // Calculate total reduction: reduction.quantity * item.quantity (sold qty)
+              const totalReduction = reduction.quantity * item.quantity;
+              const reductionNewStock = Math.max(
+                0,
+                reductionCurrentStock - totalReduction
+              );
+
+              // Update reduction product stock
+              await productsService.update(reduction.productId, {
+                stock: reductionNewStock,
+              });
+
+              // Log stock history for reduction product
+              await stockHistoryService.logStockMovement({
+                productId: reduction.productId,
+                productName: reductionProduct.name,
+                sku: reductionProduct.sku || null,
+                type: "sale",
+                quantity: -totalReduction,
+                previousStock: reductionCurrentStock,
+                newStock: reductionNewStock,
+                referenceId: orderNumber,
+                referenceType: "receipt",
+                userId: cashier?.id || null,
+                userName: cashier?.name || "Unknown",
+                notes: `Sale of ${item.quantity}x ${product.name} → Reduced ${totalReduction}x ${reductionProduct.name}`,
+              });
+            }
+
+            // Also reduce own stock if reduceOwnStock is true (default: true for backwards compatibility)
+            const shouldReduceOwnStock = product.reduceOwnStock !== false;
+            if (shouldReduceOwnStock) {
+              const newStock = Math.max(0, currentStock - item.quantity);
+
+              // Update product stock
+              await productsService.update(product.id, {
+                stock: newStock,
+              });
+
+              // Log stock history
+              await stockHistoryService.logStockMovement({
+                productId: product.id,
+                productName: product.name,
+                sku: product.sku || null,
+                type: "sale",
+                quantity: -item.quantity,
+                previousStock: currentStock,
+                newStock: newStock,
+                referenceId: orderNumber,
+                referenceType: "receipt",
+                userId: cashier?.id || null,
+                userName: cashier?.name || "Unknown",
+                notes: `Sale: ${item.quantity}x ${product.name} (own stock)`,
+              });
+            }
+          } else {
+            // DEFAULT SYSTEM: Reduce own stock only (no recipe configured)
+            const newStock = Math.max(0, currentStock - item.quantity);
+
+            // Update product stock
+            await productsService.update(product.id, {
+              stock: newStock,
+            });
+
+            // Log stock history
+            await stockHistoryService.logStockMovement({
+              productId: product.id,
+              productName: product.name,
+              sku: product.sku || null,
+              type: "sale",
+              quantity: -item.quantity, // Negative for sale
+              previousStock: currentStock,
+              newStock: newStock,
+              referenceId: orderNumber,
+              referenceType: "receipt",
+              userId: cashier?.id || null,
+              userName: cashier?.name || "Unknown",
+              notes: `Sale: ${item.quantity}x ${product.name}`,
+            });
+          }
         }
       } catch (error) {
         console.error("❌ Error updating stock:", error);
@@ -2564,7 +2651,17 @@ export default function SalesSection({ cashier }) {
                       product.available_for_sale !== false;
                     const hasVariants =
                       product.variants && product.variants.length > 0;
-                    const isOutOfStock = hasVariants
+
+                    // Check if product uses recipe mode (doesn't reduce own stock)
+                    const hasStockReductions =
+                      product.stockReductions &&
+                      product.stockReductions.length > 0;
+                    const reduceOwnStock = product.reduceOwnStock !== false;
+                    const isRecipeMode = hasStockReductions && !reduceOwnStock;
+
+                    const isOutOfStock = isRecipeMode
+                      ? false // Recipe mode products are never "out of stock" based on own stock
+                      : hasVariants
                       ? product.variants.every(
                           (v) =>
                             !v.sku ||
@@ -2858,7 +2955,18 @@ export default function SalesSection({ cashier }) {
                   const trackStock = parseBoolean(product.trackStock, true);
                   const availableForSale = isProductAvailable(product);
                   const stock = getProductStock(product);
-                  const isOutOfStock = trackStock && stock <= 0;
+
+                  // Check if product uses recipe mode (doesn't reduce own stock)
+                  const hasStockReductions =
+                    product.stockReductions &&
+                    product.stockReductions.length > 0;
+                  const reduceOwnStock = product.reduceOwnStock !== false;
+                  const isRecipeMode = hasStockReductions && !reduceOwnStock;
+
+                  // Recipe mode products are never "out of stock" based on own stock
+                  const isOutOfStock = isRecipeMode
+                    ? false
+                    : trackStock && stock <= 0;
                   const canSell = availableForSale && !isOutOfStock;
                   const imageUrl = getProductImage(product);
                   const productColor = getProductColor(product);
@@ -3364,16 +3472,18 @@ export default function SalesSection({ cashier }) {
 
               {/* Discount button row */}
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-12 w-12 flex-shrink-0"
-                  onClick={handleShowDiscounts}
-                  disabled={items.length === 0}
-                  title="Apply Discount"
-                >
-                  <Percent className="h-5 w-5" />
-                </Button>
+                {canApplyDiscount(cashier) && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-12 w-12 flex-shrink-0"
+                    onClick={handleShowDiscounts}
+                    disabled={items.length === 0}
+                    title="Apply Discount"
+                  >
+                    <Percent className="h-5 w-5" />
+                  </Button>
+                )}
                 <Button
                   className="flex-1 h-12 text-lg"
                   onClick={handleCheckout}

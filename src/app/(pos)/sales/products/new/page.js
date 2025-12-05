@@ -20,6 +20,9 @@ import {
   Loader2,
   Save,
   CheckCircle,
+  Search,
+  Minus,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -50,6 +53,12 @@ export default function POSNewProductPage() {
   const [isQuickAddingCategory, setIsQuickAddingCategory] = useState(false);
   const [nextSku, setNextSku] = useState("");
 
+  // Stock reduction states
+  const [allProducts, setAllProducts] = useState([]);
+  const [stockReductionSearch, setStockReductionSearch] = useState("");
+  const [showStockReductionPicker, setShowStockReductionPicker] =
+    useState(false);
+
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
@@ -66,11 +75,14 @@ export default function POSNewProductPage() {
     representationType: "color",
     image: null,
     imagePreview: null,
+    stockReductions: [],
+    reduceOwnStock: true,
   });
 
   // Load categories on mount
   useEffect(() => {
     loadCategories();
+    loadAllProducts();
     generateNextSku();
   }, []);
 
@@ -88,6 +100,15 @@ export default function POSNewProductPage() {
     } catch (error) {
       console.error("Error loading categories:", error);
       toast.error("Failed to load categories");
+    }
+  };
+
+  const loadAllProducts = async () => {
+    try {
+      const data = await productsService.getAll();
+      setAllProducts(data);
+    } catch (error) {
+      console.error("Error loading products for stock reduction:", error);
     }
   };
 
@@ -112,6 +133,8 @@ export default function POSNewProductPage() {
           representationType: product.imageUrl ? "image" : "color",
           image: null,
           imagePreview: product.imageUrl || null,
+          stockReductions: product.stockReductions || [],
+          reduceOwnStock: product.reduceOwnStock !== false, // Default true
         });
       } else {
         toast.error("Product not found");
@@ -198,6 +221,60 @@ export default function POSNewProductPage() {
     }));
   };
 
+  // Stock reduction helpers
+  const addStockReduction = (product) => {
+    // Don't add if already in list or is current product
+    if (
+      formData.stockReductions.some((r) => r.productId === product.id) ||
+      product.id === editId
+    ) {
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      stockReductions: [
+        ...prev.stockReductions,
+        {
+          productId: product.id,
+          productName: product.name,
+          quantity: 1,
+        },
+      ],
+    }));
+    setStockReductionSearch("");
+    setShowStockReductionPicker(false);
+  };
+
+  const updateStockReductionQuantity = (productId, quantity) => {
+    setFormData((prev) => ({
+      ...prev,
+      stockReductions: prev.stockReductions.map((r) =>
+        r.productId === productId
+          ? { ...r, quantity: Math.max(1, quantity) }
+          : r
+      ),
+    }));
+  };
+
+  const removeStockReduction = (productId) => {
+    setFormData((prev) => ({
+      ...prev,
+      stockReductions: prev.stockReductions.filter(
+        (r) => r.productId !== productId
+      ),
+    }));
+  };
+
+  // Filter products for stock reduction picker
+  const filteredStockProducts = allProducts.filter((p) => {
+    if (p.id === editId) return false; // Exclude current product
+    if (!p.trackStock) return false; // Only show products with stock tracking
+    if (formData.stockReductions.some((r) => r.productId === p.id))
+      return false; // Exclude already added
+    if (!stockReductionSearch) return true;
+    return p.name.toLowerCase().includes(stockReductionSearch.toLowerCase());
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -225,6 +302,8 @@ export default function POSNewProductPage() {
         imageUrl: formData.imagePreview || "",
         source: "pos",
         updatedAt: new Date().toISOString(),
+        stockReductions: formData.trackStock ? formData.stockReductions : [],
+        reduceOwnStock: formData.trackStock ? formData.reduceOwnStock : true,
       };
 
       if (editId) {
@@ -237,18 +316,22 @@ export default function POSNewProductPage() {
           const oldStock = oldProduct?.stock || 0;
           const newStock = parseInt(formData.stock) || 0;
 
-          if (oldStock !== newStock) {
-            await stockHistoryService.create({
+          // Only log if stock changed and new stock >= 1
+          if (oldStock !== newStock && newStock >= 1) {
+            await stockHistoryService.logStockMovement({
               productId: editId,
               productName: productData.name,
+              sku: productData.sku || null,
+              type: "adjustment",
+              quantity: newStock - oldStock,
               previousStock: oldStock,
               newStock: newStock,
-              changeAmount: newStock - oldStock,
-              changeType:
-                newStock > oldStock ? "adjustment_add" : "adjustment_remove",
               reason: "Stock adjusted via POS product edit",
-              performedBy: user?.name || "Cashier",
-              cost: parseFloat(formData.cost) || 0,
+              referenceId: null,
+              referenceType: "product_edit",
+              userId: user?.id || null,
+              userName: user?.name || "Cashier",
+              notes: `Cost: ฿${parseFloat(formData.cost) || 0}`,
             });
           }
         }
@@ -262,18 +345,22 @@ export default function POSNewProductPage() {
         productData.createdAt = new Date().toISOString();
         const newProduct = await productsService.create(productData);
 
-        // Log initial stock if tracking
-        if (formData.trackStock && parseInt(formData.stock) > 0) {
-          await stockHistoryService.create({
+        // Log initial stock if tracking and stock >= 1
+        if (formData.trackStock && parseInt(formData.stock) >= 1) {
+          await stockHistoryService.logStockMovement({
             productId: newProduct.id,
             productName: productData.name,
+            sku: productData.sku || null,
+            type: "initial",
+            quantity: parseInt(formData.stock),
             previousStock: 0,
             newStock: parseInt(formData.stock),
-            changeAmount: parseInt(formData.stock),
-            changeType: "initial_stock",
             reason: "Initial stock on product creation (POS)",
-            performedBy: user?.name || "Cashier",
-            cost: parseFloat(formData.cost) || 0,
+            referenceId: null,
+            referenceType: "product_create",
+            userId: user?.id || null,
+            userName: user?.name || "Cashier",
+            notes: `Cost: ฿${parseFloat(formData.cost) || 0}`,
           });
         }
 
@@ -638,6 +725,189 @@ export default function POSNewProductPage() {
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Enter the buy price for this stock batch
                       </p>
+                    </div>
+
+                    {/* Stock Reduction Section */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                            Reduce Stock From Other Products
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            When this product is sold, automatically reduce
+                            stock from selected products
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Stock Reduction Picker */}
+                      {showStockReductionPicker ? (
+                        <div className="space-y-3">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              type="text"
+                              placeholder="Search products with stock tracking..."
+                              value={stockReductionSearch}
+                              onChange={(e) =>
+                                setStockReductionSearch(e.target.value)
+                              }
+                              className="pl-9 bg-white dark:bg-gray-800"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                            {filteredStockProducts.length === 0 ? (
+                              <p className="p-3 text-sm text-gray-500 text-center">
+                                No products found
+                              </p>
+                            ) : (
+                              filteredStockProducts
+                                .slice(0, 10)
+                                .map((product) => (
+                                  <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => addStockReduction(product)}
+                                    className="w-full p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-700 last:border-b-0 flex justify-between items-center"
+                                  >
+                                    <span className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                      {product.name}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      Stock: {product.stock ?? 0}
+                                    </span>
+                                  </button>
+                                ))
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setShowStockReductionPicker(false);
+                              setStockReductionSearch("");
+                            }}
+                            className="w-full"
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : formData.stockReductions.length > 0 ? (
+                        <div className="space-y-3">
+                          {/* List of configured reductions */}
+                          <div className="space-y-2">
+                            {formData.stockReductions.map((reduction) => (
+                              <div
+                                key={reduction.productId}
+                                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                              >
+                                <span className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                  {reduction.productName}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateStockReductionQuantity(
+                                        reduction.productId,
+                                        reduction.quantity - 1
+                                      )
+                                    }
+                                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                                  >
+                                    <Minus className="h-4 w-4" />
+                                  </button>
+                                  <span className="w-8 text-center font-medium">
+                                    {reduction.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateStockReductionQuantity(
+                                        reduction.productId,
+                                        reduction.quantity + 1
+                                      )
+                                    }
+                                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeStockReduction(reduction.productId)
+                                    }
+                                    className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 ml-2"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Add more button */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowStockReductionPicker(true)}
+                            className="w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Another Product
+                          </Button>
+
+                          {/* Reduce Own Stock Checkbox */}
+                          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={formData.reduceOwnStock}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    reduceOwnStock: e.target.checked,
+                                  })
+                                }
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <div>
+                                <p className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                  Also reduce this product's own stock
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {formData.reduceOwnStock
+                                    ? "This product's stock will be reduced along with the selected products above"
+                                    : "Only the selected products above will have their stock reduced (recipe mode)"}
+                                </p>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowStockReductionPicker(true)}
+                          className="w-full"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Product to Reduce Stock
+                        </Button>
+                      )}
+
+                      {formData.stockReductions.length === 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                          No stock reductions configured. This product's own
+                          stock will be reduced when sold (default behavior).
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}

@@ -44,6 +44,45 @@ export const PERMISSIONS = {
   MANAGE_TICKETS: "manage_tickets",
 };
 
+// Detailed cashier permissions (granular control)
+export const CASHIER_PERMISSIONS = {
+  // Price permissions
+  CAN_CHANGE_PRICE: "can_change_price",
+
+  // Stock permissions
+  CAN_CHANGE_STOCK: "can_change_stock",
+
+  // Product permissions
+  CAN_ADD_PRODUCT: "can_add_product",
+  CAN_DELETE_PRODUCT: "can_delete_product",
+  CAN_EDIT_PRODUCT: "can_edit_product",
+
+  // Customer permissions
+  CAN_ADD_CUSTOMER: "can_add_customer",
+  CAN_EDIT_CUSTOMER: "can_edit_customer",
+  CAN_DELETE_CUSTOMER: "can_delete_customer",
+  CAN_SET_CUSTOMER_EXPIRY: "can_set_customer_expiry",
+
+  // Other permissions
+  CAN_APPLY_DISCOUNT: "can_apply_discount",
+  CAN_VOID_SALE: "can_void_sale",
+};
+
+// Default permissions for new cashiers (all false = restricted)
+export const DEFAULT_CASHIER_PERMISSIONS = {
+  [CASHIER_PERMISSIONS.CAN_CHANGE_PRICE]: false,
+  [CASHIER_PERMISSIONS.CAN_CHANGE_STOCK]: false,
+  [CASHIER_PERMISSIONS.CAN_ADD_PRODUCT]: false,
+  [CASHIER_PERMISSIONS.CAN_DELETE_PRODUCT]: false,
+  [CASHIER_PERMISSIONS.CAN_EDIT_PRODUCT]: false,
+  [CASHIER_PERMISSIONS.CAN_ADD_CUSTOMER]: true, // Allow by default
+  [CASHIER_PERMISSIONS.CAN_EDIT_CUSTOMER]: true, // Allow by default
+  [CASHIER_PERMISSIONS.CAN_DELETE_CUSTOMER]: false,
+  [CASHIER_PERMISSIONS.CAN_SET_CUSTOMER_EXPIRY]: false,
+  [CASHIER_PERMISSIONS.CAN_APPLY_DISCOUNT]: false,
+  [CASHIER_PERMISSIONS.CAN_VOID_SALE]: false,
+};
+
 export const TRANSACTION_TYPES = {
   SALE: "sale",
   RETURN: "return",

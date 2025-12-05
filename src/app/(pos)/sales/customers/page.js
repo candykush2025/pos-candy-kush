@@ -38,6 +38,30 @@ import { formatCurrency } from "@/lib/utils/format";
 import { customersService } from "@/lib/firebase/firestore";
 import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
 
+// Helper function to safely get points as a number
+const getPointsValue = (customer) => {
+  if (!customer) return 0;
+  const points =
+    customer.points || customer.customPoints || customer.totalPoints;
+  if (typeof points === "number") return points;
+  if (Array.isArray(points)) {
+    return points.reduce((sum, p) => {
+      if (typeof p === "number") return sum + p;
+      if (typeof p === "object" && p.amount !== undefined)
+        return sum + (p.amount || 0);
+      return sum;
+    }, 0);
+  }
+  if (
+    typeof points === "object" &&
+    points !== null &&
+    points.amount !== undefined
+  ) {
+    return points.amount || 0;
+  }
+  return 0;
+};
+
 export default function CashierCustomersPage() {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
@@ -58,6 +82,7 @@ export default function CashierCustomersPage() {
     lastName: "",
     nickname: "",
     nationality: "",
+    passportNumber: "",
     dateOfBirth: "",
     // Contact Information
     email: "",
@@ -187,6 +212,7 @@ export default function CashierCustomersPage() {
       lastName: "",
       nickname: "",
       nationality: "",
+      passportNumber: "",
       dateOfBirth: "",
       email: "",
       cell: "",
@@ -207,6 +233,7 @@ export default function CashierCustomersPage() {
       lastName: customer.lastName || "",
       nickname: customer.nickname || "",
       nationality: customer.nationality || "",
+      passportNumber: customer.passportNumber || "",
       dateOfBirth: customer.dateOfBirth || "",
       email: customer.email || "",
       cell: customer.cell || customer.phone || "",
@@ -245,6 +272,7 @@ export default function CashierCustomersPage() {
         lastName: customer.lastName || "",
         nickname: customer.nickname || "",
         nationality: customer.nationality || "",
+        passportNumber: customer.passportNumber || "",
         dateOfBirth: customer.dateOfBirth || "",
         email: customer.email || "",
         cell: customer.cell || customer.phone || "",
@@ -312,6 +340,7 @@ export default function CashierCustomersPage() {
         lastName: formData.lastName.trim(),
         nickname: formData.nickname.trim(),
         nationality: formData.nationality.trim(),
+        passportNumber: formData.passportNumber.trim(),
         dateOfBirth: formData.dateOfBirth,
 
         // Contact Information
@@ -356,6 +385,7 @@ export default function CashierCustomersPage() {
             lastName: customerData.lastName || "",
             nickname: customerData.nickname || "",
             nationality: customerData.nationality || "",
+            passportNumber: customerData.passportNumber || "",
             dateOfBirth: customerData.dateOfBirth || "",
             email: customerData.email || "",
             cell: customerData.cell || "",
@@ -565,18 +595,10 @@ export default function CashierCustomersPage() {
                           spent
                         </span>
                       </div>
-                      {(customer.totalPoints ||
-                        customer.customPoints ||
-                        customer.points ||
-                        0) > 0 && (
+                      {getPointsValue(customer) > 0 && (
                         <div className="flex items-center gap-1 text-purple-600">
                           <Award className="h-4 w-4" />
-                          <span>
-                            {customer.totalPoints ||
-                              customer.customPoints ||
-                              customer.points}{" "}
-                            points
-                          </span>
+                          <span>{getPointsValue(customer)} points</span>
                         </div>
                       )}
                     </div>
@@ -709,6 +731,22 @@ export default function CashierCustomersPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Passport Number
+                  </label>
+                  <Input
+                    placeholder="A12345678"
+                    value={formData.passportNumber}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        passportNumber: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+
                 <div className="col-span-2">
                   <label className="block text-sm font-medium mb-2">
                     Date of Birth
@@ -800,40 +838,6 @@ export default function CashierCustomersPage() {
                       })
                     }
                   />
-                </div>
-
-                <div className="col-span-2 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isNoMember}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          isNoMember: e.target.checked,
-                        })
-                      }
-                      className="rounded border-neutral-300 dark:border-neutral-600"
-                    />
-                    <span className="text-sm font-medium">
-                      Non-Member Account
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isActive}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          isActive: e.target.checked,
-                        })
-                      }
-                      className="rounded border-neutral-300 dark:border-neutral-600"
-                    />
-                    <span className="text-sm font-medium">Active Account</span>
-                  </label>
                 </div>
               </div>
             </div>
@@ -1105,9 +1109,25 @@ export default function CashierCustomersPage() {
                 <div>
                   <span className="text-neutral-500">Points:</span>
                   <p className="font-medium">
-                    {selectedCustomer.customPoints ||
-                      selectedCustomer.points ||
-                      0}
+                    {getPointsValue(selectedCustomer)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Nationality:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.nationality || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Passport Number:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.passportNumber || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-neutral-500">Date of Birth:</span>
+                  <p className="font-medium">
+                    {selectedCustomer.dateOfBirth || "N/A"}
                   </p>
                 </div>
                 <div>
