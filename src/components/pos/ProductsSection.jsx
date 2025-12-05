@@ -40,8 +40,10 @@ import {
   canDeleteProduct,
 } from "@/lib/services/userPermissionsService";
 
-export default function ProductsSection() {
-  const { user } = useAuthStore();
+export default function ProductsSection({ cashier }) {
+  // Use cashier prop if provided (POS mode), otherwise fall back to useAuthStore (admin mode)
+  const { user: authUser } = useAuthStore();
+  const user = cashier || authUser;
   const router = useRouter();
   const [activeMenu, setActiveMenu] = useState("products");
   const [products, setProducts] = useState([]);

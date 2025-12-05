@@ -82,25 +82,37 @@ export default function StockManagementSection() {
     // Stock status filter
     let matchesStockFilter = true;
     if (stockFilter === "in-stock") {
-      matchesStockFilter = product.stock && product.stock > 0 && 
+      matchesStockFilter =
+        product.stock &&
+        product.stock > 0 &&
         (!product.lowStock || product.stock > product.lowStock);
     } else if (stockFilter === "low-stock") {
-      matchesStockFilter = product.lowStock && product.stock <= product.lowStock && product.stock > 0;
+      matchesStockFilter =
+        product.lowStock &&
+        product.stock <= product.lowStock &&
+        product.stock > 0;
     } else if (stockFilter === "out-of-stock") {
       matchesStockFilter = !product.stock || product.stock === 0;
     }
 
-    return matchesSearch && matchesZeroFilter && matchesCategory && matchesProduct && matchesStockFilter;
+    return (
+      matchesSearch &&
+      matchesZeroFilter &&
+      matchesCategory &&
+      matchesProduct &&
+      matchesStockFilter
+    );
   });
 
   // Get products for the product dropdown (filtered by category if selected)
-  const productsForDropdown = selectedCategory === "all" 
-    ? products 
-    : products.filter(p => p.categoryId === selectedCategory);
+  const productsForDropdown =
+    selectedCategory === "all"
+      ? products
+      : products.filter((p) => p.categoryId === selectedCategory);
 
   // Get category name helper
   const getCategoryName = (categoryId) => {
-    const category = categories.find(c => c.id === categoryId);
+    const category = categories.find((c) => c.id === categoryId);
     return category?.name || "Uncategorized";
   };
 
@@ -113,7 +125,12 @@ export default function StockManagementSection() {
     setHideZeroStock(false);
   };
 
-  const hasActiveFilters = searchQuery || selectedCategory !== "all" || selectedProduct !== "all" || stockFilter !== "all" || hideZeroStock;
+  const hasActiveFilters =
+    searchQuery ||
+    selectedCategory !== "all" ||
+    selectedProduct !== "all" ||
+    stockFilter !== "all" ||
+    hideZeroStock;
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     let aVal = a[sortField];
@@ -337,10 +354,7 @@ export default function StockManagementSection() {
                 <label className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-1 block">
                   Stock Status
                 </label>
-                <Select
-                  value={stockFilter}
-                  onValueChange={setStockFilter}
-                >
+                <Select value={stockFilter} onValueChange={setStockFilter}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
@@ -375,7 +389,8 @@ export default function StockManagementSection() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Filter className="h-4 w-4 text-neutral-500" />
                   <span className="text-sm text-neutral-500 dark:text-neutral-400">
-                    Showing {sortedProducts.length} of {products.length} products
+                    Showing {sortedProducts.length} of {products.length}{" "}
+                    products
                   </span>
                   {selectedCategory !== "all" && (
                     <Badge variant="secondary" className="text-xs">
@@ -384,7 +399,8 @@ export default function StockManagementSection() {
                   )}
                   {selectedProduct !== "all" && (
                     <Badge variant="secondary" className="text-xs">
-                      Product: {products.find(p => p.id === selectedProduct)?.name}
+                      Product:{" "}
+                      {products.find((p) => p.id === selectedProduct)?.name}
                     </Badge>
                   )}
                   {stockFilter !== "all" && (

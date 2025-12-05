@@ -551,7 +551,7 @@ export default function SalesPage() {
       {activeTab === "customers" && <CustomersSection cashier={cashier} />}
       {activeTab === "history" && <HistorySection cashier={cashier} />}
       {activeTab === "shifts" && <ShiftsSection cashier={cashier} />}
-      {activeTab === "products" && <ProductsSection />}
+      {activeTab === "products" && <ProductsSection cashier={cashier} />}
       {activeTab === "settings" && <SettingsSection />}
       {activeTab === "kiosk-orders" && (
         <KioskOrdersPanel currentUser={cashier} />
