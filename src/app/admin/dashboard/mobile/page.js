@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   receiptsService,
   productsService,
   customersService,
@@ -34,6 +41,8 @@ import {
   Crown,
   Tag,
   ChevronDown,
+  ChevronUp,
+  List,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import {
@@ -52,6 +61,8 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export default function MobileDashboardPage() {
   const { user, isAuthenticated } = useAuthStore();
@@ -77,6 +88,7 @@ export default function MobileDashboardPage() {
   });
 
   const [topProducts, setTopProducts] = useState([]);
+  const [allSoldProducts, setAllSoldProducts] = useState([]);
   const [topCustomers, setTopCustomers] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [dailySalesData, setDailySalesData] = useState([]);
@@ -97,6 +109,20 @@ export default function MobileDashboardPage() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
+  // Custom date range picker
+  const [showCustomPeriodModal, setShowCustomPeriodModal] = useState(false);
+  const [dateRange, setDateRange] = useState([null, null]);
+  const [customStartDate, setCustomStartDate] = useState(null);
+  const [customEndDate, setCustomEndDate] = useState(null);
+  const [selectedDateRangeLabel, setSelectedDateRangeLabel] =
+    useState("This Month");
+
+  // All sold products section
+  const [showAllSoldProducts, setShowAllSoldProducts] = useState(false);
+  const [soldProductsCategory, setSoldProductsCategory] = useState("all");
+  const [showSoldProductsCategoryPicker, setShowSoldProductsCategoryPicker] =
+    useState(false);
+
   const months = [
     "January",
     "February",
@@ -114,9 +140,11 @@ export default function MobileDashboardPage() {
 
   const dateRangeOptions = [
     { value: "today", label: "Today" },
+    { value: "yesterday", label: "Yesterday" },
     { value: "thisWeek", label: "This Week" },
     { value: "thisMonth", label: "This Month" },
     { value: "thisYear", label: "This Year" },
+    { value: "customPeriod", label: "Custom Period" },
   ];
 
   // Redirect to desktop on larger screens
@@ -202,6 +230,8 @@ export default function MobileDashboardPage() {
     selectedDateRange,
     selectedMonth,
     selectedYear,
+    customStartDate,
+    customEndDate,
   ]);
 
   // Get date range based on selection
@@ -216,6 +246,23 @@ export default function MobileDashboardPage() {
           now.getFullYear(),
           now.getMonth(),
           now.getDate(),
+          23,
+          59,
+          59
+        );
+        break;
+      case "yesterday":
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        startDate = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate()
+        );
+        endDate = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate(),
           23,
           59,
           59
@@ -240,6 +287,17 @@ export default function MobileDashboardPage() {
       case "thisYear":
         startDate = new Date(now.getFullYear(), 0, 1);
         endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        break;
+      case "customPeriod":
+        if (customStartDate && customEndDate) {
+          startDate = new Date(customStartDate);
+          endDate = new Date(customEndDate);
+          endDate.setHours(23, 59, 59);
+        } else {
+          // Default to this month if no custom range selected
+          startDate = new Date(selectedYear, selectedMonth, 1);
+          endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+        }
         break;
       case "thisMonth":
       default:
@@ -356,15 +414,20 @@ export default function MobileDashboardPage() {
           const items =
             receipt.lineItems || receipt.line_items || receipt.items || [];
           items.forEach((item) => {
+            const itemId = item.item_id || item.itemId || item.id;
+            const itemCategoryId = productCategoryMap[itemId];
+
             // Category filter for items
             if (selectedCategory !== "all") {
-              const itemId = item.item_id || item.itemId || item.id;
-              const itemCategoryId = productCategoryMap[itemId];
               if (itemCategoryId !== selectedCategory) return;
             }
             const name = item.item_name || item.name || "Unknown";
             if (!productSales[name])
-              productSales[name] = { quantity: 0, revenue: 0 };
+              productSales[name] = {
+                quantity: 0,
+                revenue: 0,
+                categoryId: itemCategoryId,
+              };
             productSales[name].quantity += item.quantity || 1;
             productSales[name].revenue +=
               item.total_money ||
@@ -439,6 +502,13 @@ export default function MobileDashboardPage() {
           .map(([name, data]) => ({ name, ...data }))
           .sort((a, b) => b.revenue - a.revenue)
           .slice(0, 5)
+      );
+
+      // All sold products (for detailed view)
+      setAllSoldProducts(
+        Object.entries(productSales)
+          .map(([name, data]) => ({ name, ...data }))
+          .sort((a, b) => b.revenue - a.revenue)
       );
 
       // Top customers
@@ -519,10 +589,14 @@ export default function MobileDashboardPage() {
     switch (selectedDateRange) {
       case "today":
         return type === "revenue" ? "Today Revenue" : "Today Orders";
+      case "yesterday":
+        return type === "revenue" ? "Yesterday Revenue" : "Yesterday Orders";
       case "thisWeek":
         return type === "revenue" ? "Week Revenue" : "Week Orders";
       case "thisYear":
         return type === "revenue" ? "Year Revenue" : "Year Orders";
+      case "customPeriod":
+        return type === "revenue" ? "Period Revenue" : "Period Orders";
       case "thisMonth":
       default:
         return type === "revenue" ? "Month Revenue" : "Month Orders";
@@ -688,6 +762,10 @@ export default function MobileDashboardPage() {
                 ?.label || "This Month"}
               {selectedDateRange === "thisMonth" &&
                 ` - ${months[selectedMonth]} ${selectedYear}`}
+              {selectedDateRange === "customPeriod" &&
+                customStartDate &&
+                customEndDate &&
+                ` - ${selectedDateRangeLabel}`}
             </span>
             <ChevronDown
               className={`h-6 w-6 transition-transform ${
@@ -701,9 +779,14 @@ export default function MobileDashboardPage() {
                 <button
                   key={option.value}
                   onClick={() => {
-                    setSelectedDateRange(option.value);
-                    if (option.value !== "thisMonth") {
+                    if (option.value === "customPeriod") {
                       setShowDatePicker(false);
+                      setShowCustomPeriodModal(true);
+                    } else {
+                      setSelectedDateRange(option.value);
+                      if (option.value !== "thisMonth") {
+                        setShowDatePicker(false);
+                      }
                     }
                   }}
                   className={`w-full px-6 py-4 text-left text-xl font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
@@ -925,6 +1008,172 @@ export default function MobileDashboardPage() {
                   </p>
                 </div>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* All Sold Items */}
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle className="text-3xl font-bold flex items-center gap-3">
+              <List className="h-8 w-8" />
+              All Sold Items
+            </CardTitle>
+            <CardDescription className="text-xl">
+              {allSoldProducts.length} products sold
+            </CardDescription>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {/* Category Filter for Sold Products */}
+          <div className="relative mb-6">
+            <Button
+              onClick={() =>
+                setShowSoldProductsCategoryPicker(
+                  !showSoldProductsCategoryPicker
+                )
+              }
+              variant="outline"
+              className="w-full h-14 text-xl font-bold justify-between"
+            >
+              <span className="flex items-center">
+                <Tag className="h-5 w-5 mr-2" />
+                {soldProductsCategory === "all"
+                  ? "All Categories"
+                  : categories.find((c) => c.id === soldProductsCategory)
+                      ?.name || "Select Category"}
+              </span>
+              <ChevronDown
+                className={`h-5 w-5 transition-transform ${
+                  showSoldProductsCategoryPicker ? "rotate-180" : ""
+                }`}
+              />
+            </Button>
+            {showSoldProductsCategoryPicker && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-neutral-800 border dark:border-neutral-700 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                <button
+                  onClick={() => {
+                    setSoldProductsCategory("all");
+                    setShowSoldProductsCategoryPicker(false);
+                  }}
+                  className={`w-full px-6 py-4 text-left text-xl font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+                    soldProductsCategory === "all"
+                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                      : ""
+                  }`}
+                >
+                  All Categories
+                </button>
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => {
+                      setSoldProductsCategory(category.id);
+                      setShowSoldProductsCategoryPicker(false);
+                    }}
+                    className={`w-full px-6 py-4 text-left text-xl font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+                      soldProductsCategory === category.id
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                        : ""
+                    }`}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Summary Stats */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
+              <p className="text-lg text-neutral-600 dark:text-neutral-400">
+                Total Items
+              </p>
+              <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+                {allSoldProducts
+                  .filter(
+                    (p) =>
+                      soldProductsCategory === "all" ||
+                      p.categoryId === soldProductsCategory
+                  )
+                  .reduce((sum, p) => sum + p.quantity, 0)}
+              </p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+              <p className="text-lg text-neutral-600 dark:text-neutral-400">
+                Total Revenue
+              </p>
+              <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                {formatCurrency(
+                  allSoldProducts
+                    .filter(
+                      (p) =>
+                        soldProductsCategory === "all" ||
+                        p.categoryId === soldProductsCategory
+                    )
+                    .reduce((sum, p) => sum + p.revenue, 0)
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Products List */}
+          {allSoldProducts.filter(
+            (p) =>
+              soldProductsCategory === "all" ||
+              p.categoryId === soldProductsCategory
+          ).length === 0 ? (
+            <p className="text-neutral-500 text-center py-10 text-2xl">
+              No products in this category
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {allSoldProducts
+                .filter(
+                  (p) =>
+                    soldProductsCategory === "all" ||
+                    p.categoryId === soldProductsCategory
+                )
+                .map((product, index) => {
+                  const categoryName = categories.find(
+                    (c) => c.id === product.categoryId
+                  )?.name;
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-xl text-neutral-900 dark:text-white truncate">
+                          {product.name}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-lg text-neutral-500">
+                            Qty: {product.quantity}
+                          </span>
+                          {categoryName && (
+                            <span className="text-sm bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded-lg">
+                              {categoryName}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-xl text-green-600 dark:text-green-400">
+                          {formatCurrency(product.revenue)}
+                        </p>
+                        <p className="text-sm text-neutral-500">
+                          Avg:{" "}
+                          {formatCurrency(product.revenue / product.quantity)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </CardContent>
@@ -1160,6 +1409,75 @@ export default function MobileDashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Custom Period Modal */}
+      <Dialog
+        open={showCustomPeriodModal}
+        onOpenChange={setShowCustomPeriodModal}
+      >
+        <DialogContent className="sm:max-w-sm p-4">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-center text-2xl font-bold">
+              Select Date Range
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center px-0">
+            <DatePicker
+              selectsRange={true}
+              startDate={dateRange[0]}
+              endDate={dateRange[1]}
+              onChange={(update) => {
+                setDateRange(update);
+              }}
+              inline
+            />
+          </div>
+          <DialogFooter className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              className="flex-1 h-14 text-lg"
+              onClick={() => {
+                setShowCustomPeriodModal(false);
+                setDateRange([null, null]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 h-14 text-lg bg-green-600 hover:bg-green-700"
+              disabled={!dateRange[0] || !dateRange[1]}
+              onClick={() => {
+                if (dateRange[0] && dateRange[1]) {
+                  setCustomStartDate(dateRange[0]);
+                  setCustomEndDate(dateRange[1]);
+                  setSelectedDateRange("customPeriod");
+                  const formattedStart = dateRange[0].toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "short",
+                      day: "numeric",
+                    }
+                  );
+                  const formattedEnd = dateRange[1].toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    }
+                  );
+                  const label = `${formattedStart} - ${formattedEnd}`;
+                  setSelectedDateRangeLabel(label);
+                  setShowCustomPeriodModal(false);
+                  setDateRange([null, null]);
+                }
+              }}
+            >
+              Apply Range
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
