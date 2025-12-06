@@ -228,6 +228,8 @@ export default function SalesSection({ cashier }) {
   const [isDragMode, setIsDragMode] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const longPressTimer = useRef(null);
+  const searchInputRef = useRef(null);
+  const searchBlurTimerRef = useRef(null);
 
   // Category SLOT colors (for boxes in grid) - key: "categoryName-index-categoryId"
   const [categorySlotColors, setCategorySlotColors] = useState({});
@@ -548,6 +550,63 @@ export default function SalesSection({ cashier }) {
       }
     };
   }, [customers, lastKeyTime]);
+
+  // Auto-blur search input after 5 seconds of inactivity (to allow barcode scanner to work)
+  useEffect(() => {
+    const handleSearchInputFocus = () => {
+      // Clear any existing timer
+      if (searchBlurTimerRef.current) {
+        clearTimeout(searchBlurTimerRef.current);
+      }
+    };
+
+    const handleSearchInputKeyUp = () => {
+      // Reset the timer on each keypress
+      if (searchBlurTimerRef.current) {
+        clearTimeout(searchBlurTimerRef.current);
+      }
+      
+      // Start new 5-second timer to auto-blur
+      searchBlurTimerRef.current = setTimeout(() => {
+        const activeElement = document.activeElement;
+        if (
+          activeElement?.tagName === "INPUT" &&
+          (activeElement === searchInputRef.current ||
+            activeElement.placeholder?.toLowerCase().includes("search"))
+        ) {
+          activeElement.blur();
+          console.log("[Auto-blur] Search input blurred after 5 seconds of inactivity");
+        }
+      }, 5000);
+    };
+
+    const handleSearchInputBlur = () => {
+      // Clear timer when input loses focus
+      if (searchBlurTimerRef.current) {
+        clearTimeout(searchBlurTimerRef.current);
+        searchBlurTimerRef.current = null;
+      }
+    };
+
+    // Add listeners to all input elements
+    const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
+    inputs.forEach((input) => {
+      input.addEventListener("focus", handleSearchInputFocus);
+      input.addEventListener("keyup", handleSearchInputKeyUp);
+      input.addEventListener("blur", handleSearchInputBlur);
+    });
+
+    return () => {
+      inputs.forEach((input) => {
+        input.removeEventListener("focus", handleSearchInputFocus);
+        input.removeEventListener("keyup", handleSearchInputKeyUp);
+        input.removeEventListener("blur", handleSearchInputBlur);
+      });
+      if (searchBlurTimerRef.current) {
+        clearTimeout(searchBlurTimerRef.current);
+      }
+    };
+  }, []);
 
   // Cart clearing timer - check every 10 seconds if cart is empty and clear API cart
   useEffect(() => {
@@ -2970,6 +3029,7 @@ export default function SalesSection({ cashier }) {
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <Input
+                    ref={searchInputRef}
                     placeholder="Search products by name, barcode, or SKU..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
