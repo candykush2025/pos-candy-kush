@@ -479,38 +479,75 @@ export default function SalesSection({ cashier }) {
 
   // Barcode scanner listener
   useEffect(() => {
+    let barcodeTimeout = null;
+    let localBuffer = "";
+
     const handleKeyDown = (event) => {
+      // Ignore if user is typing in an input field, textarea, or contentEditable
+      const activeElement = document.activeElement;
+      const isInputFocused =
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.isContentEditable ||
+        activeElement?.closest('[role="combobox"]') ||
+        activeElement?.closest('[role="listbox"]') ||
+        activeElement?.closest('[role="dialog"]');
+
+      if (isInputFocused) {
+        return; // Don't capture barcode when user is typing
+      }
+
       const currentTime = Date.now();
       const timeDiff = currentTime - lastKeyTime;
 
-      // If more than 100ms since last keypress, start new barcode scan
-      if (timeDiff > 100) {
-        setBarcodeBuffer(event.key);
-      } else {
-        // Continue building barcode
-        setBarcodeBuffer((prev) => prev + event.key);
+      // Clear timeout on each keypress
+      if (barcodeTimeout) {
+        clearTimeout(barcodeTimeout);
       }
-      setLastKeyTime(currentTime);
 
       // Check for Enter key (barcode scan complete)
       if (event.key === "Enter") {
-        const scannedCode = barcodeBuffer.trim();
-        if (scannedCode) {
+        event.preventDefault();
+        const scannedCode = localBuffer.trim();
+        if (scannedCode && scannedCode.length >= 3) {
+          console.log("[Barcode Scanner] Scanned code:", scannedCode);
           processScannedBarcode(scannedCode);
         }
+        localBuffer = "";
         setBarcodeBuffer("");
+        return;
+      }
+
+      // Only capture printable characters (alphanumeric, dash, underscore, etc.)
+      if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        // If more than 100ms since last keypress, start new barcode scan
+        if (timeDiff > 100) {
+          localBuffer = event.key;
+        } else {
+          // Continue building barcode
+          localBuffer += event.key;
+        }
+        setBarcodeBuffer(localBuffer);
+        setLastKeyTime(currentTime);
+
+        // Auto-clear buffer after 500ms of no input (barcode scanners are fast)
+        barcodeTimeout = setTimeout(() => {
+          localBuffer = "";
+          setBarcodeBuffer("");
+        }, 500);
       }
     };
 
-    // Only listen when component is mounted and customers are loaded
-    if (customers.length > 0) {
-      document.addEventListener("keydown", handleKeyDown);
-    }
+    // Always listen for barcode scans
+    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      if (barcodeTimeout) {
+        clearTimeout(barcodeTimeout);
+      }
     };
-  }, [customers, barcodeBuffer, lastKeyTime]);
+  }, [customers, lastKeyTime]);
 
   // Cart clearing timer - check every 10 seconds if cart is empty and clear API cart
   useEffect(() => {
@@ -1009,25 +1046,58 @@ export default function SalesSection({ cashier }) {
 
   // Process scanned barcode to find matching customer
   const processScannedBarcode = (scannedCode) => {
-    if (!scannedCode || !customers.length) return;
+    if (!scannedCode) {
+      console.log("[Barcode Scanner] Empty code, ignoring");
+      return;
+    }
 
-    // Look for customer where customerId or memberId matches the scanned code
-    const matchingCustomer = customers.find(
-      (customer) =>
-        customer.customerId === scannedCode || customer.memberId === scannedCode
+    console.log("[Barcode Scanner] Processing code:", scannedCode);
+    console.log("[Barcode Scanner] Available customers:", customers.length);
+
+    // First, check if it's a product barcode
+    const matchingProduct = products.find(
+      (product) =>
+        product.barcode === scannedCode ||
+        product.sku === scannedCode
     );
+
+    if (matchingProduct) {
+      // Add product to cart
+      addItem(matchingProduct);
+      toast.success(`Added "${matchingProduct.name}" to cart`);
+      console.log("[Barcode Scanner] Product matched:", matchingProduct.name);
+      return;
+    }
+
+    // Then check if it's a customer/member code
+    if (customers.length === 0) {
+      console.log("[Barcode Scanner] No customers loaded yet");
+      toast.warning("Customers not loaded. Please wait and try again.");
+      return;
+    }
+
+    // Look for customer where customerId, memberId, id, or phone matches the scanned code
+    const matchingCustomer = customers.find((customer) => {
+      const code = scannedCode.toLowerCase();
+      return (
+        customer.customerId?.toLowerCase() === code ||
+        customer.memberId?.toLowerCase() === code ||
+        customer.id?.toLowerCase() === code ||
+        customer.phone === scannedCode ||
+        customer.email?.toLowerCase() === code
+      );
+    });
 
     if (matchingCustomer) {
       // Set the customer in the cart
       setCartCustomer(matchingCustomer);
       toast.success(
-        `Customer "${matchingCustomer.name}" selected via barcode scan`
+        `Customer "${matchingCustomer.name}" selected via QR scan`
       );
-      console.log("Barcode scan matched customer:", matchingCustomer);
+      console.log("[Barcode Scanner] Customer matched:", matchingCustomer);
     } else {
-      console.log("No customer found for barcode:", scannedCode);
-      // Optional: Could show a subtle notification that no customer was found
-      // toast.info("Customer not found for scanned barcode");
+      console.log("[Barcode Scanner] No match found for:", scannedCode);
+      toast.info(`No customer or product found for code: ${scannedCode}`);
     }
   };
 
