@@ -48,7 +48,7 @@ export default function SoldItemsPage() {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  
+
   // Date range
   const [selectedDateRange, setSelectedDateRange] = useState("thisMonth");
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -56,7 +56,8 @@ export default function SoldItemsPage() {
   const [dateRange, setDateRange] = useState([null, null]);
   const [customStartDate, setCustomStartDate] = useState(null);
   const [customEndDate, setCustomEndDate] = useState(null);
-  const [selectedDateRangeLabel, setSelectedDateRangeLabel] = useState("This Month");
+  const [selectedDateRangeLabel, setSelectedDateRangeLabel] =
+    useState("This Month");
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
@@ -64,8 +65,18 @@ export default function SoldItemsPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
   const dateRangeOptions = [
@@ -100,7 +111,13 @@ export default function SoldItemsPage() {
   // Load data when filters change
   useEffect(() => {
     loadSoldItems();
-  }, [selectedDateRange, selectedMonth, selectedYear, customStartDate, customEndDate]);
+  }, [
+    selectedDateRange,
+    selectedMonth,
+    selectedYear,
+    customStartDate,
+    customEndDate,
+  ]);
 
   const getDateRange = () => {
     const now = new Date();
@@ -109,18 +126,47 @@ export default function SoldItemsPage() {
     switch (selectedDateRange) {
       case "today":
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59
+        );
         break;
       case "yesterday":
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
-        startDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-        endDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
+        startDate = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate()
+        );
+        endDate = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate(),
+          23,
+          59,
+          59
+        );
         break;
       case "thisWeek":
         const dayOfWeek = now.getDay();
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
-        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - dayOfWeek), 23, 59, 59);
+        startDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - dayOfWeek
+        );
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + (6 - dayOfWeek),
+          23,
+          59,
+          59
+        );
         break;
       case "thisYear":
         startDate = new Date(now.getFullYear(), 0, 1);
@@ -155,36 +201,43 @@ export default function SoldItemsPage() {
       const productCategoryMap = {};
       products.forEach((p) => {
         if (p.id) productCategoryMap[p.id] = p.categoryId || p.category_id;
-        if (p.loyverseId) productCategoryMap[p.loyverseId] = p.categoryId || p.category_id;
+        if (p.loyverseId)
+          productCategoryMap[p.loyverseId] = p.categoryId || p.category_id;
       });
 
       const { startDate, endDate } = getDateRange();
       const productSales = {};
 
       receipts.forEach((receipt) => {
-        const receiptDate = receipt.createdAt?.toDate?.() || new Date(receipt.createdAt);
+        const receiptDate =
+          receipt.createdAt?.toDate?.() || new Date(receipt.createdAt);
         if (!receiptDate || isNaN(receiptDate.getTime())) return;
 
         // Date filter
         if (receiptDate < startDate || receiptDate > endDate) return;
 
         // Process items
-        const items = receipt.lineItems || receipt.line_items || receipt.items || [];
+        const items =
+          receipt.lineItems || receipt.line_items || receipt.items || [];
         items.forEach((item) => {
           const itemId = item.item_id || item.itemId || item.id;
           const itemCategoryId = productCategoryMap[itemId];
           const name = item.item_name || item.name || "Unknown";
-          
+
           if (!productSales[name]) {
-            productSales[name] = { 
-              quantity: 0, 
-              revenue: 0, 
+            productSales[name] = {
+              quantity: 0,
+              revenue: 0,
               categoryId: itemCategoryId,
-              transactions: 0
+              transactions: 0,
             };
           }
           productSales[name].quantity += item.quantity || 1;
-          productSales[name].revenue += item.total_money || item.total || item.price * (item.quantity || 1) || 0;
+          productSales[name].revenue +=
+            item.total_money ||
+            item.total ||
+            item.price * (item.quantity || 1) ||
+            0;
           productSales[name].transactions++;
         });
       });
@@ -208,7 +261,10 @@ export default function SoldItemsPage() {
       return false;
     }
     // Search filter
-    if (searchQuery && !product.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+    if (
+      searchQuery &&
+      !product.name.toLowerCase().includes(searchQuery.toLowerCase())
+    ) {
       return false;
     }
     return true;
@@ -219,13 +275,20 @@ export default function SoldItemsPage() {
   const totalRevenue = filteredProducts.reduce((sum, p) => sum + p.revenue, 0);
 
   const getDateLabel = () => {
-    if (selectedDateRange === "customPeriod" && customStartDate && customEndDate) {
+    if (
+      selectedDateRange === "customPeriod" &&
+      customStartDate &&
+      customEndDate
+    ) {
       return selectedDateRangeLabel;
     }
     if (selectedDateRange === "thisMonth") {
       return `${months[selectedMonth]} ${selectedYear}`;
     }
-    return dateRangeOptions.find(o => o.value === selectedDateRange)?.label || "This Month";
+    return (
+      dateRangeOptions.find((o) => o.value === selectedDateRange)?.label ||
+      "This Month"
+    );
   };
 
   if (loading) {
@@ -296,7 +359,11 @@ export default function SoldItemsPage() {
               <Calendar className="h-6 w-6 mr-3" />
               {getDateLabel()}
             </span>
-            <ChevronDown className={`h-6 w-6 transition-transform ${showDatePicker ? "rotate-180" : ""}`} />
+            <ChevronDown
+              className={`h-6 w-6 transition-transform ${
+                showDatePicker ? "rotate-180" : ""
+              }`}
+            />
           </Button>
           {showDatePicker && (
             <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-neutral-800 border dark:border-neutral-700 rounded-xl shadow-lg max-h-80 overflow-y-auto">
@@ -346,19 +413,21 @@ export default function SoldItemsPage() {
                     ))}
                   </div>
                   <div className="flex gap-2">
-                    {[selectedYear - 1, selectedYear, selectedYear + 1].map((year) => (
-                      <button
-                        key={year}
-                        onClick={() => setSelectedYear(year)}
-                        className={`flex-1 px-3 py-3 text-lg font-semibold rounded-lg ${
-                          selectedYear === year
-                            ? "bg-green-600 text-white"
-                            : "bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600"
-                        }`}
-                      >
-                        {year}
-                      </button>
-                    ))}
+                    {[selectedYear - 1, selectedYear, selectedYear + 1].map(
+                      (year) => (
+                        <button
+                          key={year}
+                          onClick={() => setSelectedYear(year)}
+                          className={`flex-1 px-3 py-3 text-lg font-semibold rounded-lg ${
+                            selectedYear === year
+                              ? "bg-green-600 text-white"
+                              : "bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600"
+                          }`}
+                        >
+                          {year}
+                        </button>
+                      )
+                    )}
                   </div>
                   <Button
                     onClick={() => setShowDatePicker(false)}
@@ -383,9 +452,14 @@ export default function SoldItemsPage() {
               <Tag className="h-6 w-6 mr-3" />
               {selectedCategory === "all"
                 ? "All Categories"
-                : categories.find((c) => c.id === selectedCategory)?.name || "Select Category"}
+                : categories.find((c) => c.id === selectedCategory)?.name ||
+                  "Select Category"}
             </span>
-            <ChevronDown className={`h-6 w-6 transition-transform ${showCategoryPicker ? "rotate-180" : ""}`} />
+            <ChevronDown
+              className={`h-6 w-6 transition-transform ${
+                showCategoryPicker ? "rotate-180" : ""
+              }`}
+            />
           </Button>
           {showCategoryPicker && (
             <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-neutral-800 border dark:border-neutral-700 rounded-xl shadow-lg max-h-64 overflow-y-auto">
@@ -476,7 +550,9 @@ export default function SoldItemsPage() {
       ) : (
         <div className="space-y-4">
           {filteredProducts.map((product, index) => {
-            const categoryName = categories.find((c) => c.id === product.categoryId)?.name;
+            const categoryName = categories.find(
+              (c) => c.id === product.categoryId
+            )?.name;
             return (
               <Card key={index}>
                 <CardContent className="p-5">
@@ -504,7 +580,8 @@ export default function SoldItemsPage() {
                         {formatCurrency(product.revenue)}
                       </p>
                       <p className="text-sm text-neutral-500 mt-1">
-                        Avg: {formatCurrency(product.revenue / product.quantity)}
+                        Avg:{" "}
+                        {formatCurrency(product.revenue / product.quantity)}
                       </p>
                     </div>
                   </div>
@@ -516,10 +593,15 @@ export default function SoldItemsPage() {
       )}
 
       {/* Custom Period Modal */}
-      <Dialog open={showCustomPeriodModal} onOpenChange={setShowCustomPeriodModal}>
+      <Dialog
+        open={showCustomPeriodModal}
+        onOpenChange={setShowCustomPeriodModal}
+      >
         <DialogContent className="sm:max-w-sm p-4">
           <DialogHeader className="pb-2">
-            <DialogTitle className="text-center text-2xl font-bold">Select Date Range</DialogTitle>
+            <DialogTitle className="text-center text-2xl font-bold">
+              Select Date Range
+            </DialogTitle>
           </DialogHeader>
           <div className="flex justify-center px-0">
             <DatePicker
@@ -549,16 +631,24 @@ export default function SoldItemsPage() {
                   setCustomStartDate(dateRange[0]);
                   setCustomEndDate(dateRange[1]);
                   setSelectedDateRange("customPeriod");
-                  const formattedStart = dateRange[0].toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  });
-                  const formattedEnd = dateRange[1].toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  });
-                  setSelectedDateRangeLabel(`${formattedStart} - ${formattedEnd}`);
+                  const formattedStart = dateRange[0].toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "short",
+                      day: "numeric",
+                    }
+                  );
+                  const formattedEnd = dateRange[1].toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    }
+                  );
+                  setSelectedDateRangeLabel(
+                    `${formattedStart} - ${formattedEnd}`
+                  );
                   setShowCustomPeriodModal(false);
                   setDateRange([null, null]);
                 }

@@ -95,6 +95,8 @@ export default function MobileDashboardPage() {
   const [paymentMethodsData, setPaymentMethodsData] = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [customersMap, setCustomersMap] = useState({});
+  const [allReceipts, setAllReceipts] = useState([]);
+  const [selectedDay, setSelectedDay] = useState(null); // For peak hours day selection
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -208,6 +210,104 @@ export default function MobileDashboardPage() {
     return "Walk-in";
   };
 
+  // Get Order ID from receipt
+  const getOrderId = (receipt) => {
+    return (
+      receipt.receiptNumber ||
+      receipt.receipt_number ||
+      (receipt.id ? `#${receipt.id.slice(-6).toUpperCase()}` : "N/A")
+    );
+  };
+
+  // Get member name if customer is not walk-in
+  const getMemberName = (customerId, customerName) => {
+    if (
+      customerName &&
+      customerName !== "Guest" &&
+      customerName !== "Anonymous" &&
+      customerName !== "Walk-in Customer" &&
+      customerName !== "Walk-in"
+    ) {
+      return customerName;
+    }
+    if (customerId && customersMap[customerId]) {
+      return customersMap[customerId];
+    }
+    return null;
+  };
+
+  // Calculate hourly sales for a specific day
+  const calculateHourlySalesForDay = (dayNumber) => {
+    const hourlySales = Array(24)
+      .fill(null)
+      .map(() => ({ revenue: 0, orders: 0 }));
+
+    const { startDate } = getDateRange();
+    const targetDate = new Date(startDate);
+    targetDate.setDate(startDate.getDate() + dayNumber - 1);
+
+    allReceipts.forEach((receipt) => {
+      const receiptDate =
+        receipt.createdAt?.toDate?.() || new Date(receipt.createdAt);
+      if (!receiptDate || isNaN(receiptDate.getTime())) return;
+
+      // Check if receipt is from the target day
+      if (
+        receiptDate.getFullYear() === targetDate.getFullYear() &&
+        receiptDate.getMonth() === targetDate.getMonth() &&
+        receiptDate.getDate() === targetDate.getDate()
+      ) {
+        const total =
+          receipt.total || receipt.totalAmount || receipt.total_money || 0;
+        const hour = receiptDate.getHours();
+        hourlySales[hour].revenue += total;
+        hourlySales[hour].orders++;
+      }
+    });
+
+    return hourlySales.map((data, hour) => ({
+      label: `${hour}:00`,
+      revenue: data.revenue,
+      orders: data.orders,
+    }));
+  };
+
+  // Handle click on daily sales bar
+  const handleDayClick = (data) => {
+    if (data && data.day) {
+      const dayNumber = parseInt(data.day);
+      setSelectedDay(dayNumber);
+      const hourlyData = calculateHourlySalesForDay(dayNumber);
+      setHourlySalesData(hourlyData);
+    }
+  };
+
+  // Get selected day date string for Peak Hours title
+  const getSelectedDayDateString = () => {
+    if (!selectedDay) return "Today's sales by hour";
+    const { startDate } = getDateRange();
+    const targetDate = new Date(startDate);
+    targetDate.setDate(startDate.getDate() + selectedDay - 1);
+    return targetDate.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  // Format day number to full date for tooltip
+  const formatDayToFullDate = (dayNumber) => {
+    const { startDate } = getDateRange();
+    const targetDate = new Date(startDate);
+    targetDate.setDate(startDate.getDate() + parseInt(dayNumber) - 1);
+    return targetDate.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
   // Load dashboard data
   useEffect(() => {
     if (!user && !isAuthenticated) {
@@ -307,6 +407,10 @@ export default function MobileDashboardPage() {
       const receipts = await receiptsService.getAll();
       const products = await productsService.getAll();
       const customers = await customersService.getAll();
+
+      // Store receipts for later use (peak hours by day)
+      setAllReceipts(receipts);
+      setSelectedDay(null); // Reset selected day when data reloads
 
       // Build product-to-category map
       const productCategoryMap = {};
@@ -896,7 +1000,7 @@ export default function MobileDashboardPage() {
         <CardHeader>
           <CardTitle className="text-3xl font-bold">Daily Sales</CardTitle>
           <CardDescription className="text-xl">
-            Revenue this month
+            Tap a bar to see hourly sales
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -915,9 +1019,16 @@ export default function MobileDashboardPage() {
                 />
                 <Tooltip
                   formatter={(value) => formatCurrency(value)}
+                  labelFormatter={(label) => formatDayToFullDate(label)}
                   contentStyle={{ fontSize: 18 }}
                 />
-                <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="revenue"
+                  fill="#10b981"
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={handleDayClick}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -932,7 +1043,7 @@ export default function MobileDashboardPage() {
             Peak Hours
           </CardTitle>
           <CardDescription className="text-xl">
-            Today's sales by hour
+            {getSelectedDayDateString()}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -968,44 +1079,6 @@ export default function MobileDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Top Products */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold">Top Products</CardTitle>
-          <CardDescription className="text-xl">
-            Best sellers this month
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {topProducts.length === 0 ? (
-            <p className="text-neutral-500 text-center py-10 text-2xl">
-              No sales data
-            </p>
-          ) : (
-            <div className="space-y-6">
-              {topProducts.map((product, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between pb-5 border-b last:border-0"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-2xl text-neutral-900 dark:text-white truncate">
-                      {product.name}
-                    </p>
-                    <p className="text-xl text-neutral-500">
-                      Qty: {product.quantity}
-                    </p>
-                  </div>
-                  <p className="font-bold text-2xl text-green-600 dark:text-green-400">
-                    {formatCurrency(product.revenue)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* All Sold Items - Preview */}
       <Card>
         <CardHeader>
@@ -1028,7 +1101,9 @@ export default function MobileDashboardPage() {
                 Total Items
               </p>
               <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                {allSoldProducts.reduce((sum, p) => sum + p.quantity, 0)}
+                {Math.round(
+                  allSoldProducts.reduce((sum, p) => sum + p.quantity, 0)
+                )}
               </p>
             </div>
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
@@ -1066,7 +1141,10 @@ export default function MobileDashboardPage() {
                         </p>
                         <div className="flex items-center gap-3 mt-1">
                           <span className="text-lg text-neutral-500">
-                            Qty: {product.quantity}
+                            Qty:{" "}
+                            {Number.isInteger(product.quantity)
+                              ? product.quantity
+                              : product.quantity.toFixed(2)}
                           </span>
                           {categoryName && (
                             <span className="text-sm bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded-lg">
@@ -1121,18 +1199,18 @@ export default function MobileDashboardPage() {
             </p>
           ) : (
             <>
-              <div className="h-64">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={paymentMethodsData}
                       cx="50%"
-                      cy="50%"
+                      cy="45%"
                       labelLine={false}
                       label={({ name, percent }) =>
                         `${name}: ${(percent * 100).toFixed(0)}%`
                       }
-                      outerRadius={90}
+                      outerRadius={100}
                       dataKey="value"
                     >
                       {paymentMethodsData.map((entry, index) => (
@@ -1171,60 +1249,6 @@ export default function MobileDashboardPage() {
                 ))}
               </div>
             </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Low Stock Alerts */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold flex items-center gap-3">
-            <AlertTriangle className="h-8 w-8 text-amber-500" />
-            Low Stock Alerts
-          </CardTitle>
-          <CardDescription className="text-xl">
-            Products running low
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {lowStockProducts.length === 0 ? (
-            <div className="text-center py-10">
-              <Package className="h-16 w-16 mx-auto text-neutral-300 mb-4" />
-              <p className="text-neutral-500 text-2xl">
-                All products well stocked!
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {lowStockProducts.map((product, index) => (
-                <div
-                  key={product.id || index}
-                  className="flex items-center justify-between pb-5 border-b last:border-0"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-2xl text-neutral-900 dark:text-white truncate">
-                      {product.name}
-                    </p>
-                    {product.sku && (
-                      <p className="text-xl text-neutral-500">
-                        SKU: {product.sku}
-                      </p>
-                    )}
-                  </div>
-                  <p
-                    className={`font-bold text-2xl ${
-                      product.stock <= 3
-                        ? "text-red-600"
-                        : product.stock <= 5
-                        ? "text-amber-600"
-                        : "text-neutral-600"
-                    }`}
-                  >
-                    {product.stock || 0} left
-                  </p>
-                </div>
-              ))}
-            </div>
           )}
         </CardContent>
       </Card>
@@ -1300,39 +1324,59 @@ export default function MobileDashboardPage() {
               No transactions
             </p>
           ) : (
-            <div className="space-y-6">
-              {recentTransactions.map((tx) => {
-                const txDate =
-                  tx.createdAt?.toDate?.() || new Date(tx.createdAt);
-                const total = tx.total || tx.totalAmount || tx.total_money || 0;
-                return (
-                  <div
-                    key={tx.id}
-                    className="flex items-center justify-between pb-5 border-b last:border-0"
-                  >
-                    <div>
-                      <p className="font-bold text-2xl text-neutral-900 dark:text-white">
-                        {getCustomerName(
-                          tx.customerId || tx.customer_id,
-                          tx.customerName || tx.customer_name
+            <>
+              <div className="space-y-6">
+                {recentTransactions.slice(0, 5).map((tx) => {
+                  const txDate =
+                    tx.createdAt?.toDate?.() || new Date(tx.createdAt);
+                  const total = tx.total || tx.totalAmount || tx.total_money || 0;
+                  const orderId = getOrderId(tx);
+                  const memberName = getMemberName(
+                    tx.customerId || tx.customer_id,
+                    tx.customerName || tx.customer_name
+                  );
+                  return (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between pb-5 border-b last:border-0"
+                    >
+                      <div>
+                        <p className="font-bold text-2xl text-neutral-900 dark:text-white">
+                          {orderId}
+                        </p>
+                        {memberName && (
+                          <p className="text-lg text-green-600 dark:text-green-400">
+                            {memberName}
+                          </p>
                         )}
-                      </p>
-                      <p className="text-xl text-neutral-500">
-                        {txDate.toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        <p className="text-xl text-neutral-500">
+                          {txDate.toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <p className="font-bold text-2xl text-green-600 dark:text-green-400">
+                        {formatCurrency(total)}
                       </p>
                     </div>
-                    <p className="font-bold text-2xl text-green-600 dark:text-green-400">
-                      {formatCurrency(total)}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+
+              {/* Show More Button */}
+              <div className="mt-6 text-center">
+                <Button
+                  onClick={() => router.push("/admin/transactions")}
+                  variant="outline"
+                  className="h-14 px-8 text-xl font-bold"
+                >
+                  View All Transactions
+                </Button>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
