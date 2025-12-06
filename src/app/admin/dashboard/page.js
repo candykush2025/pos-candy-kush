@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -56,6 +57,7 @@ import {
   UserPlus,
   UserCheck,
   Crown,
+  Smartphone,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import DatePicker from "react-datepicker";
@@ -107,6 +109,21 @@ const resolveMoneyValue = (value) => {
 };
 
 export default function AdminDashboard() {
+  const router = useRouter();
+  
+  // Redirect mobile users to mobile dashboard
+  useEffect(() => {
+    const checkScreenSize = () => {
+      if (window.innerWidth < 1024) {
+        router.replace("/admin/dashboard/mobile");
+      }
+    };
+    
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, [router]);
+
   // Custom tooltip component that adapts to theme
   const CustomTooltip = ({ active, payload, label, formatter }) => {
     if (active && payload && payload.length) {
@@ -971,30 +988,32 @@ export default function AdminDashboard() {
       const topCustomersList = Object.entries(customerTransactionMap)
         .map(([customerId, data]) => {
           // Find customer by multiple possible ID fields
-          const customer = customers.find((c) => 
-            c.id === customerId || 
-            c.customerId === customerId ||
-            c.customer_id === customerId ||
-            c.loyverseId === customerId
+          const customer = customers.find(
+            (c) =>
+              c.id === customerId ||
+              c.customerId === customerId ||
+              c.customer_id === customerId ||
+              c.loyverseId === customerId
           );
-          
+
           // Try multiple name fields - if customer found, use their name
           let customerName = "Walk-in Customer";
-          
+
           if (customer) {
-            customerName = customer.name || 
+            customerName =
+              customer.name ||
               customer.customer_name ||
-              (customer.first_name && customer.last_name 
+              (customer.first_name && customer.last_name
                 ? `${customer.first_name} ${customer.last_name}`.trim()
                 : customer.first_name || customer.last_name) ||
-              customer.email?.split('@')[0] ||
+              customer.email?.split("@")[0] ||
               customer.phone ||
               `Customer #${customerId.slice(-6)}`;
           } else {
             // No matching customer found - show partial ID to differentiate
             customerName = `Customer #${customerId.slice(-6)}`;
           }
-            
+
           return {
             id: customerId,
             name: customerName,
@@ -2090,13 +2109,23 @@ export default function AdminDashboard() {
                           {index + 1}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`font-medium text-lg md:text-base truncate ${customer.isUnknown ? 'italic text-neutral-500' : ''}`}>
+                          <p
+                            className={`font-medium text-lg md:text-base truncate ${
+                              customer.isUnknown
+                                ? "italic text-neutral-500"
+                                : ""
+                            }`}
+                          >
                             {customer.name}
                           </p>
                           <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
                             {customer.orderCount} orders
-                            {customer.email && <span className="ml-2">• {customer.email}</span>}
-                            {!customer.email && customer.phone && <span className="ml-2">• {customer.phone}</span>}
+                            {customer.email && (
+                              <span className="ml-2">• {customer.email}</span>
+                            )}
+                            {!customer.email && customer.phone && (
+                              <span className="ml-2">• {customer.phone}</span>
+                            )}
                           </p>
                         </div>
                       </div>
