@@ -830,7 +830,8 @@ export default function AdminDashboard() {
       const productCostMap = {};
       products.forEach((product) => {
         if (product.id) {
-          productCostMap[product.id] = product.cost || product.purchaseCost || 0;
+          productCostMap[product.id] =
+            product.cost || product.purchaseCost || 0;
         }
       });
 
@@ -846,7 +847,8 @@ export default function AdminDashboard() {
       });
 
       const grossProfit = monthRevenue - totalCost;
-      const grossProfitMargin = monthRevenue > 0 ? (grossProfit / monthRevenue) * 100 : 0;
+      const grossProfitMargin =
+        monthRevenue > 0 ? (grossProfit / monthRevenue) * 100 : 0;
 
       // NEW: Calculate average items per transaction
       let totalItems = 0;
@@ -858,7 +860,8 @@ export default function AdminDashboard() {
           });
         }
       });
-      const avgItemsPerTransaction = monthReceipts.length > 0 ? totalItems / monthReceipts.length : 0;
+      const avgItemsPerTransaction =
+        monthReceipts.length > 0 ? totalItems / monthReceipts.length : 0;
 
       // NEW: Calculate customer insights (new vs returning)
       const customerTransactionMap = {};
@@ -866,12 +869,19 @@ export default function AdminDashboard() {
         const customerId = receipt.customerId || receipt.customer_id;
         if (customerId) {
           if (!customerTransactionMap[customerId]) {
-            customerTransactionMap[customerId] = { count: 0, total: 0, firstPurchase: null };
+            customerTransactionMap[customerId] = {
+              count: 0,
+              total: 0,
+              firstPurchase: null,
+            };
           }
           customerTransactionMap[customerId].count++;
           customerTransactionMap[customerId].total += getReceiptTotal(receipt);
           const receiptDate = getReceiptDate(receipt);
-          if (!customerTransactionMap[customerId].firstPurchase || receiptDate < customerTransactionMap[customerId].firstPurchase) {
+          if (
+            !customerTransactionMap[customerId].firstPurchase ||
+            receiptDate < customerTransactionMap[customerId].firstPurchase
+          ) {
             customerTransactionMap[customerId].firstPurchase = receiptDate;
           }
         }
@@ -892,7 +902,10 @@ export default function AdminDashboard() {
       monthCustomerSet.forEach((customerId) => {
         const customerData = customerTransactionMap[customerId];
         if (customerData) {
-          if (customerData.firstPurchase >= selectedDateRange.start && customerData.firstPurchase < selectedDateRange.end) {
+          if (
+            customerData.firstPurchase >= selectedDateRange.start &&
+            customerData.firstPurchase < selectedDateRange.end
+          ) {
             newCustomerCount++;
           }
           if (customerData.count > 1) {
@@ -901,15 +914,27 @@ export default function AdminDashboard() {
         }
       });
 
-      const repeatCustomerRate = monthCustomerSet.size > 0 ? (repeatCustomerCount / monthCustomerSet.size) * 100 : 0;
+      const repeatCustomerRate =
+        monthCustomerSet.size > 0
+          ? (repeatCustomerCount / monthCustomerSet.size) * 100
+          : 0;
 
       // NEW: Calculate hourly sales distribution
-      const hourlySales = Array(24).fill(null).map((_, hour) => ({
-        hour: hour,
-        label: hour === 0 ? '12AM' : hour < 12 ? `${hour}AM` : hour === 12 ? '12PM' : `${hour - 12}PM`,
-        revenue: 0,
-        orders: 0,
-      }));
+      const hourlySales = Array(24)
+        .fill(null)
+        .map((_, hour) => ({
+          hour: hour,
+          label:
+            hour === 0
+              ? "12AM"
+              : hour < 12
+              ? `${hour}AM`
+              : hour === 12
+              ? "12PM"
+              : `${hour - 12}PM`,
+          revenue: 0,
+          orders: 0,
+        }));
 
       monthReceipts.forEach((receipt) => {
         const receiptDate = getReceiptDate(receipt);
@@ -928,13 +953,15 @@ export default function AdminDashboard() {
           const stock = product.stock ?? product.inStock ?? 0;
           return product.trackStock && stock < 10;
         })
-        .sort((a, b) => (a.stock ?? a.inStock ?? 0) - (b.stock ?? b.inStock ?? 0))
+        .sort(
+          (a, b) => (a.stock ?? a.inStock ?? 0) - (b.stock ?? b.inStock ?? 0)
+        )
         .slice(0, 10)
         .map((product) => ({
           id: product.id,
           name: product.name || product.item_name,
           stock: product.stock ?? product.inStock ?? 0,
-          sku: product.sku || '',
+          sku: product.sku || "",
           price: product.price || 0,
         }));
 
@@ -943,11 +970,29 @@ export default function AdminDashboard() {
       // NEW: Calculate top customers by spend
       const topCustomersList = Object.entries(customerTransactionMap)
         .map(([customerId, data]) => {
-          const customer = customers.find((c) => c.id === customerId);
+          // Find customer by multiple possible ID fields
+          const customer = customers.find((c) => 
+            c.id === customerId || 
+            c.customerId === customerId ||
+            c.customer_id === customerId ||
+            c.loyverseId === customerId
+          );
+          
+          // Try multiple name fields
+          const customerName = customer?.name || 
+            customer?.customer_name ||
+            (customer?.first_name && customer?.last_name 
+              ? `${customer.first_name} ${customer.last_name}`.trim()
+              : customer?.first_name || customer?.last_name) ||
+            customer?.email?.split('@')[0] ||
+            customer?.phone ||
+            "Guest Customer";
+            
           return {
             id: customerId,
-            name: customer?.name || customer?.email || 'Anonymous',
-            email: customer?.email || '',
+            name: customerName,
+            email: customer?.email || "",
+            phone: customer?.phone || "",
             totalSpent: data.total,
             orderCount: data.count,
           };
@@ -1533,11 +1578,15 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Key Stats Grid - Mobile Friendly (2x3 on mobile, 6 columns on desktop) */}
-        <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 animate-in slide-in-from-bottom duration-500">
+        {/* Key Stats Grid - 3x2 layout (2 cols on mobile, 3 cols on tablet+) */}
+        <div className="grid gap-3 md:gap-4 grid-cols-2 md:grid-cols-3 animate-in slide-in-from-bottom duration-500">
           {statCards.map((stat, index) => {
             const Icon = stat.icon;
-            const isPositive = stat.isPercentage ? true : (stat.change ? stat.change > 0 : null);
+            const isPositive = stat.isPercentage
+              ? true
+              : stat.change
+              ? stat.change > 0
+              : null;
 
             return (
               <Card
@@ -1699,17 +1748,23 @@ export default function AdminDashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={hourlySalesData}>
                   <defs>
-                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                    <linearGradient
+                      id="colorRevenue"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                      <stop
+                        offset="95%"
+                        stopColor="#10b981"
+                        stopOpacity={0.1}
+                      />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="label" 
-                    tick={{ fontSize: 10 }}
-                    interval={1}
-                  />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={1} />
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip
                     content={
@@ -1732,32 +1787,70 @@ export default function AdminDashboard() {
             {hourlySalesData.length > 0 && (
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
                 {(() => {
-                  const peakHour = hourlySalesData.reduce((max, h) => h.revenue > max.revenue ? h : max, hourlySalesData[0]);
-                  const peakOrderHour = hourlySalesData.reduce((max, h) => h.orders > max.orders ? h : max, hourlySalesData[0]);
-                  const totalDayRevenue = hourlySalesData.reduce((sum, h) => sum + h.revenue, 0);
-                  const totalOrders = hourlySalesData.reduce((sum, h) => sum + h.orders, 0);
+                  const peakHour = hourlySalesData.reduce(
+                    (max, h) => (h.revenue > max.revenue ? h : max),
+                    hourlySalesData[0]
+                  );
+                  const peakOrderHour = hourlySalesData.reduce(
+                    (max, h) => (h.orders > max.orders ? h : max),
+                    hourlySalesData[0]
+                  );
+                  const totalDayRevenue = hourlySalesData.reduce(
+                    (sum, h) => sum + h.revenue,
+                    0
+                  );
+                  const totalOrders = hourlySalesData.reduce(
+                    (sum, h) => sum + h.orders,
+                    0
+                  );
                   return (
                     <>
                       <div className="text-center">
-                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Peak Revenue Hour</p>
-                        <p className="text-lg font-bold text-green-600 dark:text-green-400">{peakHour?.label || '-'}</p>
-                        <p className="text-xs text-neutral-400">{formatCurrency(peakHour?.revenue || 0)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Busiest Hour</p>
-                        <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{peakOrderHour?.label || '-'}</p>
-                        <p className="text-xs text-neutral-400">{peakOrderHour?.orders || 0} orders</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Peak Hour %</p>
-                        <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                          {totalDayRevenue > 0 ? ((peakHour?.revenue || 0) / totalDayRevenue * 100).toFixed(1) : 0}%
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                          Peak Revenue Hour
                         </p>
-                        <p className="text-xs text-neutral-400">of daily revenue</p>
+                        <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                          {peakHour?.label || "-"}
+                        </p>
+                        <p className="text-xs text-neutral-400">
+                          {formatCurrency(peakHour?.revenue || 0)}
+                        </p>
                       </div>
                       <div className="text-center">
-                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Total Orders</p>
-                        <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{totalOrders}</p>
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                          Busiest Hour
+                        </p>
+                        <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                          {peakOrderHour?.label || "-"}
+                        </p>
+                        <p className="text-xs text-neutral-400">
+                          {peakOrderHour?.orders || 0} orders
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                          Peak Hour %
+                        </p>
+                        <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                          {totalDayRevenue > 0
+                            ? (
+                                ((peakHour?.revenue || 0) / totalDayRevenue) *
+                                100
+                              ).toFixed(1)
+                            : 0}
+                          %
+                        </p>
+                        <p className="text-xs text-neutral-400">
+                          of daily revenue
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                          Total Orders
+                        </p>
+                        <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                          {totalOrders}
+                        </p>
                         <p className="text-xs text-neutral-400">in period</p>
                       </div>
                     </>
@@ -1926,13 +2019,15 @@ export default function AdminDashboard() {
                         )}
                       </div>
                       <div className="text-right">
-                        <p className={`font-bold text-lg md:text-base ${
-                          product.stock <= 3 
-                            ? 'text-red-600 dark:text-red-400' 
-                            : product.stock <= 5 
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-neutral-600 dark:text-neutral-400'
-                        }`}>
+                        <p
+                          className={`font-bold text-lg md:text-base ${
+                            product.stock <= 3
+                              ? "text-red-600 dark:text-red-400"
+                              : product.stock <= 5
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-neutral-600 dark:text-neutral-400"
+                          }`}
+                        >
                           {product.stock} left
                         </p>
                         <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
@@ -1973,15 +2068,17 @@ export default function AdminDashboard() {
                       className="flex items-center justify-between pb-3 border-b last:border-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 -mx-4 px-4 rounded-lg transition-all duration-200"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                          index === 0 
-                            ? 'bg-amber-500' 
-                            : index === 1 
-                            ? 'bg-neutral-400'
-                            : index === 2
-                            ? 'bg-amber-700'
-                            : 'bg-neutral-300 dark:bg-neutral-600'
-                        }`}>
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                            index === 0
+                              ? "bg-amber-500"
+                              : index === 1
+                              ? "bg-neutral-400"
+                              : index === 2
+                              ? "bg-amber-700"
+                              : "bg-neutral-300 dark:bg-neutral-600"
+                          }`}
+                        >
                           {index + 1}
                         </div>
                         <div className="flex-1 min-w-0">
