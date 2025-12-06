@@ -978,15 +978,22 @@ export default function AdminDashboard() {
             c.loyverseId === customerId
           );
           
-          // Try multiple name fields
-          const customerName = customer?.name || 
-            customer?.customer_name ||
-            (customer?.first_name && customer?.last_name 
-              ? `${customer.first_name} ${customer.last_name}`.trim()
-              : customer?.first_name || customer?.last_name) ||
-            customer?.email?.split('@')[0] ||
-            customer?.phone ||
-            "Guest Customer";
+          // Try multiple name fields - if customer found, use their name
+          let customerName = "Walk-in Customer";
+          
+          if (customer) {
+            customerName = customer.name || 
+              customer.customer_name ||
+              (customer.first_name && customer.last_name 
+                ? `${customer.first_name} ${customer.last_name}`.trim()
+                : customer.first_name || customer.last_name) ||
+              customer.email?.split('@')[0] ||
+              customer.phone ||
+              `Customer #${customerId.slice(-6)}`;
+          } else {
+            // No matching customer found - show partial ID to differentiate
+            customerName = `Customer #${customerId.slice(-6)}`;
+          }
             
           return {
             id: customerId,
@@ -995,6 +1002,7 @@ export default function AdminDashboard() {
             phone: customer?.phone || "",
             totalSpent: data.total,
             orderCount: data.count,
+            isUnknown: !customer, // Flag for UI styling
           };
         })
         .sort((a, b) => b.totalSpent - a.totalSpent)
@@ -2082,11 +2090,13 @@ export default function AdminDashboard() {
                           {index + 1}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-lg md:text-base truncate">
+                          <p className={`font-medium text-lg md:text-base truncate ${customer.isUnknown ? 'italic text-neutral-500' : ''}`}>
                             {customer.name}
                           </p>
                           <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
                             {customer.orderCount} orders
+                            {customer.email && <span className="ml-2">• {customer.email}</span>}
+                            {!customer.email && customer.phone && <span className="ml-2">• {customer.phone}</span>}
                           </p>
                         </div>
                       </div>
