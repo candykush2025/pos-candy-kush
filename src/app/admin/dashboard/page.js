@@ -110,7 +110,7 @@ const resolveMoneyValue = (value) => {
 
 export default function AdminDashboard() {
   const router = useRouter();
-  
+
   // Redirect mobile users to mobile dashboard
   useEffect(() => {
     const checkScreenSize = () => {
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
         router.replace("/admin/dashboard/mobile");
       }
     };
-    
+
     checkScreenSize();
     window.addEventListener("resize", checkScreenSize);
     return () => window.removeEventListener("resize", checkScreenSize);

@@ -221,26 +221,14 @@ export default function AdminLayout({ children }) {
   if (isMobile) {
     return (
       <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex flex-col pb-20">
-        {/* Mobile Header */}
-        <div className="bg-white dark:bg-neutral-900 border-b dark:border-neutral-800 sticky top-0 z-40 shadow-sm">
-          <div className="px-4 py-3">
-            <h1 className="text-xl font-bold text-green-700 dark:text-green-500">
-              Candy Kush POS
-            </h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Admin Panel
-            </p>
-          </div>
-        </div>
-
         {/* Main Content */}
         <main className="flex-1 overflow-auto bg-neutral-50 dark:bg-neutral-950">
-          <div className="p-4">{children}</div>
+          <div className="p-6 pt-8">{children}</div>
         </main>
 
         {/* Bottom Navigation */}
         <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-neutral-900 border-t dark:border-neutral-800 shadow-lg z-50">
-          <div className="grid grid-cols-3 gap-1 p-2">
+          <div className="grid grid-cols-3 gap-1 p-3">
             {mobileBottomNav.map((item) => {
               const Icon = item.icon;
               const isActive = item.href && pathname.startsWith(item.href);
@@ -248,21 +236,21 @@ export default function AdminLayout({ children }) {
               return (
                 <Link key={item.name} href={item.href}>
                   <button
-                    className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-colors ${
+                    className={`w-full flex flex-col items-center justify-center py-4 px-2 rounded-xl transition-colors ${
                       isActive
                         ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
                         : "hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
                     }`}
                   >
                     <Icon
-                      className={`h-6 w-6 mb-1 ${
+                      className={`h-8 w-8 mb-2 ${
                         isActive
                           ? "text-green-700 dark:text-green-400"
                           : "text-neutral-600 dark:text-neutral-400"
                       }`}
                     />
                     <span
-                      className={`text-xs font-medium ${
+                      className={`text-lg font-bold ${
                         isActive
                           ? "text-green-700 dark:text-green-400"
                           : "text-neutral-600 dark:text-neutral-400"
