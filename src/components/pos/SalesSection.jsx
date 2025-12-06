@@ -521,7 +521,12 @@ export default function SalesSection({ cashier }) {
       }
 
       // Only capture printable characters (alphanumeric, dash, underscore, etc.)
-      if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      if (
+        event.key.length === 1 &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey
+      ) {
         // If more than 100ms since last keypress, start new barcode scan
         if (timeDiff > 100) {
           localBuffer = event.key;
@@ -565,7 +570,7 @@ export default function SalesSection({ cashier }) {
       if (searchBlurTimerRef.current) {
         clearTimeout(searchBlurTimerRef.current);
       }
-      
+
       // Start new 5-second timer to auto-blur
       searchBlurTimerRef.current = setTimeout(() => {
         const activeElement = document.activeElement;
@@ -575,7 +580,9 @@ export default function SalesSection({ cashier }) {
             activeElement.placeholder?.toLowerCase().includes("search"))
         ) {
           activeElement.blur();
-          console.log("[Auto-blur] Search input blurred after 5 seconds of inactivity");
+          console.log(
+            "[Auto-blur] Search input blurred after 5 seconds of inactivity"
+          );
         }
       }, 5000);
     };
@@ -589,7 +596,9 @@ export default function SalesSection({ cashier }) {
     };
 
     // Add listeners to all input elements
-    const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
+    const inputs = document.querySelectorAll(
+      'input[type="text"], input:not([type])'
+    );
     inputs.forEach((input) => {
       input.addEventListener("focus", handleSearchInputFocus);
       input.addEventListener("keyup", handleSearchInputKeyUp);
@@ -1116,8 +1125,7 @@ export default function SalesSection({ cashier }) {
     // First, check if it's a product barcode
     const matchingProduct = products.find(
       (product) =>
-        product.barcode === scannedCode ||
-        product.sku === scannedCode
+        product.barcode === scannedCode || product.sku === scannedCode
     );
 
     if (matchingProduct) {
@@ -1150,9 +1158,7 @@ export default function SalesSection({ cashier }) {
     if (matchingCustomer) {
       // Set the customer in the cart
       setCartCustomer(matchingCustomer);
-      toast.success(
-        `Customer "${matchingCustomer.name}" selected via QR scan`
-      );
+      toast.success(`Customer "${matchingCustomer.name}" selected via QR scan`);
       console.log("[Barcode Scanner] Customer matched:", matchingCustomer);
     } else {
       console.log("[Barcode Scanner] No match found for:", scannedCode);

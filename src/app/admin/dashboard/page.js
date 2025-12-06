@@ -50,6 +50,12 @@ import {
   Filter,
   Tag,
   RefreshCw,
+  Percent,
+  Clock,
+  AlertTriangle,
+  UserPlus,
+  UserCheck,
+  Crown,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import DatePicker from "react-datepicker";
@@ -59,6 +65,8 @@ import {
   Bar,
   LineChart,
   Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -138,11 +146,23 @@ export default function AdminDashboard() {
     todayChange: 0,
     ordersChange: 0,
     avgOrderValueChange: 0,
+    // New metrics
+    grossProfit: 0,
+    grossProfitMargin: 0,
+    totalCost: 0,
+    avgItemsPerTransaction: 0,
+    newCustomers: 0,
+    repeatCustomers: 0,
+    repeatCustomerRate: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [monthlyData, setMonthlyData] = useState([]);
   const [dailySalesData, setDailySalesData] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
+  // New dashboard data
+  const [hourlySalesData, setHourlySalesData] = useState([]);
+  const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [topCustomers, setTopCustomers] = useState([]);
   const [paymentMethodsData, setPaymentMethodsData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -805,6 +825,138 @@ export default function AdminDashboard() {
             100
           : 0;
 
+      // NEW: Calculate gross profit margin
+      // Create a map of product costs for quick lookup
+      const productCostMap = {};
+      products.forEach((product) => {
+        if (product.id) {
+          productCostMap[product.id] = product.cost || product.purchaseCost || 0;
+        }
+      });
+
+      let totalCost = 0;
+      monthReceipts.forEach((receipt) => {
+        const items = receipt.lineItems || receipt.line_items || [];
+        if (items && Array.isArray(items)) {
+          items.forEach((item) => {
+            const cost = productCostMap[item.item_id] || 0;
+            totalCost += cost * (item.quantity || 1);
+          });
+        }
+      });
+
+      const grossProfit = monthRevenue - totalCost;
+      const grossProfitMargin = monthRevenue > 0 ? (grossProfit / monthRevenue) * 100 : 0;
+
+      // NEW: Calculate average items per transaction
+      let totalItems = 0;
+      monthReceipts.forEach((receipt) => {
+        const items = receipt.lineItems || receipt.line_items || [];
+        if (items && Array.isArray(items)) {
+          items.forEach((item) => {
+            totalItems += item.quantity || 1;
+          });
+        }
+      });
+      const avgItemsPerTransaction = monthReceipts.length > 0 ? totalItems / monthReceipts.length : 0;
+
+      // NEW: Calculate customer insights (new vs returning)
+      const customerTransactionMap = {};
+      receipts.forEach((receipt) => {
+        const customerId = receipt.customerId || receipt.customer_id;
+        if (customerId) {
+          if (!customerTransactionMap[customerId]) {
+            customerTransactionMap[customerId] = { count: 0, total: 0, firstPurchase: null };
+          }
+          customerTransactionMap[customerId].count++;
+          customerTransactionMap[customerId].total += getReceiptTotal(receipt);
+          const receiptDate = getReceiptDate(receipt);
+          if (!customerTransactionMap[customerId].firstPurchase || receiptDate < customerTransactionMap[customerId].firstPurchase) {
+            customerTransactionMap[customerId].firstPurchase = receiptDate;
+          }
+        }
+      });
+
+      // Count new customers (first purchase in selected period) vs repeat customers
+      let newCustomerCount = 0;
+      let repeatCustomerCount = 0;
+      const monthCustomerSet = new Set();
+
+      monthReceipts.forEach((receipt) => {
+        const customerId = receipt.customerId || receipt.customer_id;
+        if (customerId) {
+          monthCustomerSet.add(customerId);
+        }
+      });
+
+      monthCustomerSet.forEach((customerId) => {
+        const customerData = customerTransactionMap[customerId];
+        if (customerData) {
+          if (customerData.firstPurchase >= selectedDateRange.start && customerData.firstPurchase < selectedDateRange.end) {
+            newCustomerCount++;
+          }
+          if (customerData.count > 1) {
+            repeatCustomerCount++;
+          }
+        }
+      });
+
+      const repeatCustomerRate = monthCustomerSet.size > 0 ? (repeatCustomerCount / monthCustomerSet.size) * 100 : 0;
+
+      // NEW: Calculate hourly sales distribution
+      const hourlySales = Array(24).fill(null).map((_, hour) => ({
+        hour: hour,
+        label: hour === 0 ? '12AM' : hour < 12 ? `${hour}AM` : hour === 12 ? '12PM' : `${hour - 12}PM`,
+        revenue: 0,
+        orders: 0,
+      }));
+
+      monthReceipts.forEach((receipt) => {
+        const receiptDate = getReceiptDate(receipt);
+        if (receiptDate && !isNaN(receiptDate.getTime())) {
+          const hour = receiptDate.getHours();
+          hourlySales[hour].revenue += getReceiptTotal(receipt);
+          hourlySales[hour].orders++;
+        }
+      });
+
+      setHourlySalesData(hourlySales);
+
+      // NEW: Get low stock products (stock < 10)
+      const lowStock = products
+        .filter((product) => {
+          const stock = product.stock ?? product.inStock ?? 0;
+          return product.trackStock && stock < 10;
+        })
+        .sort((a, b) => (a.stock ?? a.inStock ?? 0) - (b.stock ?? b.inStock ?? 0))
+        .slice(0, 10)
+        .map((product) => ({
+          id: product.id,
+          name: product.name || product.item_name,
+          stock: product.stock ?? product.inStock ?? 0,
+          sku: product.sku || '',
+          price: product.price || 0,
+        }));
+
+      setLowStockProducts(lowStock);
+
+      // NEW: Calculate top customers by spend
+      const topCustomersList = Object.entries(customerTransactionMap)
+        .map(([customerId, data]) => {
+          const customer = customers.find((c) => c.id === customerId);
+          return {
+            id: customerId,
+            name: customer?.name || customer?.email || 'Anonymous',
+            email: customer?.email || '',
+            totalSpent: data.total,
+            orderCount: data.count,
+          };
+        })
+        .sort((a, b) => b.totalSpent - a.totalSpent)
+        .slice(0, 5);
+
+      setTopCustomers(topCustomersList);
+
       // Set stats
       setStats({
         totalRevenue,
@@ -819,6 +971,14 @@ export default function AdminDashboard() {
         todayChange: Math.round(todayChange * 10) / 10,
         ordersChange: Math.round(ordersChange * 10) / 10,
         avgOrderValueChange: Math.round(avgOrderValueChange * 10) / 10,
+        // New metrics
+        grossProfit,
+        grossProfitMargin: Math.round(grossProfitMargin * 10) / 10,
+        totalCost,
+        avgItemsPerTransaction: Math.round(avgItemsPerTransaction * 10) / 10,
+        newCustomers: newCustomerCount,
+        repeatCustomers: repeatCustomerCount,
+        repeatCustomerRate: Math.round(repeatCustomerRate * 10) / 10,
       });
 
       // Prepare daily sales data for the selected period
@@ -1068,10 +1228,21 @@ export default function AdminDashboard() {
         : `${months[selectedMonth]} ${selectedYear}`,
     },
     {
+      title: "Gross Profit",
+      value: formatCurrency(stats.grossProfit),
+      change: stats.grossProfitMargin,
+      changeLabel: "profit margin",
+      icon: Percent,
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-100",
+      subtitle: `Cost: ${formatCurrency(stats.totalCost)}`,
+      isPercentage: true,
+    },
+    {
       title: "Today's Sales",
       value: formatCurrency(stats.todayRevenue),
       change: stats.todayChange,
-      changeLabel: "vs yesterday", // Compare with yesterday's sales
+      changeLabel: "vs yesterday",
       icon: TrendingUp,
       color: "text-blue-600",
       bgColor: "bg-blue-100",
@@ -1099,7 +1270,18 @@ export default function AdminDashboard() {
       icon: CreditCard,
       color: "text-orange-600",
       bgColor: "bg-orange-100",
-      subtitle: "This month",
+      subtitle: `${stats.avgItemsPerTransaction} items/order`,
+    },
+    {
+      title: "Customer Insights",
+      value: stats.newCustomers + stats.repeatCustomers,
+      change: stats.repeatCustomerRate,
+      changeLabel: "repeat rate",
+      icon: Users,
+      color: "text-pink-600",
+      bgColor: "bg-pink-100",
+      subtitle: `${stats.newCustomers} new, ${stats.repeatCustomers} returning`,
+      isPercentage: true,
     },
   ];
 
@@ -1351,11 +1533,11 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Key Stats Grid - Mobile Friendly (2x2 on mobile, 4 columns on desktop) */}
-        <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4 animate-in slide-in-from-bottom duration-500">
+        {/* Key Stats Grid - Mobile Friendly (2x3 on mobile, 6 columns on desktop) */}
+        <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 animate-in slide-in-from-bottom duration-500">
           {statCards.map((stat, index) => {
             const Icon = stat.icon;
-            const isPositive = stat.change ? stat.change > 0 : null;
+            const isPositive = stat.isPercentage ? true : (stat.change ? stat.change > 0 : null);
 
             return (
               <Card
@@ -1383,15 +1565,19 @@ export default function AdminDashboard() {
                     {stat.value}
                   </div>
                   {stat.change !== undefined && stat.change !== null && (
-                    <div className="flex items-center mt-2 text-base md:text-sm">
-                      {isPositive ? (
+                    <div className="flex items-center mt-2 text-base md:text-sm flex-wrap">
+                      {stat.isPercentage ? (
+                        <Percent className="h-6 w-6 md:h-4 md:w-4 text-blue-600 dark:text-blue-400 mr-1" />
+                      ) : isPositive ? (
                         <ArrowUpRight className="h-6 w-6 md:h-4 md:w-4 text-green-600 dark:text-green-400 mr-1" />
                       ) : (
                         <ArrowDownRight className="h-6 w-6 md:h-4 md:w-4 text-red-600 dark:text-red-400 mr-1" />
                       )}
                       <span
                         className={
-                          isPositive
+                          stat.isPercentage
+                            ? "text-blue-600 dark:text-blue-400"
+                            : isPositive
                             ? "text-green-600 dark:text-green-400"
                             : "text-red-600 dark:text-red-400"
                         }
@@ -1496,6 +1682,91 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Hourly Sales Distribution */}
+        <Card className="hover:shadow-lg transition-shadow animate-in slide-in-from-bottom duration-700">
+          <CardHeader>
+            <CardTitle className="text-xl md:text-lg flex items-center gap-2">
+              <Clock className="h-6 w-6 md:h-5 md:w-5" />
+              Peak Hours Analysis
+            </CardTitle>
+            <CardDescription className="text-base md:text-sm">
+              Sales distribution by hour of day - identify your busiest times
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64 md:h-80 min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={hourlySalesData}>
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="label" 
+                    tick={{ fontSize: 10 }}
+                    interval={1}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    content={
+                      <CustomTooltip
+                        formatter={(value) => formatCurrency(value)}
+                      />
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#10b981"
+                    fillOpacity={1}
+                    fill="url(#colorRevenue)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Peak Hour Summary */}
+            {hourlySalesData.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                {(() => {
+                  const peakHour = hourlySalesData.reduce((max, h) => h.revenue > max.revenue ? h : max, hourlySalesData[0]);
+                  const peakOrderHour = hourlySalesData.reduce((max, h) => h.orders > max.orders ? h : max, hourlySalesData[0]);
+                  const totalDayRevenue = hourlySalesData.reduce((sum, h) => sum + h.revenue, 0);
+                  const totalOrders = hourlySalesData.reduce((sum, h) => sum + h.orders, 0);
+                  return (
+                    <>
+                      <div className="text-center">
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Peak Revenue Hour</p>
+                        <p className="text-lg font-bold text-green-600 dark:text-green-400">{peakHour?.label || '-'}</p>
+                        <p className="text-xs text-neutral-400">{formatCurrency(peakHour?.revenue || 0)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Busiest Hour</p>
+                        <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{peakOrderHour?.label || '-'}</p>
+                        <p className="text-xs text-neutral-400">{peakOrderHour?.orders || 0} orders</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Peak Hour %</p>
+                        <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                          {totalDayRevenue > 0 ? ((peakHour?.revenue || 0) / totalDayRevenue * 100).toFixed(1) : 0}%
+                        </p>
+                        <p className="text-xs text-neutral-400">of daily revenue</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400">Total Orders</p>
+                        <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{totalOrders}</p>
+                        <p className="text-xs text-neutral-400">in period</p>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Top Products & Payment Methods - Mobile Stacked */}
         <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2 animate-in slide-in-from-right duration-700">
@@ -1610,6 +1881,125 @@ export default function AdminDashboard() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Low Stock Alerts & Top Customers Row */}
+        <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2 animate-in slide-in-from-bottom duration-700">
+          {/* Low Stock Alerts */}
+          <Card className="hover:shadow-lg transition-shadow duration-300">
+            <CardHeader>
+              <CardTitle className="text-xl md:text-lg flex items-center gap-2">
+                <AlertTriangle className="h-6 w-6 md:h-5 md:w-5 text-amber-500" />
+                Low Stock Alerts
+              </CardTitle>
+              <CardDescription className="text-base md:text-sm">
+                Products running low on inventory (less than 10 units)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {lowStockProducts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="h-12 w-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-2" />
+                  <p className="text-neutral-500 dark:text-neutral-400 text-sm">
+                    All products are well stocked!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {lowStockProducts.map((product, index) => (
+                    <div
+                      key={product.id || index}
+                      className="flex items-center justify-between pb-3 border-b last:border-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 -mx-4 px-4 rounded-lg transition-all duration-200"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-lg md:text-base truncate">
+                          {product.name}
+                        </p>
+                        {product.sku && (
+                          <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
+                            SKU: {product.sku}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-bold text-lg md:text-base ${
+                          product.stock <= 3 
+                            ? 'text-red-600 dark:text-red-400' 
+                            : product.stock <= 5 
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-neutral-600 dark:text-neutral-400'
+                        }`}>
+                          {product.stock} left
+                        </p>
+                        <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
+                          {formatCurrency(product.price)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Top Customers */}
+          <Card className="hover:shadow-lg transition-shadow duration-300">
+            <CardHeader>
+              <CardTitle className="text-xl md:text-lg flex items-center gap-2">
+                <Crown className="h-6 w-6 md:h-5 md:w-5 text-amber-500" />
+                Top Customers
+              </CardTitle>
+              <CardDescription className="text-base md:text-sm">
+                Highest spending customers
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {topCustomers.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-2" />
+                  <p className="text-neutral-500 dark:text-neutral-400 text-sm">
+                    No customer data yet
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {topCustomers.map((customer, index) => (
+                    <div
+                      key={customer.id || index}
+                      className="flex items-center justify-between pb-3 border-b last:border-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 -mx-4 px-4 rounded-lg transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                          index === 0 
+                            ? 'bg-amber-500' 
+                            : index === 1 
+                            ? 'bg-neutral-400'
+                            : index === 2
+                            ? 'bg-amber-700'
+                            : 'bg-neutral-300 dark:bg-neutral-600'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-lg md:text-base truncate">
+                            {customer.name}
+                          </p>
+                          <p className="text-base md:text-xs text-neutral-500 dark:text-neutral-400">
+                            {customer.orderCount} orders
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg md:text-base text-green-600 dark:text-green-400">
+                          {formatCurrency(customer.totalSpent)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
