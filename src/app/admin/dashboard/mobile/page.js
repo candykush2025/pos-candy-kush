@@ -41,7 +41,6 @@ import {
   Crown,
   Tag,
   ChevronDown,
-  ChevronUp,
   List,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
@@ -116,12 +115,6 @@ export default function MobileDashboardPage() {
   const [customEndDate, setCustomEndDate] = useState(null);
   const [selectedDateRangeLabel, setSelectedDateRangeLabel] =
     useState("This Month");
-
-  // All sold products section
-  const [showAllSoldProducts, setShowAllSoldProducts] = useState(false);
-  const [soldProductsCategory, setSoldProductsCategory] = useState("all");
-  const [showSoldProductsCategoryPicker, setShowSoldProductsCategoryPicker] =
-    useState(false);
 
   const months = [
     "January",
@@ -1013,13 +1006,13 @@ export default function MobileDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* All Sold Items */}
+      {/* All Sold Items - Preview */}
       <Card>
         <CardHeader>
           <div>
             <CardTitle className="text-3xl font-bold flex items-center gap-3">
               <List className="h-8 w-8" />
-              All Sold Items
+              Sold Items
             </CardTitle>
             <CardDescription className="text-xl">
               {allSoldProducts.length} products sold
@@ -1028,65 +1021,6 @@ export default function MobileDashboardPage() {
         </CardHeader>
 
         <CardContent>
-          {/* Category Filter for Sold Products */}
-          <div className="relative mb-6">
-            <Button
-              onClick={() =>
-                setShowSoldProductsCategoryPicker(
-                  !showSoldProductsCategoryPicker
-                )
-              }
-              variant="outline"
-              className="w-full h-14 text-xl font-bold justify-between"
-            >
-              <span className="flex items-center">
-                <Tag className="h-5 w-5 mr-2" />
-                {soldProductsCategory === "all"
-                  ? "All Categories"
-                  : categories.find((c) => c.id === soldProductsCategory)
-                      ?.name || "Select Category"}
-              </span>
-              <ChevronDown
-                className={`h-5 w-5 transition-transform ${
-                  showSoldProductsCategoryPicker ? "rotate-180" : ""
-                }`}
-              />
-            </Button>
-            {showSoldProductsCategoryPicker && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-neutral-800 border dark:border-neutral-700 rounded-xl shadow-lg max-h-64 overflow-y-auto">
-                <button
-                  onClick={() => {
-                    setSoldProductsCategory("all");
-                    setShowSoldProductsCategoryPicker(false);
-                  }}
-                  className={`w-full px-6 py-4 text-left text-xl font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-                    soldProductsCategory === "all"
-                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                      : ""
-                  }`}
-                >
-                  All Categories
-                </button>
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => {
-                      setSoldProductsCategory(category.id);
-                      setShowSoldProductsCategoryPicker(false);
-                    }}
-                    className={`w-full px-6 py-4 text-left text-xl font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-                      soldProductsCategory === category.id
-                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                        : ""
-                    }`}
-                  >
-                    {category.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Summary Stats */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
@@ -1094,13 +1028,7 @@ export default function MobileDashboardPage() {
                 Total Items
               </p>
               <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                {allSoldProducts
-                  .filter(
-                    (p) =>
-                      soldProductsCategory === "all" ||
-                      p.categoryId === soldProductsCategory
-                  )
-                  .reduce((sum, p) => sum + p.quantity, 0)}
+                {allSoldProducts.reduce((sum, p) => sum + p.quantity, 0)}
               </p>
             </div>
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
@@ -1109,36 +1037,21 @@ export default function MobileDashboardPage() {
               </p>
               <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                 {formatCurrency(
-                  allSoldProducts
-                    .filter(
-                      (p) =>
-                        soldProductsCategory === "all" ||
-                        p.categoryId === soldProductsCategory
-                    )
-                    .reduce((sum, p) => sum + p.revenue, 0)
+                  allSoldProducts.reduce((sum, p) => sum + p.revenue, 0)
                 )}
               </p>
             </div>
           </div>
 
-          {/* Products List */}
-          {allSoldProducts.filter(
-            (p) =>
-              soldProductsCategory === "all" ||
-              p.categoryId === soldProductsCategory
-          ).length === 0 ? (
+          {/* Products List - Max 3 items */}
+          {allSoldProducts.length === 0 ? (
             <p className="text-neutral-500 text-center py-10 text-2xl">
-              No products in this category
+              No products sold
             </p>
           ) : (
-            <div className="space-y-4">
-              {allSoldProducts
-                .filter(
-                  (p) =>
-                    soldProductsCategory === "all" ||
-                    p.categoryId === soldProductsCategory
-                )
-                .map((product, index) => {
+            <>
+              <div className="space-y-4">
+                {allSoldProducts.slice(0, 3).map((product, index) => {
                   const categoryName = categories.find(
                     (c) => c.id === product.categoryId
                   )?.name;
@@ -1174,7 +1087,21 @@ export default function MobileDashboardPage() {
                     </div>
                   );
                 })}
-            </div>
+              </div>
+
+              {/* View All Button */}
+              {allSoldProducts.length > 3 && (
+                <div className="mt-6 text-center">
+                  <Button
+                    onClick={() => router.push("/admin/sold-items")}
+                    variant="outline"
+                    className="h-14 px-8 text-xl font-bold"
+                  >
+                    View All {allSoldProducts.length} Items
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
