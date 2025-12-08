@@ -836,7 +836,7 @@ export default function SalesSection({ cashier }) {
 
         finalProducts = productsData.map((product) => {
           if (product.trackStock) {
-            const stockFromHistory = latestStockMap[product.id];
+            const stockFromHistory = latestStockMap.get(product.id);
             if (stockFromHistory !== undefined) {
               return {
                 ...product,
@@ -845,11 +845,11 @@ export default function SalesSection({ cashier }) {
               };
             }
           }
-          // For non-tracked products or products without history, use 0
+          // For non-tracked products or products without history, use product.stock
           return {
             ...product,
-            stock: product.trackStock ? 0 : product.stock || 0,
-            inStock: product.trackStock ? 0 : product.inStock || 0,
+            stock: product.stock ?? 0,
+            inStock: product.inStock ?? product.stock ?? 0,
           };
         });
       } catch (err) {
