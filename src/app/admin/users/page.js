@@ -759,7 +759,13 @@ export default function AdminUsers() {
                                 {log.details || "-"}
                                 {log.previousValue && log.newValue && (
                                   <span className="block">
-                                    {log.previousValue} {log.newValue}
+                                    {typeof log.previousValue === "object"
+                                      ? JSON.stringify(log.previousValue)
+                                      : log.previousValue}{" "}
+                                    →{" "}
+                                    {typeof log.newValue === "object"
+                                      ? JSON.stringify(log.newValue)
+                                      : log.newValue}
                                   </span>
                                 )}
                               </td>

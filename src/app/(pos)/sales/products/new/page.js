@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { canDeleteProduct } from "@/lib/services/userPermissionsService";
 
 const PRODUCT_COLORS = [
   { value: "GREY", label: "Grey", hex: "#9CA3AF" },
@@ -43,11 +44,31 @@ export default function POSNewProductPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
-  const { user } = useAuthStore();
+  const { user: authUser } = useAuthStore();
+
+  // Get cashier from localStorage (POS mode) or fall back to authUser
+  const [cashier, setCashier] = useState(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedCashier = localStorage.getItem("pos_cashier");
+      if (savedCashier) {
+        try {
+          setCashier(JSON.parse(savedCashier));
+        } catch (error) {
+          console.error("Error loading cashier session:", error);
+        }
+      }
+    }
+  }, []);
+
+  // Use cashier if in POS mode, otherwise use authUser
+  const user = cashier || authUser;
 
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingProduct, setLoadingProduct] = useState(!!editId);
+  const [deleting, setDeleting] = useState(false);
   const [showQuickAddCategory, setShowQuickAddCategory] = useState(false);
   const [quickCategoryName, setQuickCategoryName] = useState("");
   const [isQuickAddingCategory, setIsQuickAddingCategory] = useState(false);
@@ -403,6 +424,39 @@ export default function POSNewProductPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editId) return;
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this product? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      // Delete from Firebase
+      await productsService.delete(editId);
+
+      // Delete from IndexedDB
+      try {
+        await dbService.deleteProduct(editId);
+      } catch (dbError) {
+        console.warn("IndexedDB delete sync failed:", dbError.message);
+      }
+
+      toast.success("Product deleted successfully");
+      router.push("/sales?tab=products");
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      toast.error("Failed to delete product");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1072,6 +1126,28 @@ export default function POSNewProductPage() {
 
               {/* Submit Buttons */}
               <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                {/* Delete Button - Only show when editing and has permission */}
+                {editId && canDeleteProduct(user) && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={deleting || loading}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {deleting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Link href="/sales?tab=products" className="flex-1">
                   <Button
                     type="button"
@@ -1081,7 +1157,11 @@ export default function POSNewProductPage() {
                     Cancel
                   </Button>
                 </Link>
-                <Button type="submit" className="flex-1" disabled={loading}>
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={loading || deleting}
+                >
                   {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
