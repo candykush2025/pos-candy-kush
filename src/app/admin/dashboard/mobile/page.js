@@ -24,6 +24,7 @@ import {
   customersService,
   categoriesService,
 } from "@/lib/firebase/firestore";
+import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
 import {
   DollarSign,
   ShoppingCart,
@@ -404,9 +405,18 @@ export default function MobileDashboardPage() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const receipts = await receiptsService.getAll();
-      const products = await productsService.getAll();
-      const customers = await customersService.getAll();
+      const [receipts, productData, customers, stockMap] = await Promise.all([
+        receiptsService.getAll(),
+        productsService.getAll(),
+        customersService.getAll(),
+        stockHistoryService.getLatestStockForAllProducts(),
+      ]);
+
+      // Enrich products with stock from stock history
+      const products = productData.map((p) => ({
+        ...p,
+        stock: stockMap.get(p.id) ?? p.stock ?? 0,
+      }));
 
       // Store receipts for later use (peak hours by day)
       setAllReceipts(receipts);
@@ -1329,7 +1339,8 @@ export default function MobileDashboardPage() {
                 {recentTransactions.slice(0, 5).map((tx) => {
                   const txDate =
                     tx.createdAt?.toDate?.() || new Date(tx.createdAt);
-                  const total = tx.total || tx.totalAmount || tx.total_money || 0;
+                  const total =
+                    tx.total || tx.totalAmount || tx.total_money || 0;
                   const orderId = getOrderId(tx);
                   const memberName = getMemberName(
                     tx.customerId || tx.customer_id,

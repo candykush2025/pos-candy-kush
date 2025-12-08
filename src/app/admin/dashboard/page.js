@@ -35,6 +35,7 @@ import {
   setDocument,
   COLLECTIONS,
 } from "@/lib/firebase/firestore";
+import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
 import { loyverseService } from "@/lib/api/loyverse";
 import { toast } from "sonner";
 import {
@@ -651,9 +652,18 @@ export default function AdminDashboard() {
         orderBy: ["createdAt", "desc"],
       });
 
-      // Get products and customers first (needed for category filtering)
-      const products = await productsService.getAll();
-      const customers = await customersService.getAll();
+      // Get products, customers, and stock data in parallel
+      const [productData, customers, stockMap] = await Promise.all([
+        productsService.getAll(),
+        customersService.getAll(),
+        stockHistoryService.getLatestStockForAllProducts(),
+      ]);
+
+      // Enrich products with stock from stock history
+      const products = productData.map((p) => ({
+        ...p,
+        stock: stockMap.get(p.id) ?? p.stock ?? 0,
+      }));
 
       // Filter by category if selected
       if (selectedCategory !== "all") {

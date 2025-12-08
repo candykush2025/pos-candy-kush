@@ -135,6 +135,21 @@ export default function NewProductPage() {
       setLoadingProduct(true);
       const product = await productsService.get(id);
       if (product) {
+        // Get current stock from stockHistory (not hardcoded product.stock)
+        let currentStock = product.stock || 0;
+        if (product.trackStock) {
+          try {
+            const stockFromHistory = await stockHistoryService.getCurrentStock(
+              id
+            );
+            if (stockFromHistory !== null) {
+              currentStock = stockFromHistory;
+            }
+          } catch (err) {
+            console.error("Error fetching stock from history:", err);
+          }
+        }
+
         setFormData({
           name: product.name || "",
           handle: product.handle || "",
@@ -146,7 +161,7 @@ export default function NewProductPage() {
           price: product.price?.toString() || "",
           memberPrice: product.memberPrice?.toString() || "",
           cost: product.cost?.toString() || "",
-          stock: product.stock?.toString() || "",
+          stock: currentStock.toString(),
           lowStock: product.lowStock?.toString() || "5",
           trackStock: product.trackStock || false,
           soldByWeight: product.soldByWeight || false,
@@ -352,17 +367,26 @@ export default function NewProductPage() {
 
         // Log stock change if tracking stock
         if (formData.trackStock) {
-          const oldProduct = await productsService.get(editId);
-          const oldStock = oldProduct?.stock || 0;
+          // Get current stock from stockHistory (not product.stock field)
+          let oldStock = 0;
+          try {
+            const stockFromHistory = await stockHistoryService.getCurrentStock(
+              editId
+            );
+            oldStock = stockFromHistory !== null ? stockFromHistory : 0;
+          } catch (err) {
+            console.error("Error getting current stock from history:", err);
+          }
+
           const newStock = parseInt(formData.stock) || 0;
 
-          // Only log if stock actually changed and new stock is at least 1
-          if (oldStock !== newStock && newStock >= 1) {
+          // Log if stock changed
+          if (oldStock !== newStock) {
             await stockHistoryService.logStockMovement({
               productId: editId,
               productName: productData.name,
               sku: productData.sku || null,
-              type: newStock > oldStock ? "adjustment" : "adjustment",
+              type: "adjustment",
               quantity: newStock - oldStock,
               previousStock: oldStock,
               newStock: newStock,

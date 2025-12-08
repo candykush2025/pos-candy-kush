@@ -169,13 +169,31 @@ export default function TransactionsPage() {
     switch (filterType) {
       case "today":
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        end = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59
+        );
         break;
       case "yesterday":
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
-        start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-        end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
+        start = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate()
+        );
+        end = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate(),
+          23,
+          59,
+          59
+        );
         break;
       case "thisMonth":
         start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -243,7 +261,12 @@ export default function TransactionsPage() {
   const getProductName = (item) => {
     const itemId = item.item_id || item.itemId || item.id;
     if (productsMap[itemId]) {
-      return productsMap[itemId].name || item.item_name || item.name || "Unknown Item";
+      return (
+        productsMap[itemId].name ||
+        item.item_name ||
+        item.name ||
+        "Unknown Item"
+      );
     }
     return item.item_name || item.name || "Unknown Item";
   };
@@ -260,7 +283,9 @@ export default function TransactionsPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-500 mx-auto"></div>
-          <p className="mt-6 text-2xl text-neutral-600">Loading transactions...</p>
+          <p className="mt-6 text-2xl text-neutral-600">
+            Loading transactions...
+          </p>
         </div>
       </div>
     );
@@ -306,42 +331,66 @@ export default function TransactionsPage() {
           <Button
             variant={selectedDateFilter === "all" ? "default" : "outline"}
             onClick={() => applyDateFilter("all")}
-            className={`h-11 px-4 text-base ${selectedDateFilter === "all" ? "bg-green-600 hover:bg-green-700" : ""}`}
+            className={`h-11 px-4 text-base ${
+              selectedDateFilter === "all"
+                ? "bg-green-600 hover:bg-green-700"
+                : ""
+            }`}
           >
             All
           </Button>
           <Button
             variant={selectedDateFilter === "today" ? "default" : "outline"}
             onClick={() => applyDateFilter("today")}
-            className={`h-11 px-4 text-base ${selectedDateFilter === "today" ? "bg-green-600 hover:bg-green-700" : ""}`}
+            className={`h-11 px-4 text-base ${
+              selectedDateFilter === "today"
+                ? "bg-green-600 hover:bg-green-700"
+                : ""
+            }`}
           >
             Today
           </Button>
           <Button
             variant={selectedDateFilter === "yesterday" ? "default" : "outline"}
             onClick={() => applyDateFilter("yesterday")}
-            className={`h-11 px-4 text-base ${selectedDateFilter === "yesterday" ? "bg-green-600 hover:bg-green-700" : ""}`}
+            className={`h-11 px-4 text-base ${
+              selectedDateFilter === "yesterday"
+                ? "bg-green-600 hover:bg-green-700"
+                : ""
+            }`}
           >
             Yesterday
           </Button>
           <Button
             variant={selectedDateFilter === "thisMonth" ? "default" : "outline"}
             onClick={() => applyDateFilter("thisMonth")}
-            className={`h-11 px-4 text-base ${selectedDateFilter === "thisMonth" ? "bg-green-600 hover:bg-green-700" : ""}`}
+            className={`h-11 px-4 text-base ${
+              selectedDateFilter === "thisMonth"
+                ? "bg-green-600 hover:bg-green-700"
+                : ""
+            }`}
           >
             This Month
           </Button>
           <Button
             variant={selectedDateFilter === "lastMonth" ? "default" : "outline"}
             onClick={() => applyDateFilter("lastMonth")}
-            className={`h-11 px-4 text-base ${selectedDateFilter === "lastMonth" ? "bg-green-600 hover:bg-green-700" : ""}`}
+            className={`h-11 px-4 text-base ${
+              selectedDateFilter === "lastMonth"
+                ? "bg-green-600 hover:bg-green-700"
+                : ""
+            }`}
           >
             Last Month
           </Button>
           <Button
             variant={selectedDateFilter === "custom" ? "default" : "outline"}
             onClick={() => applyDateFilter("custom")}
-            className={`h-11 px-4 text-base flex items-center gap-2 ${selectedDateFilter === "custom" ? "bg-green-600 hover:bg-green-700" : ""}`}
+            className={`h-11 px-4 text-base flex items-center gap-2 ${
+              selectedDateFilter === "custom"
+                ? "bg-green-600 hover:bg-green-700"
+                : ""
+            }`}
           >
             <Calendar className="h-4 w-4" />
             {selectedDateFilter === "custom" && startDate && endDate
@@ -547,10 +596,7 @@ export default function TransactionsPage() {
                         item.total_money / quantity ||
                         0;
                       const total =
-                        item.total_money ||
-                        item.total ||
-                        price * quantity ||
-                        0;
+                        item.total_money || item.total || price * quantity || 0;
 
                       return (
                         <div

@@ -152,4 +152,53 @@ export const stockHistoryService = {
       throw error;
     }
   },
+
+  /**
+   * Get the latest stock level for all products from stock history
+   * Returns a Map of productId -> latestStock
+   */
+  async getLatestStockForAllProducts() {
+    try {
+      // Get all history sorted by date desc
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        orderBy("createdAt", "desc")
+      );
+
+      const snapshot = await getDocs(q);
+      const latestStockMap = new Map();
+
+      // For each product, we only want the most recent entry (first one we encounter)
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const productId = data.productId;
+        // Only set if we haven't seen this product yet (first = most recent)
+        if (productId && !latestStockMap.has(productId)) {
+          latestStockMap.set(productId, data.newStock);
+        }
+      });
+
+      return latestStockMap;
+    } catch (error) {
+      console.error("Error fetching latest stock for all products:", error);
+      // Return empty Map on error so .get() still works
+      return new Map();
+    }
+  },
+
+  /**
+   * Get the current stock for a single product from stock history
+   */
+  async getCurrentStock(productId) {
+    try {
+      const history = await this.getProductHistory(productId, 1);
+      if (history.length > 0) {
+        return history[0].newStock;
+      }
+      return null; // No history found
+    } catch (error) {
+      console.error("Error fetching current stock:", error);
+      throw error;
+    }
+  },
 };

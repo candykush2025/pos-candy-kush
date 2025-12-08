@@ -830,42 +830,28 @@ export default function SalesSection({ cashier }) {
           "@/lib/firebase/stockHistoryService"
         );
 
-        const enriched = await Promise.all(
-          productsData.map(async (product) => {
-            if (product.trackStock) {
-              try {
-                const history = await stockHistoryService.getProductHistory(
-                  product.id,
-                  1
-                );
-                if (
-                  history &&
-                  history.length > 0 &&
-                  history[0].newStock !== undefined
-                ) {
-                  return {
-                    ...product,
-                    stock: history[0].newStock,
-                    inStock: history[0].newStock,
-                  };
-                }
-              } catch (err) {
-                console.warn(
-                  `Failed to fetch stock history for product ${product.id}:`,
-                  err
-                );
-              }
+        // Get all latest stock levels in one call (more efficient)
+        const latestStockMap =
+          await stockHistoryService.getLatestStockForAllProducts();
+
+        finalProducts = productsData.map((product) => {
+          if (product.trackStock) {
+            const stockFromHistory = latestStockMap[product.id];
+            if (stockFromHistory !== undefined) {
+              return {
+                ...product,
+                stock: stockFromHistory,
+                inStock: stockFromHistory,
+              };
             }
-
-            return {
-              ...product,
-              stock: product.stock || product.inStock || 0,
-              inStock: product.inStock || product.stock || 0,
-            };
-          })
-        );
-
-        finalProducts = enriched;
+          }
+          // For non-tracked products or products without history, use 0
+          return {
+            ...product,
+            stock: product.trackStock ? 0 : product.stock || 0,
+            inStock: product.trackStock ? 0 : product.inStock || 0,
+          };
+        });
       } catch (err) {
         console.warn(
           "Stock history enrichment failed, using raw products:",

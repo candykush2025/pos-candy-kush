@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { productsService, categoriesService } from "@/lib/firebase/firestore";
+import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -46,12 +47,22 @@ export default function StockManagementSection() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [productsData, categoriesData] = await Promise.all([
+      const [productsData, categoriesData, latestStockMap] = await Promise.all([
         productsService.getAll(),
         categoriesService.getAll(),
+        stockHistoryService.getLatestStockForAllProducts(),
       ]);
+
       // Only show products that track stock
-      const stockTrackedProducts = productsData.filter((p) => p.trackStock);
+      // Get stock from stock history, NOT from product.stock field
+      const stockTrackedProducts = productsData
+        .filter((p) => p.trackStock)
+        .map((p) => ({
+          ...p,
+          // Use stock from stock history if available, otherwise 0
+          stock: latestStockMap[p.id] !== undefined ? latestStockMap[p.id] : 0,
+        }));
+
       setProducts(stockTrackedProducts);
       setCategories(categoriesData);
     } catch (error) {

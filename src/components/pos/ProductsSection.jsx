@@ -98,45 +98,19 @@ export default function ProductsSection({ cashier }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [productData, categoryData, discountData] = await Promise.all([
-        productsService.getAll({ orderBy: ["name", "asc"] }),
-        categoriesService.getAll(),
-        discountsService.getAll(),
-      ]);
+      const [productData, categoryData, discountData, stockMap] =
+        await Promise.all([
+          productsService.getAll({ orderBy: ["name", "asc"] }),
+          categoriesService.getAll(),
+          discountsService.getAll(),
+          stockHistoryService.getLatestStockForAllProducts(),
+        ]);
 
-      // Enrich products with current stock from stock history
-      const enrichedProducts = await Promise.all(
-        productData.map(async (product) => {
-          if (product.trackStock) {
-            try {
-              // Get the latest stock history entry for this product
-              const history = await stockHistoryService.getProductHistory(
-                product.id,
-                1
-              );
-
-              // If there's a history entry, use its newStock value
-              if (history.length > 0) {
-                return {
-                  ...product,
-                  stock: history[0].newStock,
-                };
-              }
-            } catch (error) {
-              console.error(
-                `Error fetching stock history for ${product.name}:`,
-                error
-              );
-            }
-          }
-
-          // If no stock history or not tracking stock, use the product's stock value
-          return {
-            ...product,
-            stock: product.stock || product.inStock || 0,
-          };
-        })
-      );
+      // Enrich products with current stock from stock history (batch loaded)
+      const enrichedProducts = productData.map((product) => ({
+        ...product,
+        stock: stockMap.get(product.id) ?? product.stock ?? 0,
+      }));
 
       setProducts(enrichedProducts);
       setCategories(categoryData.filter((cat) => !cat.deletedAt));
