@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -75,6 +76,14 @@ export default function CustomersPage() {
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    type: null, // 'single' or 'bulk'
+    customer: null,
+    loading: false,
+  });
 
   const [formData, setFormData] = useState({
     // Required
@@ -355,31 +364,32 @@ export default function CustomersPage() {
     );
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedIds.length === 0) {
       toast.error("No customers selected");
       return;
     }
 
-    if (
-      !confirm(
-        `Are you sure you want to delete ${selectedIds.length} customer(s)? This action cannot be undone.`
-      )
-    ) {
-      return;
-    }
+    setDeleteModal({
+      open: true,
+      type: "bulk",
+      customer: null,
+      loading: false,
+    });
+  };
 
-    setIsDeleting(true);
+  const handleBulkDeleteConfirm = async () => {
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
       await Promise.all(selectedIds.map((id) => customersService.delete(id)));
       toast.success(`${selectedIds.length} customer(s) deleted successfully`);
       setSelectedIds([]);
+      setDeleteModal({ open: false, type: null, customer: null, loading: false });
       loadCustomers();
     } catch (error) {
       console.error("Error deleting customers:", error);
       toast.error("Failed to delete some customers");
-    } finally {
-      setIsDeleting(false);
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -496,16 +506,28 @@ export default function CustomersPage() {
     }
   };
 
-  const handleDelete = async (customer) => {
-    if (!confirm(`Delete customer "${customer.name}"?`)) return;
+  const handleDelete = (customer) => {
+    setDeleteModal({
+      open: true,
+      type: "single",
+      customer: customer,
+      loading: false,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.customer) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
-      await dbService.deleteCustomer(customer.id);
+      await dbService.deleteCustomer(deleteModal.customer.id);
       toast.success("Customer deleted successfully");
+      setDeleteModal({ open: false, type: null, customer: null, loading: false });
       loadCustomers();
     } catch (error) {
       console.error("Error deleting customer:", error);
       toast.error("Failed to delete customer");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -2231,6 +2253,63 @@ export default function CustomersPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({
+              open: false,
+              type: null,
+              customer: null,
+              loading: false,
+            });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deleteModal.type === "bulk" ? "Delete Customers" : "Delete Customer"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteModal.type === "bulk"
+                ? `Are you sure you want to delete ${selectedIds.length} customer(s)? This action cannot be undone.`
+                : `Are you sure you want to delete "${deleteModal.customer?.name}"? This action cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({
+                  open: false,
+                  type: null,
+                  customer: null,
+                  loading: false,
+                })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteModal.type === "bulk") {
+                  handleBulkDeleteConfirm();
+                } else {
+                  handleDeleteConfirm();
+                }
+              }}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -30,6 +31,14 @@ export default function CategoriesPage() {
   });
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    type: null, // 'single' or 'bulk'
+    category: null,
+    loading: false,
+  });
 
   useEffect(() => {
     loadCategories();
@@ -92,20 +101,22 @@ export default function CategoriesPage() {
     }
   };
 
-  const handleBulkDeleteCategories = async () => {
+  const handleBulkDeleteCategories = () => {
     if (selectedCategories.length === 0) {
       toast.error("No categories selected");
       return;
     }
 
-    if (
-      !confirm(
-        `Are you sure you want to delete ${selectedCategories.length} category(s)?`
-      )
-    )
-      return;
+    setDeleteModal({
+      open: true,
+      type: "bulk",
+      category: null,
+      loading: false,
+    });
+  };
 
-    setIsDeletingBulk(true);
+  const handleBulkDeleteCategoriesConfirm = async () => {
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
     const failed = [];
 
     for (let i = 0; i < selectedCategories.length; i++) {
@@ -165,7 +176,7 @@ export default function CategoriesPage() {
       }
     }
 
-    setIsDeletingBulk(false);
+    setDeleteModal({ open: false, type: null, category: null, loading: false });
     if (failed.length > 0) {
       toast.error(
         `Failed to delete ${failed.length} categories. Remove products from those categories first.`
@@ -206,8 +217,19 @@ export default function CategoriesPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (category) => {
-    if (!confirm(`Delete category "${category.name}"?`)) return;
+  const handleDelete = (category) => {
+    setDeleteModal({
+      open: true,
+      type: "single",
+      category: category,
+      loading: false,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.category) return;
+    const category = deleteModal.category;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
       // Check if category has products in Firebase or local (check by ID and name)
@@ -237,6 +259,7 @@ export default function CategoriesPage() {
         toast.error(
           "Cannot delete category with products. Remove products first."
         );
+        setDeleteModal((prev) => ({ ...prev, loading: false }));
         return;
       }
 
@@ -260,10 +283,12 @@ export default function CategoriesPage() {
       }
 
       toast.success("Category deleted successfully");
+      setDeleteModal({ open: false, type: null, category: null, loading: false });
       await loadCategories();
     } catch (error) {
       console.error("Error deleting category:", error);
       toast.error("Failed to delete category");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -548,6 +573,63 @@ export default function CategoriesPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({
+              open: false,
+              type: null,
+              category: null,
+              loading: false,
+            });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deleteModal.type === "bulk" ? "Delete Categories" : "Delete Category"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteModal.type === "bulk"
+                ? `Are you sure you want to delete ${selectedCategories.length} category(s)? This action cannot be undone.`
+                : `Are you sure you want to delete "${deleteModal.category?.name}"? This action cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({
+                  open: false,
+                  type: null,
+                  category: null,
+                  loading: false,
+                })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteModal.type === "bulk") {
+                  handleBulkDeleteCategoriesConfirm();
+                } else {
+                  handleDeleteConfirm();
+                }
+              }}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

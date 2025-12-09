@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -74,6 +75,13 @@ export default function CashierCustomersPage() {
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [syncingCustomers, setSyncingCustomers] = useState({});
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    customer: null,
+    loading: false,
+  });
 
   const [formData, setFormData] = useState({
     // Required
@@ -247,16 +255,27 @@ export default function CashierCustomersPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (customer) => {
-    if (!confirm(`Delete customer "${customer.name}"?`)) return;
+  const handleDelete = (customer) => {
+    setDeleteModal({
+      open: true,
+      customer: customer,
+      loading: false,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.customer) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
-      await dbService.deleteCustomer(customer.id);
+      await dbService.deleteCustomer(deleteModal.customer.id);
       toast.success("Customer deleted successfully");
+      setDeleteModal({ open: false, customer: null, loading: false });
       loadCustomers();
     } catch (error) {
       console.error("Error deleting customer:", error);
       toast.error("Failed to delete customer");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -1145,6 +1164,43 @@ export default function CashierCustomersPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({ open: false, customer: null, loading: false });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Customer</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteModal.customer?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({ open: false, customer: null, loading: false })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

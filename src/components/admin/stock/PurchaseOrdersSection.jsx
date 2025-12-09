@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -33,6 +34,13 @@ export default function PurchaseOrdersSection() {
     supplier: "",
     notes: "",
     items: [],
+  });
+
+  // Receive PO confirmation modal state
+  const [receiveModal, setReceiveModal] = useState({
+    open: false,
+    po: null,
+    loading: false,
   });
 
   useEffect(() => {
@@ -127,9 +135,18 @@ export default function PurchaseOrdersSection() {
     }
   };
 
-  const handleReceivePO = async (po) => {
-    if (!confirm("Mark this purchase order as received and update stock?"))
-      return;
+  const handleReceivePO = (po) => {
+    setReceiveModal({
+      open: true,
+      po: po,
+      loading: false,
+    });
+  };
+
+  const handleReceivePOConfirm = async () => {
+    if (!receiveModal.po) return;
+    const po = receiveModal.po;
+    setReceiveModal((prev) => ({ ...prev, loading: true }));
 
     try {
       // Update each product's stock
@@ -162,10 +179,12 @@ export default function PurchaseOrdersSection() {
       // Mark PO as received
       await purchaseOrdersService.markAsReceived(po.id);
       toast.success("Purchase order received and stock updated");
+      setReceiveModal({ open: false, po: null, loading: false });
       loadData();
     } catch (error) {
       console.error("Error receiving purchase order:", error);
       toast.error("Failed to receive purchase order");
+      setReceiveModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -375,6 +394,43 @@ export default function PurchaseOrdersSection() {
           )}
         </CardContent>
       </Card>
+
+      {/* Receive Confirmation Modal */}
+      <Dialog
+        open={receiveModal.open}
+        onOpenChange={(open) => {
+          if (!open && !receiveModal.loading) {
+            setReceiveModal({ open: false, po: null, loading: false });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Receive Purchase Order</DialogTitle>
+            <DialogDescription>
+              Mark this purchase order{receiveModal.po?.supplier ? ` from "${receiveModal.po.supplier}"` : ""} as received and update stock? 
+              This will add {receiveModal.po?.totalQuantity || 0} item(s) to inventory.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setReceiveModal({ open: false, po: null, loading: false })
+              }
+              disabled={receiveModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReceivePOConfirm}
+              disabled={receiveModal.loading}
+            >
+              {receiveModal.loading ? "Processing..." : "Confirm Received"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

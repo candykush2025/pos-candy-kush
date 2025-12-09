@@ -27,6 +27,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -1758,6 +1759,14 @@ export default function CustomersSection({ cashier }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    type: null, // 'single' or 'bulk'
+    customer: null,
+    loading: false,
+  });
+
   // Load customers when component mounts or cashier changes
   useEffect(() => {
     loadCustomers();
@@ -2004,45 +2013,51 @@ export default function CustomersSection({ cashier }) {
     }
   };
 
-  const handleDeleteCustomer = async (customer) => {
+  const handleDeleteCustomer = (customer) => {
     // Permission check for deleting
     if (!canDeleteCustomer(cashier)) {
       toast.error("You don't have permission to delete customers");
       return;
     }
 
-    if (
-      !confirm(
-        `Are you sure you want to delete ${customer.name}? This action cannot be undone.`
-      )
-    ) {
-      return;
-    }
+    setDeleteModal({
+      open: true,
+      type: "single",
+      customer: customer,
+      loading: false,
+    });
+  };
+
+  const handleDeleteCustomerConfirm = async () => {
+    if (!deleteModal.customer) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
-      await customersService.delete(customer.id);
+      await customersService.delete(deleteModal.customer.id);
 
       // Log the delete action
       if (cashier) {
         await logCustomerAction(
           cashier,
           LOG_ACTIONS.CUSTOMER_DELETED,
-          customer,
+          deleteModal.customer,
           {
-            description: `Deleted customer: ${customer.name}`,
+            description: `Deleted customer: ${deleteModal.customer.name}`,
           }
         );
       }
 
       toast.success("Customer deleted successfully");
+      setDeleteModal({ open: false, type: null, customer: null, loading: false });
       loadCustomers();
     } catch (error) {
       console.error("Error deleting customer:", error);
       toast.error("Failed to delete customer");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     // Permission check for deleting
     if (!canDeleteCustomer(cashier)) {
       toast.error("You don't have permission to delete customers");
@@ -2054,15 +2069,16 @@ export default function CustomersSection({ cashier }) {
       return;
     }
 
-    if (
-      !confirm(
-        `Are you sure you want to delete ${selectedIds.length} customer(s)? This action cannot be undone.`
-      )
-    ) {
-      return;
-    }
+    setDeleteModal({
+      open: true,
+      type: "bulk",
+      customer: null,
+      loading: false,
+    });
+  };
 
-    setIsDeleting(true);
+  const handleBulkDeleteConfirm = async () => {
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
       await Promise.all(selectedIds.map((id) => customersService.delete(id)));
 
@@ -2075,12 +2091,12 @@ export default function CustomersSection({ cashier }) {
 
       toast.success(`${selectedIds.length} customer(s) deleted successfully`);
       setSelectedIds([]);
+      setDeleteModal({ open: false, type: null, customer: null, loading: false });
       loadCustomers();
     } catch (error) {
       console.error("Error deleting customers:", error);
       toast.error("Failed to delete some customers");
-    } finally {
-      setIsDeleting(false);
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -3083,6 +3099,63 @@ export default function CustomersSection({ cashier }) {
           }}
           customer={selectedCustomerForHistory}
         />
+
+        {/* Delete Confirmation Modal */}
+        <Dialog
+          open={deleteModal.open}
+          onOpenChange={(open) => {
+            if (!open && !deleteModal.loading) {
+              setDeleteModal({
+                open: false,
+                type: null,
+                customer: null,
+                loading: false,
+              });
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {deleteModal.type === "bulk" ? "Delete Customers" : "Delete Customer"}
+              </DialogTitle>
+              <DialogDescription>
+                {deleteModal.type === "bulk"
+                  ? `Are you sure you want to delete ${selectedIds.length} customer(s)? This action cannot be undone.`
+                  : `Are you sure you want to delete ${deleteModal.customer?.name}? This action cannot be undone.`}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setDeleteModal({
+                    open: false,
+                    type: null,
+                    customer: null,
+                    loading: false,
+                  })
+                }
+                disabled={deleteModal.loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (deleteModal.type === "bulk") {
+                    handleBulkDeleteConfirm();
+                  } else {
+                    handleDeleteCustomerConfirm();
+                  }
+                }}
+                disabled={deleteModal.loading}
+              >
+                {deleteModal.loading ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

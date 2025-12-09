@@ -15,6 +15,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -87,6 +88,14 @@ export default function ItemListPage() {
     created: [],
     skipped: [],
     failed: [],
+  });
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    type: null, // 'single', 'bulk', 'loyverse-categories', 'loyverse-products', 'sync-delete'
+    item: null,
+    loading: false,
   });
 
   const [formData, setFormData] = useState({
@@ -308,13 +317,17 @@ export default function ItemListPage() {
     }
   };
 
-  const handleClearAndRefetch = async () => {
-    if (
-      !confirm(
-        "This will refresh local cache to match Firebase (no deletions in Firebase). Continue?"
-      )
-    )
-      return;
+  const handleClearAndRefetch = () => {
+    setDeleteModal({
+      open: true,
+      type: "sync-refresh",
+      item: null,
+      loading: false,
+    });
+  };
+
+  const handleClearAndRefetchConfirm = async () => {
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
       toast.info("🔄 Refreshing local data from Firebase...");
@@ -366,20 +379,25 @@ export default function ItemListPage() {
       toast.success(
         `✅ Refreshed ${firebaseProducts.length} products from Firebase`
       );
+      setDeleteModal({ open: false, type: null, item: null, loading: false });
     } catch (error) {
       console.error("Error refreshing products:", error);
       toast.error("Failed to refresh products: " + error.message);
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
-  const handleClearIndexedDBOnly = async () => {
-    if (
-      !confirm(
-        "⚠️ Clear ALL IndexedDB data? This will remove offline cache for cashier."
-      )
-    ) {
-      return;
-    }
+  const handleClearIndexedDBOnly = () => {
+    setDeleteModal({
+      open: true,
+      type: "clear-indexeddb",
+      item: null,
+      loading: false,
+    });
+  };
+
+  const handleClearIndexedDBOnlyConfirm = async () => {
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
       toast.info("🗑️ Clearing IndexedDB...");
@@ -897,14 +915,17 @@ export default function ItemListPage() {
     }
   };
 
-  const handleFetchAllCategoriesFromKiosk = async () => {
-    if (
-      !confirm(
-        "Fetch all categories from Kiosk API?\n\nThis will create new categories from your product data if they don't exist in Firebase."
-      )
-    ) {
-      return;
-    }
+  const handleFetchAllCategoriesFromKiosk = () => {
+    setDeleteModal({
+      open: true,
+      type: "fetch-categories",
+      item: null,
+      loading: false,
+    });
+  };
+
+  const handleFetchAllCategoriesFromKioskConfirm = async () => {
+    setDeleteModal({ open: false, type: null, item: null, loading: false });
 
     setIsFetchingCategories(true);
     setCategoryFetchProgress({
@@ -1082,8 +1103,19 @@ export default function ItemListPage() {
     router.push(`/admin/products/new?edit=${product.id}`);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Are you sure you want to delete this product?")) return;
+  const handleDelete = (product) => {
+    setDeleteModal({
+      open: true,
+      type: "single",
+      item: product,
+      loading: false,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.item) return;
+    const id = deleteModal.item.id;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
       console.log("🗑️ Deleting product:", id);
@@ -1102,27 +1134,33 @@ export default function ItemListPage() {
       }
 
       toast.success("Product deleted successfully");
+      setDeleteModal({ open: false, type: null, item: null, loading: false });
       console.log("🔄 Reloading products...");
       await loadProducts();
       console.log("✅ Products reloaded");
     } catch (error) {
       console.error("❌ Error deleting product:", error);
       toast.error("Failed to delete product");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedProducts.length === 0) {
       toast.error("No products selected");
       return;
     }
 
-    if (
-      !confirm(
-        `Are you sure you want to delete ${selectedProducts.length} product(s)?`
-      )
-    )
-      return;
+    setDeleteModal({
+      open: true,
+      type: "bulk",
+      item: null,
+      loading: false,
+    });
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    setDeleteModal({ open: false, type: null, item: null, loading: false });
 
     try {
       console.log("🗑️ BULK DELETE START");
@@ -2526,7 +2564,7 @@ export default function ItemListPage() {
                             variant="destructive"
                             size="sm"
                             className="w-full"
-                            onClick={() => handleDelete(product.id)}
+                            onClick={() => handleDelete(product)}
                           >
                             <Trash2 className="h-4 w-4 mr-1" />
                             Delete
@@ -2541,6 +2579,70 @@ export default function ItemListPage() {
           </div>
         </>
       )}
+
+      {/* Delete/Action Confirmation Modal */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({ open: false, type: null, item: null, loading: false });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deleteModal.type === "bulk" && "Delete Products"}
+              {deleteModal.type === "single" && "Delete Product"}
+              {deleteModal.type === "sync-refresh" && "Refresh Data"}
+              {deleteModal.type === "clear-indexeddb" && "Clear Cache"}
+              {deleteModal.type === "fetch-categories" && "Fetch Categories"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteModal.type === "bulk" &&
+                `Are you sure you want to delete ${selectedProducts.length} product(s)? This action cannot be undone.`}
+              {deleteModal.type === "single" &&
+                `Are you sure you want to delete "${deleteModal.item?.name}"? This action cannot be undone.`}
+              {deleteModal.type === "sync-refresh" &&
+                "This will refresh local cache to match Firebase (no deletions in Firebase). Continue?"}
+              {deleteModal.type === "clear-indexeddb" &&
+                "⚠️ Clear ALL IndexedDB data? This will remove offline cache for cashier."}
+              {deleteModal.type === "fetch-categories" &&
+                "Fetch all categories from Kiosk API? This will create new categories from your product data if they don't exist in Firebase."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({ open: false, type: null, item: null, loading: false })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={deleteModal.type === "bulk" || deleteModal.type === "single" || deleteModal.type === "clear-indexeddb" ? "destructive" : "default"}
+              onClick={() => {
+                if (deleteModal.type === "bulk") {
+                  handleBulkDeleteConfirm();
+                } else if (deleteModal.type === "single") {
+                  handleDeleteConfirm();
+                } else if (deleteModal.type === "sync-refresh") {
+                  handleClearAndRefetchConfirm();
+                } else if (deleteModal.type === "clear-indexeddb") {
+                  handleClearIndexedDBOnlyConfirm();
+                } else if (deleteModal.type === "fetch-categories") {
+                  handleFetchAllCategoriesFromKioskConfirm();
+                }
+              }}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Processing..." : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

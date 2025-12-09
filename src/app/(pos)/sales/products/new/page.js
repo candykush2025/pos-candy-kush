@@ -8,6 +8,14 @@ import { dbService } from "@/lib/db/dbService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
   ArrowLeft,
@@ -23,6 +31,7 @@ import {
   Search,
   Minus,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -69,6 +78,7 @@ export default function POSNewProductPage() {
   const [loading, setLoading] = useState(false);
   const [loadingProduct, setLoadingProduct] = useState(!!editId);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showQuickAddCategory, setShowQuickAddCategory] = useState(false);
   const [quickCategoryName, setQuickCategoryName] = useState("");
   const [isQuickAddingCategory, setIsQuickAddingCategory] = useState(false);
@@ -427,18 +437,16 @@ export default function POSNewProductPage() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     if (!editId) return;
 
-    if (
-      !confirm(
-        "Are you sure you want to delete this product? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
-
     setDeleting(true);
+    setShowDeleteModal(false);
+
     try {
       // Delete from Firebase
       await productsService.delete(editId);
@@ -1131,7 +1139,7 @@ export default function POSNewProductPage() {
                   <Button
                     type="button"
                     variant="destructive"
-                    onClick={handleDelete}
+                    onClick={handleDeleteClick}
                     disabled={deleting || loading}
                     className="bg-red-600 hover:bg-red-700"
                   >
@@ -1188,6 +1196,54 @@ export default function POSNewProductPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Product
+            </DialogTitle>
+            <DialogDescription className="text-gray-600 dark:text-gray-400">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {formData.name || "this product"}
+              </span>
+              ? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowDeleteModal(false)}
+              className="flex-1 sm:flex-none"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Product
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

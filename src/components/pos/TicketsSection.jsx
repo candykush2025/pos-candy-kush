@@ -13,6 +13,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -27,6 +28,11 @@ export default function TicketsSection({ onSwitchToSales }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    ticket: null,
+    loading: false,
+  });
 
   const handleResumeTicket = (ticket) => {
     // Load ticket data into cart
@@ -51,15 +57,25 @@ export default function TicketsSection({ onSwitchToSales }) {
     }
   };
 
-  const handleDeleteTicket = async (ticketId) => {
-    if (!confirm("Are you sure you want to delete this ticket?")) return;
+  const handleDeleteTicket = (ticket) => {
+    setDeleteModal({
+      open: true,
+      ticket: ticket,
+      loading: false,
+    });
+  };
 
+  const handleDeleteTicketConfirm = async () => {
+    if (!deleteModal.ticket) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
-      await deleteTicket(ticketId);
+      await deleteTicket(deleteModal.ticket.id);
       toast.success("Ticket deleted successfully");
+      setDeleteModal({ open: false, ticket: null, loading: false });
     } catch (error) {
       console.error("Error deleting ticket:", error);
       toast.error("Failed to delete ticket");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -164,7 +180,7 @@ export default function TicketsSection({ onSwitchToSales }) {
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => handleDeleteTicket(ticket.id)}
+                    onClick={() => handleDeleteTicket(ticket)}
                   >
                     <Trash2 className="h-4 w-4 text-red-600" />
                   </Button>
@@ -215,6 +231,45 @@ export default function TicketsSection({ onSwitchToSales }) {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({ open: false, ticket: null, loading: false });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Ticket</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete ticket{" "}
+              {deleteModal.ticket?.ticketNumber ? `"${deleteModal.ticket.ticketNumber}"` : ""}?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({ open: false, ticket: null, loading: false })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteTicketConfirm}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

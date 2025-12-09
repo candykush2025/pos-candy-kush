@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -26,6 +27,8 @@ import {
   X,
   ChevronDown,
   Check,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { productsService, categoriesService } from "@/lib/firebase/firestore";
 import { discountsService } from "@/lib/firebase/discountsService";
@@ -75,6 +78,14 @@ export default function ProductsSection({ cashier }) {
   // Form submission loading states
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   const [isSubmittingDiscount, setIsSubmittingDiscount] = useState(false);
+
+  // Delete confirmation modal states
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    type: null, // 'product', 'discount', 'category'
+    item: null,
+    loading: false,
+  });
 
   useEffect(() => {
     loadData();
@@ -241,15 +252,27 @@ export default function ProductsSection({ cashier }) {
     setIsDiscountModalOpen(true);
   };
 
-  const handleDeleteDiscount = async (id) => {
-    if (!confirm("Are you sure you want to delete this discount?")) return;
+  const handleDeleteDiscount = async (discount) => {
+    setDeleteModal({
+      open: true,
+      type: "discount",
+      item: discount,
+      loading: false,
+    });
+  };
+
+  const handleDeleteDiscountConfirm = async () => {
+    if (!deleteModal.item) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
-      await discountsService.delete(id);
+      await discountsService.delete(deleteModal.item.id);
       toast.success("Discount deleted");
+      setDeleteModal({ open: false, type: null, item: null, loading: false });
       loadData();
     } catch (error) {
       console.error("Error deleting discount:", error);
       toast.error("Failed to delete discount");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -335,19 +358,31 @@ export default function ProductsSection({ cashier }) {
     router.push(`/sales/products/new?edit=${product.id}`);
   };
 
-  const handleDeleteProduct = async (id) => {
+  const handleDeleteProduct = async (product) => {
     if (!canDeleteProduct(user)) {
       toast.error("You don't have permission to delete products");
       return;
     }
-    if (!confirm("Are you sure you want to delete this product?")) return;
+    setDeleteModal({
+      open: true,
+      type: "product",
+      item: product,
+      loading: false,
+    });
+  };
+
+  const handleDeleteProductConfirm = async () => {
+    if (!deleteModal.item) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
-      await productsService.delete(id);
+      await productsService.delete(deleteModal.item.id);
       toast.success("Product deleted");
+      setDeleteModal({ open: false, type: null, item: null, loading: false });
       loadData();
     } catch (error) {
       console.error("Error deleting product:", error);
       toast.error("Failed to delete product");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -364,15 +399,27 @@ export default function ProductsSection({ cashier }) {
     setIsCategoryModalOpen(true);
   };
 
-  const handleDeleteCategory = async (id) => {
-    if (!confirm("Are you sure you want to delete this category?")) return;
+  const handleDeleteCategory = async (category) => {
+    setDeleteModal({
+      open: true,
+      type: "category",
+      item: category,
+      loading: false,
+    });
+  };
+
+  const handleDeleteCategoryConfirm = async () => {
+    if (!deleteModal.item) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
-      await categoriesService.delete(id);
+      await categoriesService.delete(deleteModal.item.id);
       toast.success("Category deleted");
+      setDeleteModal({ open: false, type: null, item: null, loading: false });
       loadData();
     } catch (error) {
       console.error("Error deleting category:", error);
       toast.error("Failed to delete category");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -718,7 +765,7 @@ export default function ProductsSection({ cashier }) {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleDeleteCategory(category.id)}
+                              onClick={() => handleDeleteCategory(category)}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -836,9 +883,7 @@ export default function ProductsSection({ cashier }) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() =>
-                                  handleDeleteDiscount(discount.id)
-                                }
+                                onClick={() => handleDeleteDiscount(discount)}
                               >
                                 <Trash2 className="h-4 w-4 text-red-600" />
                               </Button>
@@ -1081,6 +1126,63 @@ export default function ProductsSection({ cashier }) {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({
+              open: false,
+              type: null,
+              item: null,
+              loading: false,
+            });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this {deleteModal.type}
+              {deleteModal.item?.name ? ` "${deleteModal.item.name}"` : ""}?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({
+                  open: false,
+                  type: null,
+                  item: null,
+                  loading: false,
+                })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteModal.type === "product") {
+                  handleDeleteProductConfirm();
+                } else if (deleteModal.type === "discount") {
+                  handleDeleteDiscountConfirm();
+                } else if (deleteModal.type === "category") {
+                  handleDeleteCategoryConfirm();
+                }
+              }}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

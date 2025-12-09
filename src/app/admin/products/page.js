@@ -10,6 +10,7 @@ import {
   DialogTrigger,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -53,6 +54,14 @@ function ItemListTab() {
     color: "#3b82f6",
     discountType: "percentage",
     discountValue: "",
+  });
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    type: null, // 'product' or 'category'
+    item: null,
+    loading: false,
   });
 
   useEffect(() => {
@@ -252,16 +261,28 @@ function ItemListTab() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Are you sure you want to delete this product?")) return;
+  const handleDelete = (product) => {
+    setDeleteModal({
+      open: true,
+      type: "product",
+      item: product,
+      loading: false,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.item) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
-      await productsService.delete(id);
+      await productsService.delete(deleteModal.item.id);
       toast.success("Product deleted successfully");
+      setDeleteModal({ open: false, type: null, item: null, loading: false });
       loadProducts();
     } catch (error) {
       console.error("Error deleting product:", error);
       toast.error("Failed to delete product");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -555,7 +576,7 @@ function ItemListTab() {
                       <Button
                         variant="outline"
                         size="icon"
-                        onClick={() => handleDelete(product.id)}
+                        onClick={() => handleDelete(product)}
                       >
                         <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
@@ -567,6 +588,43 @@ function ItemListTab() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({ open: false, type: null, item: null, loading: false });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Product</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteModal.item?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({ open: false, type: null, item: null, loading: false })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -582,6 +640,13 @@ function CategoriesTab() {
   const [formData, setFormData] = useState({
     name: "",
     color: "#3b82f6",
+  });
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    item: null,
+    loading: false,
   });
 
   useEffect(() => {
@@ -634,8 +699,19 @@ function CategoriesTab() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (category) => {
-    if (!confirm(`Delete category "${category.name}"?`)) return;
+  const handleDelete = (category) => {
+    setDeleteModal({
+      open: true,
+      type: "category",
+      item: category,
+      loading: false,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.item) return;
+    const category = deleteModal.item;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
 
     try {
       // Check if category has products
@@ -646,15 +722,18 @@ function CategoriesTab() {
         toast.error(
           "Cannot delete category with products. Remove products first."
         );
+        setDeleteModal((prev) => ({ ...prev, loading: false }));
         return;
       }
 
       await dbService.deleteCategory(category.id);
       toast.success("Category deleted successfully");
+      setDeleteModal({ open: false, type: null, item: null, loading: false });
       loadCategories();
     } catch (error) {
       console.error("Error deleting category:", error);
       toast.error("Failed to delete category");
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -863,6 +942,43 @@ function CategoriesTab() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog
+        open={deleteModal.open}
+        onOpenChange={(open) => {
+          if (!open && !deleteModal.loading) {
+            setDeleteModal({ open: false, item: null, loading: false });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Category</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteModal.item?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteModal({ open: false, item: null, loading: false })
+              }
+              disabled={deleteModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleteModal.loading}
+            >
+              {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
