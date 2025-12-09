@@ -146,9 +146,15 @@ export const shiftsService = {
 
     // Update payment method totals
     if (transaction.paymentMethod === "cash") {
-      updateData.totalCashSales = shift.totalCashSales + transaction.total;
+      const newTotalCashSales = (shift.totalCashSales || 0) + transaction.total;
+      updateData.totalCashSales = newTotalCashSales;
+      // Expected cash = starting + cash sales - cash refunds + paid in - paid out
       updateData.expectedCash =
-        shift.startingCash + (shift.totalCashSales || 0) + transaction.total;
+        (shift.startingCash || 0) +
+        newTotalCashSales -
+        (shift.totalCashRefunds || 0) +
+        (shift.totalPaidIn || 0) -
+        (shift.totalPaidOut || 0);
     } else if (transaction.paymentMethod === "card") {
       updateData.totalCardSales = shift.totalCardSales + transaction.total;
     } else {
