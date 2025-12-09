@@ -283,7 +283,12 @@ export default function CategoriesPage() {
       }
 
       toast.success("Category deleted successfully");
-      setDeleteModal({ open: false, type: null, category: null, loading: false });
+      setDeleteModal({
+        open: false,
+        type: null,
+        category: null,
+        loading: false,
+      });
       await loadCategories();
     } catch (error) {
       console.error("Error deleting category:", error);
@@ -593,7 +598,9 @@ export default function CategoriesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {deleteModal.type === "bulk" ? "Delete Categories" : "Delete Category"}
+              {deleteModal.type === "bulk"
+                ? "Delete Categories"
+                : "Delete Category"}
             </DialogTitle>
             <DialogDescription>
               {deleteModal.type === "bulk"

@@ -594,7 +594,12 @@ function ItemListTab() {
         open={deleteModal.open}
         onOpenChange={(open) => {
           if (!open && !deleteModal.loading) {
-            setDeleteModal({ open: false, type: null, item: null, loading: false });
+            setDeleteModal({
+              open: false,
+              type: null,
+              item: null,
+              loading: false,
+            });
           }
         }}
       >
@@ -602,14 +607,20 @@ function ItemListTab() {
           <DialogHeader>
             <DialogTitle>Delete Product</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteModal.item?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{deleteModal.item?.name}"? This
+              action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
               variant="outline"
               onClick={() =>
-                setDeleteModal({ open: false, type: null, item: null, loading: false })
+                setDeleteModal({
+                  open: false,
+                  type: null,
+                  item: null,
+                  loading: false,
+                })
               }
               disabled={deleteModal.loading}
             >
@@ -958,7 +969,8 @@ function CategoriesTab() {
           <DialogHeader>
             <DialogTitle>Delete Category</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteModal.item?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{deleteModal.item?.name}"? This
+              action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">

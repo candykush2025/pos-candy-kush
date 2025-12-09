@@ -408,8 +408,12 @@ export default function PurchaseOrdersSection() {
           <DialogHeader>
             <DialogTitle>Receive Purchase Order</DialogTitle>
             <DialogDescription>
-              Mark this purchase order{receiveModal.po?.supplier ? ` from "${receiveModal.po.supplier}"` : ""} as received and update stock? 
-              This will add {receiveModal.po?.totalQuantity || 0} item(s) to inventory.
+              Mark this purchase order
+              {receiveModal.po?.supplier
+                ? ` from "${receiveModal.po.supplier}"`
+                : ""}{" "}
+              as received and update stock? This will add{" "}
+              {receiveModal.po?.totalQuantity || 0} item(s) to inventory.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">

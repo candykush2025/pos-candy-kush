@@ -1381,7 +1381,19 @@ export default function SalesSection({ cashier }) {
     }
 
     // Check if product is sold by weight
-    if (product.soldBy === "weight") {
+    // Support both soldBy === "weight" and soldByWeight === true (different field naming)
+    const isSoldByWeight =
+      product.soldBy === "weight" || product.soldByWeight === true;
+
+    console.log("🛒 Product click debug:", {
+      productName: product.name,
+      productId: product.id,
+      soldBy: product.soldBy,
+      soldByWeight: product.soldByWeight,
+      isSoldByWeight: isSoldByWeight,
+    });
+
+    if (isSoldByWeight) {
       setSelectedWeightProduct(product);
       setWeightInput("");
       setShowWeightModal(true);

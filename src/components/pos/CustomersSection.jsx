@@ -2048,7 +2048,12 @@ export default function CustomersSection({ cashier }) {
       }
 
       toast.success("Customer deleted successfully");
-      setDeleteModal({ open: false, type: null, customer: null, loading: false });
+      setDeleteModal({
+        open: false,
+        type: null,
+        customer: null,
+        loading: false,
+      });
       loadCustomers();
     } catch (error) {
       console.error("Error deleting customer:", error);
@@ -2091,7 +2096,12 @@ export default function CustomersSection({ cashier }) {
 
       toast.success(`${selectedIds.length} customer(s) deleted successfully`);
       setSelectedIds([]);
-      setDeleteModal({ open: false, type: null, customer: null, loading: false });
+      setDeleteModal({
+        open: false,
+        type: null,
+        customer: null,
+        loading: false,
+      });
       loadCustomers();
     } catch (error) {
       console.error("Error deleting customers:", error);
@@ -3117,7 +3127,9 @@ export default function CustomersSection({ cashier }) {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {deleteModal.type === "bulk" ? "Delete Customers" : "Delete Customer"}
+                {deleteModal.type === "bulk"
+                  ? "Delete Customers"
+                  : "Delete Customer"}
               </DialogTitle>
               <DialogDescription>
                 {deleteModal.type === "bulk"

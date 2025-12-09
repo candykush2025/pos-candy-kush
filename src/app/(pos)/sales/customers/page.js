@@ -1180,7 +1180,8 @@ export default function CashierCustomersPage() {
           <DialogHeader>
             <DialogTitle>Delete Customer</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteModal.customer?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{deleteModal.customer?.name}"?
+              This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">

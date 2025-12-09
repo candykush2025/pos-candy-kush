@@ -2585,7 +2585,12 @@ export default function ItemListPage() {
         open={deleteModal.open}
         onOpenChange={(open) => {
           if (!open && !deleteModal.loading) {
-            setDeleteModal({ open: false, type: null, item: null, loading: false });
+            setDeleteModal({
+              open: false,
+              type: null,
+              item: null,
+              loading: false,
+            });
           }
         }}
       >
@@ -2615,14 +2620,25 @@ export default function ItemListPage() {
             <Button
               variant="outline"
               onClick={() =>
-                setDeleteModal({ open: false, type: null, item: null, loading: false })
+                setDeleteModal({
+                  open: false,
+                  type: null,
+                  item: null,
+                  loading: false,
+                })
               }
               disabled={deleteModal.loading}
             >
               Cancel
             </Button>
             <Button
-              variant={deleteModal.type === "bulk" || deleteModal.type === "single" || deleteModal.type === "clear-indexeddb" ? "destructive" : "default"}
+              variant={
+                deleteModal.type === "bulk" ||
+                deleteModal.type === "single" ||
+                deleteModal.type === "clear-indexeddb"
+                  ? "destructive"
+                  : "default"
+              }
               onClick={() => {
                 if (deleteModal.type === "bulk") {
                   handleBulkDeleteConfirm();

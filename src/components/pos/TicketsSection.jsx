@@ -248,8 +248,10 @@ export default function TicketsSection({ onSwitchToSales }) {
             <DialogTitle>Delete Ticket</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete ticket{" "}
-              {deleteModal.ticket?.ticketNumber ? `"${deleteModal.ticket.ticketNumber}"` : ""}?
-              This action cannot be undone.
+              {deleteModal.ticket?.ticketNumber
+                ? `"${deleteModal.ticket.ticketNumber}"`
+                : ""}
+              ? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
