@@ -392,6 +392,46 @@ export const shiftsService = {
           : 0,
     };
   },
+
+  // Recalculate expected cash and variance for a completed shift
+  async recalculateShift(shiftId) {
+    const docRef = doc(db, COLLECTION_NAME, shiftId);
+    const shiftSnap = await getDoc(docRef);
+
+    if (!shiftSnap.exists()) {
+      throw new Error("Shift not found");
+    }
+
+    const shift = shiftSnap.data();
+
+    // Calculate expected cash using correct formula:
+    // Expected Cash = Starting Cash + Cash Sales - Cash Refunds + Paid In - Paid Out
+    const expectedCash =
+      (shift.startingCash || 0) +
+      (shift.totalCashSales || 0) -
+      (shift.totalCashRefunds || 0) +
+      (shift.totalPaidIn || 0) -
+      (shift.totalPaidOut || 0);
+
+    // Calculate variance (actual - expected)
+    const actualCash = shift.actualCash || shift.endingCash || 0;
+    const variance = actualCash - expectedCash;
+
+    const updateData = {
+      expectedCash,
+      variance,
+      updatedAt: Timestamp.now(),
+      recalculatedAt: Timestamp.now(),
+    };
+
+    await updateDoc(docRef, updateData);
+
+    return {
+      id: shiftId,
+      ...shift,
+      ...updateData,
+    };
+  },
 };
 
 export default shiftsService;

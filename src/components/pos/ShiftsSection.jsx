@@ -29,6 +29,7 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Loader2,
+  Calculator,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ export default function ShiftsSection({ cashier }) {
   const [startingShift, setStartingShift] = useState(false);
   const [closingShiftLoading, setClosingShiftLoading] = useState(false);
   const [cashManagementLoading, setCashManagementLoading] = useState(false);
+  const [recalculatingShiftId, setRecalculatingShiftId] = useState(null);
 
   useEffect(() => {
     if (cashier?.id) {
@@ -223,6 +225,26 @@ export default function ShiftsSection({ cashier }) {
       toast.error("Failed to record cash movement");
     } finally {
       setCashManagementLoading(false);
+    }
+  };
+
+  // Recalculate shift expected cash and variance
+  const handleRecalculateShift = async (shiftId) => {
+    try {
+      setRecalculatingShiftId(shiftId);
+      const updatedShift = await shiftsService.recalculateShift(shiftId);
+
+      // Update the shifts list
+      setShifts((prevShifts) =>
+        prevShifts.map((s) => (s.id === updatedShift.id ? updatedShift : s))
+      );
+
+      toast.success("Shift recalculated successfully");
+    } catch (error) {
+      console.error("Error recalculating shift:", error);
+      toast.error("Failed to recalculate shift");
+    } finally {
+      setRecalculatingShiftId(null);
     }
   };
 
@@ -670,6 +692,42 @@ export default function ShiftsSection({ cashier }) {
                                   )}
                                 </p>
                               </div>
+                            </div>
+
+                            {/* Recalculate Button */}
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRecalculateShift(shift.id)}
+                                disabled={recalculatingShiftId === shift.id}
+                                className="w-full"
+                              >
+                                {recalculatingShiftId === shift.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Calculator className="h-4 w-4 mr-2" />
+                                )}
+                                {recalculatingShiftId === shift.id
+                                  ? "Recalculating..."
+                                  : "Recalculate Expected Cash & Variance"}
+                              </Button>
+                              {shift.recalculatedAt && (
+                                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                                  Last recalculated:{" "}
+                                  {new Date(
+                                    shift.recalculatedAt?.toDate?.()
+                                      ? shift.recalculatedAt.toDate()
+                                      : shift.recalculatedAt
+                                  ).toLocaleString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </p>
+                              )}
                             </div>
                           </>
                         )}

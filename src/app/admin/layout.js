@@ -26,6 +26,11 @@ import {
   X,
   Clock,
   ClipboardList,
+  TrendingUp,
+  Receipt,
+  Percent,
+  CreditCard,
+  FileText,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -67,6 +72,9 @@ export default function AdminLayout({ children }) {
     }
     if (pathname.startsWith("/admin/stock")) {
       setExpandedMenus((prev) => ({ ...prev, Stock: true }));
+    }
+    if (pathname.startsWith("/admin/reports")) {
+      setExpandedMenus((prev) => ({ ...prev, Sales: true }));
     }
   }, [pathname]);
 
@@ -165,6 +173,40 @@ export default function AdminLayout({ children }) {
   const desktopNavigation = [
     { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
     {
+      name: "Sales",
+      icon: TrendingUp,
+      subItems: [
+        {
+          name: "Sales Summary",
+          href: "/admin/reports/sales-summary",
+          icon: BarChart3,
+        },
+        {
+          name: "Sales by Item",
+          href: "/admin/reports/sales-by-item",
+          icon: Package,
+        },
+        {
+          name: "Sales by Category",
+          href: "/admin/reports/sales-by-category",
+          icon: FolderTree,
+        },
+        {
+          name: "Sales by Employee",
+          href: "/admin/reports/sales-by-employee",
+          icon: Users,
+        },
+        {
+          name: "Sales by Payment",
+          href: "/admin/reports/sales-by-payment",
+          icon: CreditCard,
+        },
+        { name: "Receipts", href: "/admin/reports/receipts", icon: Receipt },
+        { name: "Discounts", href: "/admin/reports/discounts", icon: Percent },
+        { name: "Shifts", href: "/admin/reports/shifts", icon: Clock },
+      ],
+    },
+    {
       name: "Products",
       icon: Package,
       subItems: [
@@ -197,7 +239,6 @@ export default function AdminLayout({ children }) {
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Customers", href: "/admin/customers", icon: UserCircle },
     { name: "Users", href: "/admin/users", icon: Users },
-    { name: "Shifts", href: "/admin/shifts", icon: Clock },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { name: "Integration", href: "/admin/integration", icon: Link2 },
     { name: "Settings", href: "/admin/settings", icon: Settings },
