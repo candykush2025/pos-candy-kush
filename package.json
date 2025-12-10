@@ -6,7 +6,11 @@
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest --config test/jest.config.js",
+    "test:unit": "jest --config test/jest.config.js test/mobile-api.test.js",
+    "test:integration": "node test/run-integration-tests.js",
+    "test:all": "npm run test:unit && npm run test:integration"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -47,6 +51,9 @@
     "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "^16.0.7",
+    "express": "^5.2.1",
+    "jest": "^30.2.0",
+    "supertest": "^7.1.4",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.4.0"
   }
