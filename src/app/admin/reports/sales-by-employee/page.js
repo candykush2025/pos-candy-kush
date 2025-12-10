@@ -1,22 +1,32 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { subDays, format, startOfDay, endOfDay } from "date-fns";
+import { Button } from "@/components/ui/button";
 
 import {
   DateRangePicker,
   ReportDataTable,
   EmployeeFilter,
 } from "@/components/reports";
-import { receiptsService } from "@/lib/firebase/firestore";
+import { useReceipts } from "@/hooks/useReportData";
 import { getDocuments } from "@/lib/firebase/firestore";
 
 export default function SalesByEmployeePage() {
-  const [loading, setLoading] = useState(true);
-  const [receipts, setReceipts] = useState([]);
+  // Use optimized hook for receipts
+  const {
+    data: receipts = [],
+    isLoading: receiptsLoading,
+    isFetching,
+    refetch,
+  } = useReceipts();
   const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+
+  const loading = receiptsLoading || usersLoading;
+
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -28,25 +38,21 @@ export default function SalesByEmployeePage() {
     isAllDay: true,
   });
 
-  // Load data
+  // Load users data (not cached yet)
   useEffect(() => {
-    loadData();
+    loadUsers();
   }, []);
 
-  const loadData = async () => {
+  const loadUsers = async () => {
     try {
-      setLoading(true);
-      const [receiptsData, usersData] = await Promise.all([
-        receiptsService.getAll({ orderBy: ["createdAt", "desc"] }),
-        getDocuments("users"),
-      ]);
-      setReceipts(receiptsData || []);
+      setUsersLoading(true);
+      const usersData = await getDocuments("users");
       setUsers(usersData || []);
     } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("Failed to load sales data");
+      console.error("Error loading users:", error);
+      toast.error("Failed to load users data");
     } finally {
-      setLoading(false);
+      setUsersLoading(false);
     }
   };
 

@@ -331,6 +331,55 @@ export const receiptsService = {
   subscribe: (callback, options) =>
     subscribeToCollection(COLLECTIONS.RECEIPTS, callback, options),
 
+  // Optimized: Get receipts within date range
+  getByDateRange: async (startDate, endDate, options = {}) => {
+    try {
+      let q = collection(db, COLLECTIONS.RECEIPTS);
+
+      // Add date range filter
+      // Note: Firestore can use >= and <= on the same field
+      if (startDate) {
+        q = query(q, where("createdAt", ">=", startDate));
+      }
+      if (endDate) {
+        q = query(q, where("createdAt", "<=", endDate));
+      }
+
+      // Add additional filters
+      if (options.where) {
+        q = query(q, where(...options.where));
+      }
+
+      // Add ordering (createdAt is already indexed if used in where clause)
+      if (options.orderBy) {
+        q = query(q, orderBy(...options.orderBy));
+      } else {
+        q = query(q, orderBy("createdAt", "desc"));
+      }
+
+      // Add limit
+      if (options.limit) {
+        q = query(q, limit(options.limit));
+      }
+
+      const querySnapshot = await getDocsFromServer(q);
+      const results = querySnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+          _firestoreId: doc.id,
+          _dataId: data.id,
+        };
+      });
+
+      return results;
+    } catch (error) {
+      console.error("Error getting receipts by date range:", error);
+      throw error;
+    }
+  },
+
   // Edit requests for admin approval
   createEditRequest: (data) => createDocument("receipt_edit_requests", data),
   getEditRequests: (options) => getDocuments("receipt_edit_requests", options),

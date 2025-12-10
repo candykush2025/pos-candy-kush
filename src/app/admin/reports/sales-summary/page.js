@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,7 @@ import {
   ChevronDown,
   BarChart2,
   LineChart as LineChartIcon,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -36,7 +37,7 @@ import {
   ReportDataTable,
   EmployeeFilter,
 } from "@/components/reports";
-import { receiptsService } from "@/lib/firebase/firestore";
+import { useReceipts } from "@/hooks/useReportData";
 
 const GROUP_BY_OPTIONS = [
   { label: "Day", value: "day" },
@@ -50,8 +51,14 @@ const CHART_TYPE_OPTIONS = [
 ];
 
 export default function SalesSummaryPage() {
-  const [loading, setLoading] = useState(true);
-  const [receipts, setReceipts] = useState([]);
+  // Use optimized hook with caching
+  const {
+    data: receipts = [],
+    isLoading: loading,
+    isFetching,
+    refetch,
+  } = useReceipts();
+
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -65,26 +72,6 @@ export default function SalesSummaryPage() {
     toHour: "23:59",
     isAllDay: true,
   });
-
-  // Load receipts data
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const data = await receiptsService.getAll({
-        orderBy: ["createdAt", "desc"],
-      });
-      setReceipts(data || []);
-    } catch (error) {
-      console.error("Error loading receipts:", error);
-      toast.error("Failed to load sales data");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Helper to get receipt date
   const getReceiptDate = (receipt) => {
@@ -496,8 +483,28 @@ export default function SalesSummaryPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Sales Summary
+          {isFetching && !loading && (
+            <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+              <Loader2 className="h-4 w-4 inline animate-spin" /> Updating...
+            </span>
+          )}
         </h1>
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetch();
+              toast.success("Data refreshed");
+            }}
+            disabled={isFetching}
+            className="gap-2"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
           <EmployeeFilter
             selectedEmployees={selectedEmployees}
             onEmployeesChange={setSelectedEmployees}

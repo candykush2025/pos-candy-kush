@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   subDays,
@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 import {
   DateRangePicker,
@@ -32,12 +33,18 @@ import {
   ReportDataTable,
   EmployeeFilter,
 } from "@/components/reports";
-import { receiptsService, productsService } from "@/lib/firebase/firestore";
+import { useReportData } from "@/hooks/useReportData";
 
 export default function SalesByItemPage() {
-  const [loading, setLoading] = useState(true);
-  const [receipts, setReceipts] = useState([]);
-  const [products, setProducts] = useState([]);
+  // Use optimized hooks with caching
+  const {
+    receipts,
+    products,
+    isLoading: loading,
+    isFetching,
+    refetch,
+  } = useReportData();
+
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -50,28 +57,6 @@ export default function SalesByItemPage() {
   });
   const [chartType, setChartType] = useState("bar"); // bar, line, pie
   const [groupBy, setGroupBy] = useState("day"); // hour, day, week, month, quarter, year
-
-  // Load data
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [receiptsData, productsData] = await Promise.all([
-        receiptsService.getAll({ orderBy: ["createdAt", "desc"] }),
-        productsService.getAll(),
-      ]);
-      setReceipts(receiptsData || []);
-      setProducts(productsData || []);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("Failed to load sales data");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Helper to get receipt date
   const getReceiptDate = (receipt) => {
@@ -689,8 +674,28 @@ export default function SalesByItemPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Sales by Item
+          {isFetching && !loading && (
+            <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+              <Loader2 className="h-4 w-4 inline animate-spin" /> Updating...
+            </span>
+          )}
         </h1>
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetch();
+              toast.success("Data refreshed");
+            }}
+            disabled={isFetching}
+            className="gap-2"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
           <EmployeeFilter
             selectedEmployees={selectedEmployees}
             onEmployeesChange={setSelectedEmployees}

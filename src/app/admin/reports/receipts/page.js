@@ -25,17 +25,28 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { DateRangePicker, EmployeeFilter } from "@/components/reports";
-import { receiptsService } from "@/lib/firebase/firestore";
+import { useReceipts } from "@/hooks/useReportData";
 import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
 import { db } from "@/lib/firebase/config";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 
 export default function ReceiptsReportPage() {
-  const [receipts, setReceipts] = useState([]);
+  // Use optimized hook for receipts
+  const {
+    data: receipts = [],
+    isLoading: receiptsLoading,
+    isFetching,
+    refetch,
+  } = useReceipts();
+
   const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [employeesLoading, setEmployeesLoading] = useState(true);
+
+  const loading = receiptsLoading || employeesLoading;
+
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -55,18 +66,12 @@ export default function ReceiptsReportPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
-    fetchData();
+    fetchEmployees();
   }, []); // Only fetch once on mount
 
-  const fetchData = async () => {
+  const fetchEmployees = async () => {
     try {
-      setLoading(true);
-
-      // Fetch receipts
-      const allReceipts = await receiptsService.getAll();
-      console.log("🔥 Total receipts from DB:", allReceipts.length);
-
-      // Fetch employees
+      setEmployeesLoading(true);
       const usersRef = collection(db, "users");
       const usersSnapshot = await getDocs(usersRef);
       const usersData = usersSnapshot.docs.map((doc) => ({
@@ -76,77 +81,72 @@ export default function ReceiptsReportPage() {
       setEmployees(
         usersData.filter((u) => u.role === "cashier" || u.role === "admin")
       );
-
-      // Sort by date descending - DON'T filter by date here, do it in useMemo
-      const sortedReceipts = [...allReceipts].sort((a, b) => {
-        let dateA, dateB;
-
-        // Handle multiple date field variations for receipt A
-        if (a.receiptDate?.toDate) {
-          dateA = a.receiptDate.toDate().getTime();
-        } else if (a.receiptDate) {
-          dateA = new Date(a.receiptDate).getTime();
-        } else if (a.created_at?.toDate) {
-          dateA = a.created_at.toDate().getTime();
-        } else if (a.created_at) {
-          dateA = new Date(a.created_at).getTime();
-        } else if (a.createdAt?.toDate) {
-          dateA = a.createdAt.toDate().getTime();
-        } else if (a.createdAt) {
-          dateA = new Date(a.createdAt).getTime();
-        } else if (a.date) {
-          dateA = new Date(a.date).getTime();
-        } else {
-          dateA = 0;
-        }
-
-        // Handle multiple date field variations for receipt B
-        if (b.receiptDate?.toDate) {
-          dateB = b.receiptDate.toDate().getTime();
-        } else if (b.receiptDate) {
-          dateB = new Date(b.receiptDate).getTime();
-        } else if (b.created_at?.toDate) {
-          dateB = b.created_at.toDate().getTime();
-        } else if (b.created_at) {
-          dateB = new Date(b.created_at).getTime();
-        } else if (b.createdAt?.toDate) {
-          dateB = b.createdAt.toDate().getTime();
-        } else if (b.createdAt) {
-          dateB = new Date(b.createdAt).getTime();
-        } else if (b.date) {
-          dateB = new Date(b.date).getTime();
-        } else {
-          dateB = 0;
-        }
-
-        return dateB - dateA;
-      });
-
-      setReceipts(sortedReceipts);
-      console.log("📝 Set receipts state:", sortedReceipts.length);
-      console.log("📅 Date range:", { from: dateRange.from, to: dateRange.to });
-      if (sortedReceipts.length > 0) {
-        console.log("First receipt sample:", sortedReceipts[0]);
-      }
     } catch (error) {
-      console.error("Error fetching receipts:", error);
-      toast.error("Failed to load receipts data");
+      console.error("Error fetching employees:", error);
+      toast.error("Failed to load employees");
     } finally {
-      setLoading(false);
+      setEmployeesLoading(false);
     }
   };
+
+  // Sort receipts by date descending (receipts already come sorted from cache/hook)
+  const sortedReceipts = useMemo(() => {
+    return [...receipts].sort((a, b) => {
+      let dateA, dateB;
+
+      // Handle multiple date field variations for receipt A
+      if (a.receiptDate?.toDate) {
+        dateA = a.receiptDate.toDate().getTime();
+      } else if (a.receiptDate) {
+        dateA = new Date(a.receiptDate).getTime();
+      } else if (a.created_at?.toDate) {
+        dateA = a.created_at.toDate().getTime();
+      } else if (a.created_at) {
+        dateA = new Date(a.created_at).getTime();
+      } else if (a.createdAt?.toDate) {
+        dateA = a.createdAt.toDate().getTime();
+      } else if (a.createdAt) {
+        dateA = new Date(a.createdAt).getTime();
+      } else if (a.date) {
+        dateA = new Date(a.date).getTime();
+      } else {
+        dateA = 0;
+      }
+
+      // Handle multiple date field variations for receipt B
+      if (b.receiptDate?.toDate) {
+        dateB = b.receiptDate.toDate().getTime();
+      } else if (b.receiptDate) {
+        dateB = new Date(b.receiptDate).getTime();
+      } else if (b.created_at?.toDate) {
+        dateB = b.created_at.toDate().getTime();
+      } else if (b.created_at) {
+        dateB = new Date(b.created_at).getTime();
+      } else if (b.createdAt?.toDate) {
+        dateB = b.createdAt.toDate().getTime();
+      } else if (b.createdAt) {
+        dateB = new Date(b.createdAt).getTime();
+      } else if (b.date) {
+        dateB = new Date(b.date).getTime();
+      } else {
+        dateB = 0;
+      }
+
+      return dateB - dateA;
+    });
+  }, [receipts]);
 
   // Apply filters
   const filteredReceipts = useMemo(() => {
     console.log("🔍 Filtering receipts:", {
-      totalReceipts: receipts.length,
+      totalReceipts: sortedReceipts.length,
       selectedStatus,
       searchTerm,
       selectedEmployees: selectedEmployees.length,
       dateRange,
     });
 
-    const filtered = receipts.filter((receipt) => {
+    const filtered = sortedReceipts.filter((receipt) => {
       // Date range filter - handle multiple date field variations
       let receiptDate;
       if (receipt.receiptDate?.toDate) {
@@ -254,7 +254,7 @@ export default function ReceiptsReportPage() {
     console.log("✅ Filtered results:", filtered.length);
     return filtered;
   }, [
-    receipts,
+    sortedReceipts,
     searchTerm,
     selectedEmployees,
     selectedPaymentType,
@@ -444,8 +444,28 @@ export default function ReceiptsReportPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Receipts
+            {isFetching && !loading && (
+              <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                <Loader2 className="h-4 w-4 inline animate-spin" /> Updating...
+              </span>
+            )}
           </h1>
           <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                refetch();
+                toast.success("Data refreshed");
+              }}
+              disabled={isFetching}
+              className="gap-2"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </Button>
             <EmployeeFilter
               selectedEmployees={selectedEmployees}
               onEmployeeChange={setSelectedEmployees}

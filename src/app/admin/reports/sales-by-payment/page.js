@@ -1,20 +1,27 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { subDays, format, startOfDay, endOfDay } from "date-fns";
+import { Button } from "@/components/ui/button";
 
 import {
   DateRangePicker,
   ReportDataTable,
   EmployeeFilter,
 } from "@/components/reports";
-import { receiptsService } from "@/lib/firebase/firestore";
+import { useReceipts } from "@/hooks/useReportData";
 
 export default function SalesByPaymentPage() {
-  const [loading, setLoading] = useState(true);
-  const [receipts, setReceipts] = useState([]);
+  // Use optimized hook with caching
+  const {
+    data: receipts = [],
+    isLoading: loading,
+    isFetching,
+    refetch,
+  } = useReceipts();
+
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -25,26 +32,6 @@ export default function SalesByPaymentPage() {
     toHour: "23:59",
     isAllDay: true,
   });
-
-  // Load data
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const data = await receiptsService.getAll({
-        orderBy: ["createdAt", "desc"],
-      });
-      setReceipts(data || []);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("Failed to load sales data");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Helper to get receipt date
   const getReceiptDate = (receipt) => {

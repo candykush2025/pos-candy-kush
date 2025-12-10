@@ -2,21 +2,32 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DateRangePicker,
   ReportDataTable,
   EmployeeFilter,
 } from "@/components/reports";
-import { receiptsService } from "@/lib/firebase/firestore";
+import { useReceipts } from "@/hooks/useReportData";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { db } from "@/lib/firebase/config";
 import { collection, getDocs } from "firebase/firestore";
 
 export default function DiscountsReportPage() {
-  const [receipts, setReceipts] = useState([]);
+  // Use optimized hook for receipts
+  const {
+    data: receipts = [],
+    isLoading: receiptsLoading,
+    isFetching,
+    refetch,
+  } = useReceipts();
+
   const [discounts, setDiscounts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [discountsLoading, setDiscountsLoading] = useState(true);
+
+  const loading = receiptsLoading || discountsLoading;
+
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -29,17 +40,12 @@ export default function DiscountsReportPage() {
   });
 
   useEffect(() => {
-    fetchData();
+    fetchDiscounts();
   }, []);
 
-  const fetchData = async () => {
+  const fetchDiscounts = async () => {
     try {
-      setLoading(true);
-
-      // Fetch all receipts
-      const allReceipts = await receiptsService.getAll();
-      setReceipts(allReceipts || []);
-
+      setDiscountsLoading(true);
       // Fetch all discounts from discounts collection
       const discountsRef = collection(db, "discounts");
       const discountsSnapshot = await getDocs(discountsRef);
@@ -52,7 +58,7 @@ export default function DiscountsReportPage() {
       console.error("Error fetching discounts:", error);
       toast.error("Failed to load discount data");
     } finally {
-      setLoading(false);
+      setDiscountsLoading(false);
     }
   };
 

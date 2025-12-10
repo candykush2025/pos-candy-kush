@@ -1,22 +1,25 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { subDays, format, startOfDay, endOfDay } from "date-fns";
+import { Button } from "@/components/ui/button";
 
 import { DateRangePicker, EmployeeFilter } from "@/components/reports";
-import {
-  receiptsService,
-  categoriesService,
-  productsService,
-} from "@/lib/firebase/firestore";
+import { useReportData } from "@/hooks/useReportData";
 
 export default function SalesByCategoryPage() {
-  const [loading, setLoading] = useState(true);
-  const [receipts, setReceipts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [products, setProducts] = useState([]);
+  // Use optimized hooks with caching
+  const {
+    receipts,
+    categories,
+    products,
+    isLoading: loading,
+    isFetching,
+    refetch,
+  } = useReportData();
+
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -27,30 +30,6 @@ export default function SalesByCategoryPage() {
     toHour: "23:59",
     isAllDay: true,
   });
-
-  // Load data
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [receiptsData, categoriesData, productsData] = await Promise.all([
-        receiptsService.getAll({ orderBy: ["createdAt", "desc"] }),
-        categoriesService.getAll(),
-        productsService.getAll(),
-      ]);
-      setReceipts(receiptsData || []);
-      setCategories(categoriesData || []);
-      setProducts(productsData || []);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("Failed to load sales data");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Create product to category mapping
   const productCategoryMap = useMemo(() => {
