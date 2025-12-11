@@ -3,12 +3,14 @@
  * Comprehensive API for Android/iOS mobile apps
  *
  * Endpoints:
+ * - POST /api/mobile?action=login - User authentication (returns JWT)
  * - GET /api/mobile?action=sales-summary - Sales summary with metrics
  * - GET /api/mobile?action=sales-by-item - Sales breakdown by item/product
  * - GET /api/mobile?action=sales-by-category - Sales breakdown by category
  * - GET /api/mobile?action=sales-by-employee - Sales breakdown by employee
  * - GET /api/mobile?action=stock - Current inventory stock levels
  *
+ * Authentication: All endpoints except login require JWT token in Authorization header
  * Filter Parameters (for all sales endpoints):
  * - period: today | this_week | this_month | this_year | custom
  * - start_date: ISO 8601 date (required if period=custom)
@@ -22,6 +24,10 @@ import {
   categoriesService,
   getDocuments,
 } from "@/lib/firebase/firestore";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase/config";
+import { jwtUtils } from "@/lib/jwt";
 import {
   startOfDay,
   endOfDay,
@@ -34,7 +40,7 @@ import {
 // CORS headers for mobile apps
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Cache-Control": "no-cache, no-store, must-revalidate",
 };
@@ -684,11 +690,97 @@ export async function OPTIONS() {
   });
 }
 
+// Authentication middleware
+function authenticateRequest(request) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return { error: "Missing or invalid authorization header" };
+  }
+
+  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  const user = jwtUtils.getUserFromToken(token);
+
+  if (!user) {
+    return { error: "Invalid or expired token" };
+  }
+
+  if (user.role !== "admin") {
+    return { error: "Admin access required" };
+  }
+
+  return { user };
+}
+
+// Login function
+async function handleLogin(email, password) {
+  try {
+    // Authenticate with Firebase
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    const firebaseUser = userCredential.user;
+
+    // Get user data from Firestore
+    const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+    if (!userDoc.exists()) {
+      throw new Error("User data not found");
+    }
+
+    const userData = userDoc.data();
+
+    // Create JWT token with admin role (1 month expiration)
+    const token = jwtUtils.encodeAdmin({
+      id: firebaseUser.uid,
+      email: firebaseUser.email,
+      name: userData.name || firebaseUser.displayName,
+      permissions: userData.permissions || [],
+    });
+
+    return {
+      success: true,
+      user: {
+        id: firebaseUser.uid,
+        email: firebaseUser.email,
+        name: userData.name || firebaseUser.displayName,
+        role: "admin",
+      },
+      token,
+      expires_in: 30 * 24 * 60 * 60, // 30 days in seconds
+    };
+  } catch (error) {
+    console.error("Login error:", error);
+    return {
+      success: false,
+      error: "Invalid email or password",
+    };
+  }
+}
+
 // GET handler - Main API endpoint
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
+
+    // Handle login action (no auth required)
+    if (action === "login") {
+      return Response.json(
+        { success: false, error: "Login requires POST method" },
+        { status: 405, headers: corsHeaders }
+      );
+    }
+
+    // Authenticate request for all other actions
+    const auth = authenticateRequest(request);
+    if (auth.error) {
+      return Response.json(
+        { success: false, error: auth.error },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
     const period = searchParams.get("period") || "last_30_days";
     const startDate = searchParams.get("start_date");
     const endDate = searchParams.get("end_date");
@@ -850,6 +942,50 @@ export async function GET(request) {
       {
         success: false,
         error: error.message || "Internal server error",
+      },
+      {
+        status: 500,
+        headers: corsHeaders,
+      }
+    );
+  }
+}
+
+// POST handler - Login endpoint
+export async function POST(request) {
+  try {
+    const { action, email, password } = await request.json();
+
+    // Only allow login action for POST
+    if (action !== "login") {
+      return Response.json(
+        { success: false, error: "Invalid action for POST method" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Validate required fields
+    if (!email || !password) {
+      return Response.json(
+        { success: false, error: "Email and password are required" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Attempt login
+    const result = await handleLogin(email, password);
+
+    if (!result.success) {
+      return Response.json(result, { status: 401, headers: corsHeaders });
+    }
+
+    return Response.json(result, { status: 200, headers: corsHeaders });
+  } catch (error) {
+    console.error("POST error:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Internal server error",
       },
       {
         status: 500,

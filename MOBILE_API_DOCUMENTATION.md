@@ -10,10 +10,51 @@ https://your-domain.com/api/mobile
 
 ## Authentication
 
-Currently, the API is open for development. In production, implement token-based authentication using the `Authorization` header.
+All API endpoints require JWT authentication except for the login endpoint. Include the JWT token in the `Authorization` header:
 
 ```http
-Authorization: Bearer YOUR_ACCESS_TOKEN
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+### Login
+
+Authenticate and receive a JWT token with admin privileges (valid for 1 month).
+
+**Endpoint:** `POST /api/mobile`
+
+**Request Body:**
+
+```json
+{
+  "action": "login",
+  "email": "admin@example.com",
+  "password": "your_password"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "user": {
+    "id": "user_uid",
+    "email": "admin@example.com",
+    "name": "Admin User",
+    "role": "admin"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in": 2592000
+}
+```
+
+**Error Response:**
+
+```json
+{
+  "success": false,
+  "error": "Invalid email or password"
+}
 ```
 
 ## CORS Support
@@ -21,7 +62,7 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 The API supports CORS with the following headers:
 
 - `Access-Control-Allow-Origin: *`
-- `Access-Control-Allow-Methods: GET, OPTIONS`
+- `Access-Control-Allow-Methods: GET, POST, OPTIONS`
 - `Access-Control-Allow-Headers: Content-Type, Authorization`
 
 ---
@@ -53,17 +94,75 @@ All sales-related endpoints (`sales-summary`, `sales-by-item`, `sales-by-categor
 
 ## Available Actions
 
-1. [Sales Summary](#1-sales-summary)
-2. [Sales by Item](#2-sales-by-item)
-3. [Sales by Category](#3-sales-by-category)
-4. [Sales by Employee](#4-sales-by-employee)
-5. [Stock/Inventory](#5-stockinventory)
+1. [Login](#login) - POST (No authentication required)
+2. [Sales Summary](#1-sales-summary) - GET (JWT required)
+3. [Sales by Item](#2-sales-by-item) - GET (JWT required)
+4. [Sales by Category](#3-sales-by-category) - GET (JWT required)
+5. [Sales by Employee](#4-sales-by-employee) - GET (JWT required)
+6. [Stock/Inventory](#5-stockinventory) - GET (JWT required)
+
+---
+
+## Login
+
+Authenticate with email and password to receive a JWT token with admin privileges.
+
+### Request
+
+```http
+POST /api/mobile
+Content-Type: application/json
+
+{
+  "action": "login",
+  "email": "admin@example.com",
+  "password": "your_password"
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "user": {
+    "id": "firebase_user_uid",
+    "email": "admin@example.com",
+    "name": "Admin User",
+    "role": "admin"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in": 2592000
+}
+```
+
+### Error Responses
+
+**Invalid Credentials:**
+
+```json
+{
+  "success": false,
+  "error": "Invalid email or password"
+}
+```
+
+**Missing Fields:**
+
+```json
+{
+  "success": false,
+  "error": "Email and password are required"
+}
+```
 
 ---
 
 ## 1. Sales Summary
 
 Get overall sales metrics and transaction statistics.
+
+**Authentication:** JWT token required
 
 ### Request
 
@@ -159,6 +258,8 @@ curl "https://your-domain.com/api/mobile?action=sales-summary&period=this_week&e
 ## 2. Sales by Item
 
 Get sales breakdown by individual products/items.
+
+**Authentication:** JWT token required
 
 ### Request
 
@@ -260,6 +361,8 @@ curl "https://your-domain.com/api/mobile?action=sales-by-item&period=this_week"
 
 Get sales breakdown by product categories.
 
+**Authentication:** JWT token required
+
 ### Request
 
 ```http
@@ -360,6 +463,8 @@ curl "https://your-domain.com/api/mobile?action=sales-by-category&period=this_mo
 
 Get sales breakdown by employee/cashier.
 
+**Authentication:** JWT token required
+
 ### Request
 
 ```http
@@ -449,6 +554,8 @@ curl "https://your-domain.com/api/mobile?action=sales-by-employee&period=today"
 ## 5. Stock/Inventory
 
 Get current stock levels for all products.
+
+**Authentication:** JWT token required
 
 ### Request
 
@@ -595,6 +702,35 @@ curl "https://your-domain.com/api/mobile?action=stock"
 
 ## Error Responses
 
+### Authentication Errors
+
+**Missing Token:**
+
+```json
+{
+  "success": false,
+  "error": "Missing or invalid authorization header"
+}
+```
+
+**Invalid/Expired Token:**
+
+```json
+{
+  "success": false,
+  "error": "Invalid or expired token"
+}
+```
+
+**Insufficient Permissions:**
+
+```json
+{
+  "success": false,
+  "error": "Admin access required"
+}
+```
+
 ### Invalid Action
 
 ```json
@@ -656,11 +792,24 @@ curl "https://your-domain.com/api/mobile?action=stock"
 ### Android (Kotlin)
 
 ```kotlin
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import com.google.gson.Gson
+
+data class LoginResponse(
+    val success: Boolean,
+    val user: User?,
+    val token: String?,
+    val expires_in: Long?,
+    val error: String?
+)
+
+data class User(
+    val id: String,
+    val email: String,
+    val name: String,
+    val role: String
+)
 
 data class SalesSummaryResponse(
     val success: Boolean,
@@ -690,12 +839,43 @@ data class TransactionStats(
 
 class MobileApiService(private val baseUrl: String) {
     private val client = OkHttpClient()
-    private val gson = Gson()
+    private var authToken: String? = null
+
+    // Login method
+    suspend fun login(email: String, password: String): LoginResponse {
+        val loginRequest = """
+            {
+                "action": "login",
+                "email": "$email",
+                "password": "$password"
+            }
+        """.trimIndent()
+
+        val request = Request.Builder()
+            .url("$baseUrl/api/mobile")
+            .post(okhttp3.RequestBody.create("application/json".toMediaType(), loginRequest))
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            val response = client.newCall(request).execute()
+            val result = gson.fromJson(response.body?.string(), LoginResponse::class.java)
+            if (result.success) {
+                authToken = result.token
+            }
+            result
+        }
+    }
+
+    // Helper method to create authenticated requests
+    private fun createAuthenticatedRequest(url: String): Request.Builder {
+        return Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $authToken")
+    }
 
     suspend fun getSalesSummary(period: String = "today"): SalesSummaryResponse {
         return withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("$baseUrl/api/mobile?action=sales-summary&period=$period")
+            val request = createAuthenticatedRequest("$baseUrl/api/mobile?action=sales-summary&period=$period")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -762,11 +942,77 @@ struct TransactionStats: Codable {
     }
 }
 
+struct LoginResponse: Codable {
+    let success: Bool
+    let token: String
+    let expiresAt: String
+    let user: User
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case token
+        case expiresAt = "expires_at"
+        case user
+    }
+}
+
+struct User: Codable {
+    let uid: String
+    let email: String
+    let role: String
+}
+
 class MobileApiService {
     let baseUrl: String
+    private var token: String?
 
     init(baseUrl: String) {
         self.baseUrl = baseUrl
+    }
+
+    func login(email: String, password: String) async throws -> LoginResponse {
+        guard let url = URL(string: "\(baseUrl)/api/mobile") else {
+            throw URLError(.badURL)
+        }
+
+        let loginData = [
+            "action": "login",
+            "email": email,
+            "password": password
+        ]
+
+        let jsonData = try JSONSerialization.data(withJSONObject: loginData)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = jsonData
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let result = try JSONDecoder().decode(LoginResponse.self, from: data)
+
+        if result.success, let token = result.token {
+            self.token = token
+        }
+
+        return result
+    }
+
+    private func makeAuthenticatedRequest<T: Codable>(url: URL) async throws -> T {
+        guard let token = token else {
+            throw NSError(domain: "MobileApiService", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated. Please login first."])
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
+            throw NSError(domain: "MobileApiService", code: 401, userInfo: [NSLocalizedDescriptionKey: "Authentication failed. Token may be expired."])
+        }
+
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     func getSalesSummary(period: String = "today") async throws -> SalesSummaryResponse {
@@ -774,8 +1020,7 @@ class MobileApiService {
             throw URLError(.badURL)
         }
 
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(SalesSummaryResponse.self, from: data)
+        return try await makeAuthenticatedRequest(url: url)
     }
 
     func getStock() async throws -> StockResponse {
@@ -783,8 +1028,7 @@ class MobileApiService {
             throw URLError(.badURL)
         }
 
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(StockResponse.self, from: data)
+        return try await makeAuthenticatedRequest(url: url)
     }
 }
 ```
@@ -827,52 +1071,96 @@ interface ApiResponse<T> {
   data: T;
 }
 
+interface LoginResponse {
+  success: boolean;
+  token: string;
+  expires_at: string;
+  user: {
+    uid: string;
+    email: string;
+    role: string;
+  };
+}
+
 class MobileApiService {
   private baseUrl: string;
+  private token: string | null = null;
 
   constructor(baseUrl: string = BASE_URL) {
     this.baseUrl = baseUrl;
   }
 
+  async login(email: string, password: string): Promise<LoginResponse> {
+    const response = await fetch(`${this.baseUrl}/api/mobile`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "login",
+        email,
+        password,
+      }),
+    });
+
+    const result: LoginResponse = await response.json();
+
+    if (result.success && result.token) {
+      this.token = result.token;
+    }
+
+    return result;
+  }
+
+  private async makeAuthenticatedRequest(url: string): Promise<any> {
+    if (!this.token) {
+      throw new Error("Not authenticated. Please login first.");
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      throw new Error("Authentication failed. Token may be expired.");
+    }
+
+    return response.json();
+  }
+
   async getSalesSummary(
     period: string = "today"
   ): Promise<ApiResponse<SalesSummaryData>> {
-    const response = await fetch(
-      `${this.baseUrl}/api/mobile?action=sales-summary&period=${period}`
-    );
-    return response.json();
+    const url = `${this.baseUrl}/api/mobile?action=sales-summary&period=${period}`;
+    return this.makeAuthenticatedRequest(url);
   }
 
   async getSalesByItem(
     period: string = "this_month"
   ): Promise<ApiResponse<any>> {
-    const response = await fetch(
-      `${this.baseUrl}/api/mobile?action=sales-by-item&period=${period}`
-    );
-    return response.json();
+    const url = `${this.baseUrl}/api/mobile?action=sales-by-item&period=${period}`;
+    return this.makeAuthenticatedRequest(url);
   }
 
   async getSalesByCategory(
     period: string = "this_month"
   ): Promise<ApiResponse<any>> {
-    const response = await fetch(
-      `${this.baseUrl}/api/mobile?action=sales-by-category&period=${period}`
-    );
-    return response.json();
+    const url = `${this.baseUrl}/api/mobile?action=sales-by-category&period=${period}`;
+    return this.makeAuthenticatedRequest(url);
   }
 
   async getSalesByEmployee(
     period: string = "today"
   ): Promise<ApiResponse<any>> {
-    const response = await fetch(
-      `${this.baseUrl}/api/mobile?action=sales-by-employee&period=${period}`
-    );
-    return response.json();
+    const url = `${this.baseUrl}/api/mobile?action=sales-by-employee&period=${period}`;
+    return this.makeAuthenticatedRequest(url);
   }
 
   async getStock(): Promise<ApiResponse<any>> {
-    const response = await fetch(`${this.baseUrl}/api/mobile?action=stock`);
-    return response.json();
+    const url = `${this.baseUrl}/api/mobile?action=stock`;
+    return this.makeAuthenticatedRequest(url);
   }
 
   async getCustomDateRange(
@@ -887,28 +1175,42 @@ class MobileApiService {
       url += `&employee_ids=${employeeIds.join(",")}`;
     }
 
-    const response = await fetch(url);
-    return response.json();
+    return this.makeAuthenticatedRequest(url);
   }
 }
 
 // Usage Example
 const api = new MobileApiService();
 
-// Get today's sales summary
-const todaySales = await api.getSalesSummary("today");
-console.log("Today's Net Sales:", todaySales.data.metrics.net_sales);
+// Login first
+try {
+  const loginResult = await api.login("admin@example.com", "password123");
+  console.log("Login successful:", loginResult.user.email);
+  console.log("Token expires:", loginResult.expires_at);
+} catch (error) {
+  console.error("Login failed:", error.message);
+  return;
+}
 
-// Get stock levels
-const stock = await api.getStock();
-console.log("Out of stock items:", stock.data.summary.out_of_stock_count);
+// Now make authenticated requests
+try {
+  // Get today's sales summary
+  const todaySales = await api.getSalesSummary("today");
+  console.log("Today's Net Sales:", todaySales.data.metrics.net_sales);
 
-// Custom date range
-const customSales = await api.getCustomDateRange(
-  "sales-summary",
-  "2024-12-01",
-  "2024-12-10"
-);
+  // Get stock levels
+  const stock = await api.getStock();
+  console.log("Out of stock items:", stock.data.summary.out_of_stock_count);
+
+  // Custom date range
+  const customSales = await api.getCustomDateRange(
+    "sales-summary",
+    "2024-12-01",
+    "2024-12-10"
+  );
+} catch (error) {
+  console.error("API request failed:", error.message);
+}
 ```
 
 ---
@@ -923,6 +1225,14 @@ Currently no rate limiting is applied. In production, consider implementing:
 ---
 
 ## Changelog
+
+### Version 1.1.0 (December 2024)
+
+- Added JWT authentication system
+- Login endpoint with 1-month admin tokens
+- All endpoints now require authentication
+- Updated mobile implementation examples with authentication
+- Added comprehensive error handling for authentication failures
 
 ### Version 1.0.0 (December 2024)
 

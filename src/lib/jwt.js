@@ -96,6 +96,19 @@ export const jwtUtils = {
     return payload !== null;
   },
 
+  // Encode JWT token with admin role (1 month expiration)
+  encodeAdmin: (userData) => {
+    const oneMonthFromNow = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // 30 days
+
+    return jwtUtils.encode({
+      user: {
+        ...userData,
+        role: "admin",
+      },
+      exp: oneMonthFromNow,
+    });
+  },
+
   // Get user from token
   getUserFromToken: (token) => {
     const payload = jwtUtils.decode(token);

@@ -1,7 +1,8 @@
 const request = require("supertest");
 
-// Test against the actual running Next.js development server
-const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3001";
+// Test against the deployed production API
+const BASE_URL =
+  process.env.TEST_BASE_URL || "https://pos-candy-kush.vercel.app";
 
 describe("Mobile API Integration Tests", () => {
   // Increase timeout for API calls
