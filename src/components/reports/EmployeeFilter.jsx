@@ -14,10 +14,14 @@ import { collection, getDocs } from "firebase/firestore";
 export function EmployeeFilter({
   selectedEmployees = [],
   onEmployeeChange = () => {},
+  onEmployeesChange, // Accept both prop names for compatibility
   showAllOption = true,
 }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Use onEmployeesChange if provided, otherwise use onEmployeeChange
+  const handleChange = onEmployeesChange || onEmployeeChange;
 
   useEffect(() => {
     fetchEmployees();
@@ -49,25 +53,25 @@ export function EmployeeFilter({
   const handleSelectAll = () => {
     if (isAllSelected) {
       // If all selected, do nothing (keep all selected)
-      onEmployeeChange([]);
+      handleChange([]);
     } else {
       // Select all
-      onEmployeeChange([]);
+      handleChange([]);
     }
   };
 
   const handleSelectEmployee = (employeeId) => {
     if (selectedEmployees.length === 0) {
       // Currently "All" is selected, switch to single employee
-      onEmployeeChange([employeeId]);
+      handleChange([employeeId]);
     } else if (selectedEmployees.includes(employeeId)) {
       // Deselect this employee
       const newSelection = selectedEmployees.filter((id) => id !== employeeId);
       // If none selected, go back to "All"
-      onEmployeeChange(newSelection.length === 0 ? [] : newSelection);
+      handleChange(newSelection.length === 0 ? [] : newSelection);
     } else {
       // Add this employee
-      onEmployeeChange([...selectedEmployees, employeeId]);
+      handleChange([...selectedEmployees, employeeId]);
     }
   };
 

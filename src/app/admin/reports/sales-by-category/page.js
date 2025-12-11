@@ -95,10 +95,17 @@ export default function SalesByCategoryPage() {
         return false;
       }
 
-      // Employee filter
+      // Employee filter - check all possible employee ID fields
       if (selectedEmployees.length > 0) {
-        const employeeId = receipt.employeeId || receipt.employee_id;
-        if (!selectedEmployees.includes(employeeId)) {
+        const employeeId =
+          receipt.employeeId ||
+          receipt.employee_id ||
+          receipt.userId ||
+          receipt.user_id ||
+          receipt.cashierId ||
+          receipt.cashier_id ||
+          receipt.processedBy;
+        if (!employeeId || !selectedEmployees.includes(employeeId)) {
           return false;
         }
       }

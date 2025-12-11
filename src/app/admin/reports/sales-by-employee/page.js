@@ -115,10 +115,17 @@ export default function SalesByEmployeePage() {
       // Include both sales and refunds (no exclusion)
       // Refunds will be tracked separately in the aggregation
 
-      // Employee filter
+      // Employee filter - check all possible employee ID fields
       if (selectedEmployees.length > 0) {
-        const employeeId = receipt.employeeId || receipt.employee_id;
-        if (!selectedEmployees.includes(employeeId)) {
+        const employeeId =
+          receipt.employeeId ||
+          receipt.employee_id ||
+          receipt.userId ||
+          receipt.user_id ||
+          receipt.cashierId ||
+          receipt.cashier_id ||
+          receipt.processedBy;
+        if (!employeeId || !selectedEmployees.includes(employeeId)) {
           return false;
         }
       }

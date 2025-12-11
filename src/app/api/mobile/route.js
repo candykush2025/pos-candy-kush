@@ -134,10 +134,17 @@ function filterReceipts(receipts, dateRange, employeeIds = []) {
       return false;
     }
 
-    // Employee filter
+    // Employee filter - check all possible employee ID fields
     if (employeeIds.length > 0) {
-      const employeeId = receipt.employeeId || receipt.employee_id;
-      if (!employeeIds.includes(employeeId)) {
+      const employeeId =
+        receipt.employeeId ||
+        receipt.employee_id ||
+        receipt.userId ||
+        receipt.user_id ||
+        receipt.cashierId ||
+        receipt.cashier_id ||
+        receipt.processedBy;
+      if (!employeeId || !employeeIds.includes(employeeId)) {
         return false;
       }
     }
