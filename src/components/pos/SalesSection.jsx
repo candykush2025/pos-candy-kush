@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -33,6 +33,11 @@ import {
 import { discountsService } from "@/lib/firebase/discountsService";
 import { shiftsService } from "@/lib/firebase/shiftsService";
 import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
+import {
+  cashbackRulesService,
+  pointUsageRulesService,
+  customerPointsService,
+} from "@/lib/firebase/cashbackService";
 import {
   printJobsService,
   PRINT_STATUS,
@@ -348,6 +353,14 @@ export default function SalesSection({ cashier }) {
   const [customDiscountType, setCustomDiscountType] = useState("percentage");
   const [customDiscountValue, setCustomDiscountValue] = useState("");
 
+  // Cashback & Points state
+  const [cashbackRules, setCashbackRules] = useState([]);
+  const [pointUsageRules, setPointUsageRules] = useState(null);
+  const [pointsToUse, setPointsToUse] = useState(0);
+  const [showUsePointsModal, setShowUsePointsModal] = useState(false);
+  const [pointsInputValue, setPointsInputValue] = useState("");
+  // calculatedCashback is now computed via useMemo below, not state
+
   // Barcode scanner state
   const [barcodeBuffer, setBarcodeBuffer] = useState("");
   const [lastKeyTime, setLastKeyTime] = useState(0);
@@ -388,7 +401,98 @@ export default function SalesSection({ cashier }) {
     loadCustomers();
     checkUnsyncedOrders();
     checkActiveShift();
+    loadCashbackRules();
   }, []);
+
+  // Load cashback rules and point usage rules
+  const loadCashbackRules = async () => {
+    try {
+      const [rules, usageRules] = await Promise.all([
+        cashbackRulesService.getAll(),
+        pointUsageRulesService.get(),
+      ]);
+      setCashbackRules(rules.filter((r) => r.isActive));
+      setPointUsageRules(usageRules);
+    } catch (error) {
+      console.error("Error loading cashback rules:", error);
+    }
+  };
+
+  // Calculate cashback using useMemo instead of useEffect to avoid race conditions
+  const calculatedCashbackMemo = useMemo(() => {
+    // Skip if no customer or non-member
+    if (!cartCustomer || cartCustomer.isNoMember === true) {
+      return { totalPoints: 0, itemBreakdown: [] };
+    }
+
+    // Skip if no items or rules
+    if (!items?.length || !cashbackRules?.length) {
+      return { totalPoints: 0, itemBreakdown: [] };
+    }
+
+    console.log("🎯 CASHBACK CALC - Customer:", cartCustomer.name, "Items:", items.length, "Rules:", cashbackRules.length);
+
+    console.log("🎯 Step A: About to call getTotal()");
+    let total = 0;
+    try {
+      total = getTotal();
+      console.log("🎯 Step B: getTotal() returned:", total);
+    } catch (e) {
+      console.error("🎯 ERROR in getTotal():", e);
+      return { totalPoints: 0, itemBreakdown: [] };
+    }
+
+    let totalPoints = 0;
+    const itemBreakdown = [];
+
+    console.log("🎯 Step C: Starting loop, items count:", items.length);
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      console.log("🎯 Step D: Processing item", i, ":", item?.name);
+
+      const itemData = {
+        productId: item.productId || item.id,
+        categoryId: item.categoryId,
+        price: item.price,
+        quantity: item.quantity,
+      };
+      console.log("🎯 Step E: itemData =", JSON.stringify(itemData));
+
+      try {
+        console.log("🎯 Step F: Calling calculateItemCashback...");
+        const result = cashbackRulesService.calculateItemCashback(
+          itemData,
+          cashbackRules,
+          total
+        );
+        console.log("🎯 Step G: Result =", result);
+
+        if (result && result.points > 0) {
+          totalPoints += result.points;
+          itemBreakdown.push({
+            itemId: itemData.productId,
+            itemName: item.name,
+            points: result.points,
+            ruleApplied: result.ruleApplied,
+          });
+        }
+      } catch (err) {
+        console.error("🎯 ERROR in calculateItemCashback:", err);
+      }
+    }
+
+    console.log("🎯 FINAL TOTAL POINTS:", totalPoints);
+    return { totalPoints, itemBreakdown };
+  }, [items, cartCustomer, cashbackRules]);
+
+  // Use the memoized value
+  const calculatedCashback = calculatedCashbackMemo;
+
+  // Legacy function kept for reference
+  const calculateCashbackForCart = () => {
+    // Now handled in useMemo above
+  };
 
   // Check for active shift
   const checkActiveShift = () => {
@@ -1142,6 +1246,26 @@ export default function SalesSection({ cashier }) {
     });
 
     if (matchingCustomer) {
+      // Check if customer membership is expired
+      if (matchingCustomer.expiryDate) {
+        const expiryDate = new Date(matchingCustomer.expiryDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (expiryDate < today) {
+          toast.error(
+            `Cannot select ${
+              matchingCustomer.name
+            } - membership expired on ${expiryDate.toLocaleDateString()}`
+          );
+          console.log(
+            "[Barcode Scanner] Customer membership expired:",
+            matchingCustomer
+          );
+          return;
+        }
+      }
+
       // Set the customer in the cart
       setCartCustomer(matchingCustomer);
       toast.success(`Customer "${matchingCustomer.name}" selected via QR scan`);
@@ -1173,36 +1297,18 @@ export default function SalesSection({ cashier }) {
     return fallback;
   };
 
-  // Helper to safely get customer points (handles both number and object types)
+  // Helper to safely get customer points from pointList (NEW SYSTEM - NO HARDCODED POINTS)
   const getCustomerPoints = (customer) => {
     if (!customer) return 0;
 
-    // Try customPoints first
-    if (customer.customPoints !== undefined && customer.customPoints !== null) {
-      if (typeof customer.customPoints === "number") {
-        return customer.customPoints;
-      }
-      if (
-        typeof customer.customPoints === "object" &&
-        customer.customPoints.amount !== undefined
-      ) {
-        return toNumber(customer.customPoints.amount, 0);
-      }
+    // ONLY use pointList - new cashback system
+    if (Array.isArray(customer.pointList) && customer.pointList.length > 0) {
+      return customer.pointList.reduce((sum, entry) => {
+        return sum + (entry.amount || 0);
+      }, 0);
     }
 
-    // Try points next
-    if (customer.points !== undefined && customer.points !== null) {
-      if (typeof customer.points === "number") {
-        return customer.points;
-      }
-      if (
-        typeof customer.points === "object" &&
-        customer.points.amount !== undefined
-      ) {
-        return toNumber(customer.points.amount, 0);
-      }
-    }
-
+    // No fallback - if no pointList, customer has 0 points
     return 0;
   };
 
@@ -2118,7 +2224,7 @@ export default function SalesSection({ cashier }) {
       return;
     }
 
-    const total = getTotal();
+    const total = getTotal() - pointsToUse * (pointUsageRules?.pointValue || 1);
     const cashAmount = parseFloat(cashReceived) || 0;
 
     if (paymentMethod === "cash" && cashAmount < total) {
@@ -2129,6 +2235,57 @@ export default function SalesSection({ cashier }) {
     try {
       setIsProcessing(true);
       const cartData = getCartData();
+
+      // Calculate cashback for eligible customers
+      let calculatedCashback = { totalPoints: 0, itemBreakdown: [] };
+      const isMember =
+        cartCustomer && (cartCustomer.isMember || !cartCustomer.isNoMember);
+
+      console.log("💰 PAYMENT CASHBACK CALC - Customer:", cartCustomer?.name);
+      console.log("💰 PAYMENT CASHBACK CALC - isMember:", isMember);
+      console.log(
+        "💰 PAYMENT CASHBACK CALC - isNoMember:",
+        cartCustomer?.isNoMember
+      );
+
+      if (isMember) {
+        let isEligibleForCashback = true;
+
+        // Check expiry if exists
+        if (cartCustomer.expiryDate) {
+          isEligibleForCashback = !customerApprovalService.isCustomerExpired(
+            cartCustomer.expiryDate
+          );
+        }
+
+        console.log(
+          "💰 PAYMENT - Eligible for cashback:",
+          isEligibleForCashback
+        );
+        console.log("💰 PAYMENT - Items to calculate:", items.length);
+
+        if (isEligibleForCashback) {
+          calculatedCashback = await cashbackRulesService.calculateCartCashback(
+            items.map((item) => ({
+              productId: item.productId || item.itemId,
+              categoryId: item.categoryId,
+              price: item.price,
+              quantity: item.quantity,
+              name: item.name,
+            })),
+            cartData.total
+          );
+
+          console.log(
+            "💰 PAYMENT - Calculated cashback result:",
+            calculatedCashback
+          );
+          console.log(
+            "💰 PAYMENT - Total points to save:",
+            calculatedCashback.totalPoints
+          );
+        }
+      }
       const { receiptsService } = await import("@/lib/firebase/firestore");
       const { generateOrderNumber } = await import("@/lib/utils/format");
 
@@ -2168,8 +2325,9 @@ export default function SalesSection({ cashier }) {
         receipt_date: now.toISOString(),
         updated_at: now.toISOString(),
 
-        // Money amounts
-        total_money: cartData.total,
+        // Money amounts (account for points discount)
+        total_money:
+          cartData.total - pointsToUse * (pointUsageRules?.pointValue || 1),
         total_tax: 0,
         total_discount: cartData.discountAmount,
         discounts: cartData.discounts || [], // Store multiple discounts
@@ -2177,11 +2335,34 @@ export default function SalesSection({ cashier }) {
         tip: 0,
         surcharge: 0,
 
-        // Points (if customer has loyalty program)
-        points_earned: cartCustomer ? Math.floor(total) : 0,
-        points_deducted: 0,
+        // Points redemption
+        points_used: pointsToUse,
+        points_discount: pointsToUse * (pointUsageRules?.pointValue || 1),
+
+        // Cashback earned (new system)
+        cashback_earned: calculatedCashback.totalPoints,
+        cashback_breakdown: calculatedCashback.itemBreakdown,
+
+        // Legacy points fields (for compatibility)
+        points_earned: calculatedCashback.totalPoints,
+        points_deducted: pointsToUse,
         points_balance: cartCustomer
-          ? (cartCustomer.points || 0) + Math.floor(total)
+          ? (() => {
+              const currentPoints = getCustomerPoints(cartCustomer);
+              console.log("💾 SAVING TO FIREBASE:");
+              console.log(
+                "   cashback_earned:",
+                calculatedCashback.totalPoints
+              );
+              console.log("   points_earned:", calculatedCashback.totalPoints);
+              console.log(
+                "   cashback_breakdown:",
+                calculatedCashback.itemBreakdown
+              );
+              return (
+                currentPoints - pointsToUse + calculatedCashback.totalPoints
+              );
+            })()
           : 0,
 
         // Additional info
@@ -2407,13 +2588,75 @@ export default function SalesSection({ cashier }) {
       // Update customer stats if customer is selected
       if (cartCustomer) {
         try {
+          // Update visit stats
           await customersService.update(cartCustomer.id, {
             visits: (cartCustomer.visits || 0) + 1,
             lastVisit: new Date(),
-            points: (cartCustomer.points || 0) + Math.floor(total), // Add 1 point per dollar
           });
+
+          // Check if customer is eligible for points (member with active membership)
+          const isEligibleForPoints =
+            !cartCustomer.isNoMember &&
+            cartCustomer.expiryDate &&
+            !customerApprovalService.isCustomerExpired(cartCustomer.expiryDate);
+
+          console.log("🎯 CUSTOMER POINTS ELIGIBILITY CHECK:");
+          console.log("   Customer:", cartCustomer.name);
+          console.log("   isNoMember:", cartCustomer.isNoMember);
+          console.log("   expiryDate:", cartCustomer.expiryDate);
+          console.log("   isEligibleForPoints:", isEligibleForPoints);
+          console.log(
+            "   calculatedCashback.totalPoints:",
+            calculatedCashback.totalPoints
+          );
+
+          if (isEligibleForPoints) {
+            // Record used points if any
+            if (pointsToUse > 0) {
+              const pointValue = pointUsageRules?.pointValue || 1;
+              const valueRedeemed = pointsToUse * pointValue;
+              console.log("📉 Recording USED points:", pointsToUse);
+              await customerPointsService.recordUsedPoints(
+                cartCustomer.id,
+                pointsToUse,
+                orderNumber,
+                receiptData.id || orderNumber,
+                valueRedeemed
+              );
+            }
+
+            // Check if customer should earn cashback
+            const shouldEarnCashback =
+              pointsToUse === 0 || // No points used
+              pointUsageRules?.earnCashbackWhenUsingPoints === true; // Or rules allow earning when using points
+
+            console.log("💎 Cashback earn check:");
+            console.log("   shouldEarnCashback:", shouldEarnCashback);
+            console.log(
+              "   calculatedCashback.totalPoints:",
+              calculatedCashback.totalPoints
+            );
+
+            if (shouldEarnCashback && calculatedCashback.totalPoints > 0) {
+              console.log(
+                "📈 Recording EARNED points:",
+                calculatedCashback.totalPoints
+              );
+              await customerPointsService.recordEarnedPoints(
+                cartCustomer.id,
+                calculatedCashback.totalPoints,
+                orderNumber,
+                receiptData.id || orderNumber,
+                calculatedCashback.itemBreakdown
+              );
+            }
+          } else {
+            console.log(
+              "❌ Customer NOT eligible for points - points will NOT be recorded to customer"
+            );
+          }
         } catch (error) {
-          console.error("Error updating customer stats:", error);
+          console.error("Error updating customer stats/points:", error);
         }
       }
 
@@ -2546,12 +2789,15 @@ export default function SalesSection({ cashier }) {
 
       // Process payment via API and clear cart
       await processPayment({
-        amount: total,
+        amount: total - pointsToUse * (pointUsageRules?.pointValue || 1),
         method: paymentMethod,
         transactionId: orderNumber,
       });
       setCashReceived("");
       setPaymentMethod("cash");
+      setPointsToUse(0);
+      setPointsInputValue("");
+      // calculatedCashback will auto-reset via useMemo when cart clears
 
       // Update kiosk order status if this was from kiosk
       if (cartData.kioskOrderId) {
@@ -2877,13 +3123,20 @@ export default function SalesSection({ cashier }) {
     clearCart();
     setCashReceived("");
     setPaymentMethod("cash");
+    setPointsToUse(0);
+    setPointsInputValue("");
     toast.success("Ready for new transaction");
   };
 
   const calculateChange = () => {
-    const total = getTotal();
+    const total = getTotal() - pointsToUse * (pointUsageRules?.pointValue || 1);
     const cashAmount = parseFloat(cashReceived) || 0;
     return Math.max(0, cashAmount - total);
+  };
+
+  // Get final total after points discount
+  const getFinalTotal = () => {
+    return getTotal() - pointsToUse * (pointUsageRules?.pointValue || 1);
   };
 
   // Handle quick cash button click - set amount and auto-complete payment
@@ -3596,20 +3849,36 @@ export default function SalesSection({ cashier }) {
                         <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
                           {cartCustomer.name}
                         </p>
-                        {cartCustomer.source && (
+                        {cartCustomer.isMember && (
                           <Badge
-                            variant="secondary"
-                            className={cn(
-                              "text-xs",
-                              cartCustomer.source === "kiosk" &&
-                                "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
-                              cartCustomer.source === "local" &&
-                                "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
-                            )}
+                            variant="outline"
+                            className="text-xs bg-blue-50 dark:bg-blue-950 border-blue-500 text-blue-700 dark:text-blue-400"
                           >
-                            {cartCustomer.source}
+                            Member
                           </Badge>
                         )}
+                        {cartCustomer.expiryDate &&
+                          (() => {
+                            const expiryDate = new Date(
+                              cartCustomer.expiryDate
+                            );
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const isExpired = expiryDate < today;
+
+                            return (
+                              <Badge
+                                variant="outline"
+                                className={
+                                  isExpired
+                                    ? "text-xs bg-red-50 dark:bg-red-950 border-red-500 text-red-700 dark:text-red-400"
+                                    : "text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                                }
+                              >
+                                {isExpired ? "Expired" : "Active"}
+                              </Badge>
+                            );
+                          })()}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         {cartCustomer.customerId ? (
@@ -3670,6 +3939,22 @@ export default function SalesSection({ cashier }) {
                   ? item.memberPrice
                   : item.price;
 
+                // Find cashback for this item
+                const itemCashback = calculatedCashback.itemBreakdown.find(
+                  (cb) => cb.itemId === (item.productId || item.id)
+                );
+
+                console.log(
+                  "[CART DISPLAY] Item:",
+                  item.name,
+                  "productId:",
+                  item.productId || item.id,
+                  "cashback:",
+                  itemCashback,
+                  "breakdown:",
+                  calculatedCashback.itemBreakdown
+                );
+
                 return (
                   <Card key={item.id} className="p-3">
                     <div className="flex justify-between items-start mb-2">
@@ -3697,6 +3982,17 @@ export default function SalesSection({ cashier }) {
                             {formatCurrency(item.price)}{" "}
                             {item.soldBy === "weight" ? "/kg" : "each"}
                           </p>
+                        )}
+                        {/* Cashback Display */}
+                        {itemCashback && itemCashback.points > 0 && (
+                          <div className="mt-1">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                            >
+                              +{itemCashback.points} pts cashback
+                            </Badge>
+                          </div>
                         )}
                       </div>
                       <Button
@@ -4035,9 +4331,134 @@ export default function SalesSection({ cashier }) {
                   Total Amount
                 </div>
                 <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                  {formatCurrency(getTotal())}
+                  {formatCurrency(
+                    getTotal() -
+                      pointsToUse * (pointUsageRules?.pointValue || 1)
+                  )}
                 </div>
+                {pointsToUse > 0 && (
+                  <div className="mt-2 text-sm text-green-600 dark:text-green-400">
+                    <span className="font-medium">{pointsToUse} points</span>{" "}
+                    applied (-
+                    {formatCurrency(
+                      pointsToUse * (pointUsageRules?.pointValue || 1)
+                    )}
+                    )
+                  </div>
+                )}
               </div>
+
+              {/* Use Points Section - Only show for members with active membership */}
+              {cartCustomer &&
+                !cartCustomer.isNoMember &&
+                cartCustomer.expiryDate &&
+                !customerApprovalService.isCustomerExpired(
+                  cartCustomer.expiryDate
+                ) && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium flex items-center gap-2">
+                        <Tag className="h-4 w-4 text-purple-600" />
+                        Use Points
+                      </label>
+                      <Badge variant="outline" className="text-purple-600">
+                        Available: {getCustomerPoints(cartCustomer)} pts
+                      </Badge>
+                    </div>
+
+                    {/* Quick Point Buttons */}
+                    <div className="grid grid-cols-4 gap-2">
+                      {[10, 25, 50, 100].map((percent) => {
+                        const availablePoints = getCustomerPoints(cartCustomer);
+                        const pointsForPercent = Math.floor(
+                          (availablePoints * percent) / 100
+                        );
+                        const maxPointsAllowed = Math.floor(
+                          getTotal() / (pointUsageRules?.pointValue || 1)
+                        );
+                        const pointsToApply = Math.min(
+                          pointsForPercent,
+                          maxPointsAllowed
+                        );
+
+                        return (
+                          <Button
+                            key={percent}
+                            type="button"
+                            variant={
+                              pointsToUse === pointsToApply
+                                ? "default"
+                                : "outline"
+                            }
+                            size="sm"
+                            onClick={() => setPointsToUse(pointsToApply)}
+                            disabled={
+                              availablePoints <
+                              (pointUsageRules?.minPointsToRedeem || 1)
+                            }
+                          >
+                            {percent}%
+                          </Button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Custom Point Input */}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Enter points"
+                        value={pointsInputValue}
+                        onChange={(e) => setPointsInputValue(e.target.value)}
+                        className="flex-1"
+                        min="0"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const availablePoints =
+                            getCustomerPoints(cartCustomer);
+                          const input = parseInt(pointsInputValue) || 0;
+                          const maxPointsAllowed = Math.floor(
+                            getTotal() / (pointUsageRules?.pointValue || 1)
+                          );
+                          const pointsToApply = Math.min(
+                            input,
+                            availablePoints,
+                            maxPointsAllowed
+                          );
+                          setPointsToUse(pointsToApply);
+                          setPointsInputValue("");
+                        }}
+                      >
+                        Apply
+                      </Button>
+                      {pointsToUse > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPointsToUse(0)}
+                          className="text-red-600"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Cashback Preview */}
+                    {calculatedCashback.totalPoints > 0 && (
+                      <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 rounded-lg">
+                        <div className="text-sm text-purple-700 dark:text-purple-300">
+                          <span className="font-medium">Cashback Earned:</span>{" "}
+                          +{calculatedCashback.totalPoints} points from this
+                          purchase
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
               {/* Payment Method Selection */}
               <div className="space-y-2">
@@ -4116,26 +4537,30 @@ export default function SalesSection({ cashier }) {
                   </div>
 
                   {/* Change Calculation */}
-                  {cashReceived && parseFloat(cashReceived) >= getTotal() && (
-                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-lg">
-                      <div className="text-sm text-green-700 dark:text-green-400 mb-1">
-                        Change
+                  {cashReceived &&
+                    parseFloat(cashReceived) >= getFinalTotal() && (
+                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-lg">
+                        <div className="text-sm text-green-700 dark:text-green-400 mb-1">
+                          Change
+                        </div>
+                        <div className="text-2xl font-bold text-green-700 dark:text-green-400">
+                          {formatCurrency(calculateChange())}
+                        </div>
                       </div>
-                      <div className="text-2xl font-bold text-green-700 dark:text-green-400">
-                        {formatCurrency(calculateChange())}
-                      </div>
-                    </div>
-                  )}
+                    )}
 
-                  {cashReceived && parseFloat(cashReceived) < getTotal() && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-lg">
-                      <div className="text-sm text-red-700 dark:text-red-400">
-                        Insufficient amount. Need{" "}
-                        {formatCurrency(getTotal() - parseFloat(cashReceived))}{" "}
-                        more.
+                  {cashReceived &&
+                    parseFloat(cashReceived) < getFinalTotal() && (
+                      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-lg">
+                        <div className="text-sm text-red-700 dark:text-red-400">
+                          Insufficient amount. Need{" "}
+                          {formatCurrency(
+                            getFinalTotal() - parseFloat(cashReceived)
+                          )}{" "}
+                          more.
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               )}
 
@@ -4184,7 +4609,8 @@ export default function SalesSection({ cashier }) {
                 disabled={
                   isProcessing ||
                   (paymentMethod === "cash" &&
-                    (!cashReceived || parseFloat(cashReceived) < getTotal()))
+                    (!cashReceived ||
+                      parseFloat(cashReceived) < getFinalTotal()))
                 }
               >
                 {isProcessing ? "Processing..." : "Complete Payment"}
@@ -4452,135 +4878,175 @@ export default function SalesSection({ cashier }) {
                       c.customerCode?.toLowerCase().includes(query)
                     );
                   })
-                  .map((customer) => (
-                    <div
-                      key={customer.id}
-                      className="p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg cursor-pointer transition-all hover:border-primary hover:bg-neutral-50 dark:hover:bg-neutral-900 hover:shadow-md"
-                      onClick={() => {
-                        setCartCustomer(customer);
-                        setShowCustomerSelectModal(false);
-                        setCustomerSearchQuery("");
-                        toast.success(
-                          `Customer ${customer.name} added to cart`
-                        );
-                      }}
-                    >
-                      <div className="flex items-start gap-4">
-                        {/* Customer Icon */}
-                        <div className="flex-shrink-0 mt-1">
-                          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                            <User className="h-6 w-6 text-primary" />
-                          </div>
-                        </div>
+                  .map((customer) => {
+                    // Check if customer membership is expired
+                    const isExpired =
+                      customer.expiryDate &&
+                      (() => {
+                        const expiryDate = new Date(customer.expiryDate);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return expiryDate < today;
+                      })();
 
-                        {/* Customer Info */}
-                        <div className="flex-1 min-w-0">
-                          {/* Name and Badges */}
-                          <div className="flex items-center gap-2 flex-wrap mb-2">
-                            <h3 className="font-semibold text-lg">
-                              {customer.name}
-                            </h3>
-
-                            {/* Source Badge */}
-                            {customer.source && (
-                              <Badge
-                                variant={
-                                  customer.source === "loyverse"
-                                    ? "secondary"
-                                    : customer.source === "kiosk"
-                                    ? "default"
-                                    : "outline"
-                                }
-                                className={
-                                  customer.source === "kiosk"
-                                    ? "text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                                    : customer.source === "local"
-                                    ? "text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
-                                    : "text-xs"
-                                }
-                              >
-                                {customer.source}
-                              </Badge>
-                            )}
-
-                            {/* Member Badge */}
-                            {customer.isMember && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs bg-blue-50 dark:bg-blue-950 border-blue-500 text-blue-700 dark:text-blue-400"
-                              >
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Member
-                              </Badge>
-                            )}
+                    return (
+                      <div
+                        key={customer.id}
+                        className={`p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg transition-all hover:shadow-md ${
+                          isExpired
+                            ? "opacity-60 cursor-not-allowed border-red-300 dark:border-red-700"
+                            : "cursor-pointer hover:border-primary hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                        }`}
+                        onClick={() => {
+                          if (isExpired) {
+                            toast.error(
+                              `Cannot select ${
+                                customer.name
+                              } - membership expired on ${new Date(
+                                customer.expiryDate
+                              ).toLocaleDateString()}`
+                            );
+                            return;
+                          }
+                          setCartCustomer(customer);
+                          setShowCustomerSelectModal(false);
+                          setCustomerSearchQuery("");
+                          toast.success(
+                            `Customer ${customer.name} added to cart`
+                          );
+                        }}
+                      >
+                        <div className="flex items-start gap-4">
+                          {/* Customer Icon */}
+                          <div className="flex-shrink-0 mt-1">
+                            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-6 w-6 text-primary" />
+                            </div>
                           </div>
 
-                          {/* Customer ID / Code */}
-                          <div className="flex items-center gap-2 mb-3">
-                            {customer.customerId ? (
-                              <span className="font-mono text-sm font-semibold text-primary">
-                                ID: {customer.customerId}
-                              </span>
-                            ) : customer.customerCode ? (
-                              <Badge variant="secondary" className="text-xs">
-                                {customer.customerCode}
-                              </Badge>
-                            ) : null}
-                            {customer.memberId && (
-                              <span className="font-mono text-sm text-neutral-500">
-                                Member: {customer.memberId}
-                              </span>
-                            )}
-                          </div>
+                          {/* Customer Info */}
+                          <div className="flex-1 min-w-0">
+                            {/* Name and Badges */}
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              <h3 className="font-semibold text-lg">
+                                {customer.name}
+                              </h3>
 
-                          {/* Contact Information */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-neutral-600 dark:text-neutral-400 mb-3">
-                            {customer.email && (
-                              <div className="flex items-center gap-2">
-                                <Mail className="h-4 w-4 flex-shrink-0" />
-                                <span className="truncate">
-                                  {customer.email}
+                              {/* Member Badge */}
+                              {customer.isMember && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs bg-blue-50 dark:bg-blue-950 border-blue-500 text-blue-700 dark:text-blue-400"
+                                >
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Member
+                                </Badge>
+                              )}
+
+                              {/* Expiry Status Badge */}
+                              {customer.expiryDate &&
+                                (() => {
+                                  const expiryDate = new Date(
+                                    customer.expiryDate
+                                  );
+                                  const today = new Date();
+                                  today.setHours(0, 0, 0, 0);
+                                  const isExpired = expiryDate < today;
+
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        isExpired
+                                          ? "text-xs bg-red-50 dark:bg-red-950 border-red-500 text-red-700 dark:text-red-400"
+                                          : "text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                                      }
+                                    >
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      {isExpired ? "Expired" : "Active"}
+                                    </Badge>
+                                  );
+                                })()}
+                            </div>
+
+                            {/* Customer ID / Code */}
+                            <div className="flex items-center gap-2 mb-3">
+                              {customer.customerId ? (
+                                <span className="font-mono text-sm font-semibold text-primary">
+                                  ID: {customer.customerId}
                                 </span>
-                              </div>
-                            )}
-                            {customer.phone && (
-                              <div className="flex items-center gap-2">
-                                <Phone className="h-4 w-4 flex-shrink-0" />
-                                <span>{customer.phone}</span>
-                              </div>
-                            )}
-                          </div>
+                              ) : customer.customerCode ? (
+                                <Badge variant="secondary" className="text-xs">
+                                  {customer.customerCode}
+                                </Badge>
+                              ) : null}
+                              {customer.memberId && (
+                                <span className="font-mono text-sm text-neutral-500">
+                                  Member: {customer.memberId}
+                                </span>
+                              )}
+                            </div>
 
-                          {/* Stats */}
-                          <div className="flex gap-4 text-sm">
-                            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                              <ShoppingCart className="h-4 w-4" />
-                              <span className="font-medium">
-                                {getCustomerPoints(customer)} pts
-                              </span>
+                            {/* Contact Information */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-neutral-600 dark:text-neutral-400 mb-3">
+                              {customer.email && (
+                                <div className="flex items-center gap-2">
+                                  <Mail className="h-4 w-4 flex-shrink-0" />
+                                  <span className="truncate">
+                                    {customer.email}
+                                  </span>
+                                </div>
+                              )}
+                              {customer.phone && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="h-4 w-4 flex-shrink-0" />
+                                  <span>{customer.phone}</span>
+                                </div>
+                              )}
+                              {customer.expiryDate && (
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-4 w-4 flex-shrink-0" />
+                                  <span>
+                                    Expires:{" "}
+                                    {new Date(
+                                      customer.expiryDate
+                                    ).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                            <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                              <User className="h-4 w-4" />
-                              <span className="font-medium">
-                                {customer.totalVisits || customer.visits || 0}{" "}
-                                visits
-                              </span>
-                            </div>
-                            {(customer.totalSpent || customer.spent) && (
-                              <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                                <CreditCard className="h-4 w-4" />
+
+                            {/* Stats */}
+                            <div className="flex gap-4 text-sm">
+                              <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                <ShoppingCart className="h-4 w-4" />
                                 <span className="font-medium">
-                                  {formatCurrency(
-                                    customer.totalSpent || customer.spent || 0
-                                  )}
+                                  {getCustomerPoints(customer)} pts
                                 </span>
                               </div>
-                            )}
+                              <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                <User className="h-4 w-4" />
+                                <span className="font-medium">
+                                  {customer.totalVisits || customer.visits || 0}{" "}
+                                  visits
+                                </span>
+                              </div>
+                              {(customer.totalSpent || customer.spent) && (
+                                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                                  <CreditCard className="h-4 w-4" />
+                                  <span className="font-medium">
+                                    {formatCurrency(
+                                      customer.totalSpent || customer.spent || 0
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                 {/* Empty State */}
                 {customers.length === 0 && (

@@ -54,29 +54,18 @@ import { toast } from "sonner";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { countries } from "@/lib/countires";
 
-// Helper function to safely get points as a number
-// Points can be stored as a number or an array of point history objects
+// Helper function to safely get points from pointList (NEW SYSTEM - NO HARDCODED POINTS)
 const getPointsValue = (customer) => {
   if (!customer) return 0;
-  const points =
-    customer.points || customer.customPoints || customer.totalPoints;
-  if (typeof points === "number") return points;
-  if (Array.isArray(points)) {
-    // If it's an array, calculate total from history
-    return points.reduce((sum, p) => {
-      if (typeof p === "number") return sum + p;
-      if (typeof p === "object" && p.amount !== undefined)
-        return sum + (p.amount || 0);
-      return sum;
+
+  // ONLY use pointList - new cashback system
+  if (Array.isArray(customer.pointList) && customer.pointList.length > 0) {
+    return customer.pointList.reduce((sum, entry) => {
+      return sum + (entry.amount || 0);
     }, 0);
   }
-  if (
-    typeof points === "object" &&
-    points !== null &&
-    points.amount !== undefined
-  ) {
-    return points.amount || 0;
-  }
+
+  // No fallback - if no pointList, customer has 0 points
   return 0;
 };
 
@@ -482,7 +471,7 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave, cashier }) {
         }),
       // System fields - only include for existing customers, never overwrite
       ...(customer && {
-        points: customer.points, // Preserve existing points (could be number or array)
+        pointList: customer.pointList || [], // Preserve existing pointList (new cashback system)
         totalSpent: customer.totalSpent || 0,
         visitCount: customer.visitCount || 0,
       }),
@@ -1082,7 +1071,17 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
   };
 
   const getTotalSpent = () => {
-    return orders.reduce((sum, order) => sum + (order.total || 0), 0);
+    return orders.reduce(
+      (sum, order) => sum + (order.total_money || order.total || 0),
+      0
+    );
+  };
+
+  const getTotalPointsEarned = () => {
+    return orders.reduce(
+      (sum, order) => sum + (order.cashback_earned || order.points_earned || 0),
+      0
+    );
   };
 
   return (
@@ -1110,7 +1109,7 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
         ) : (
           <div className="space-y-4">
             {/* Summary */}
-            <div className="grid grid-cols-3 gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+            <div className="grid grid-cols-4 gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
               <div className="text-center">
                 <p className="text-sm text-gray-400 dark:text-gray-400">
                   Total Orders
@@ -1131,6 +1130,14 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
                 <p className="text-sm text-gray-600">Avg. Order</p>
                 <p className="text-2xl font-bold text-blue-600">
                   {formatCurrency(getTotalSpent() / orders.length)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-gray-400 dark:text-gray-400">
+                  Points Earned
+                </p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {getTotalPointsEarned()}
                 </p>
               </div>
             </div>
@@ -1156,7 +1163,7 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-bold text-green-600">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(order.total_money || order.total || 0)}
                       </p>
                       <Badge
                         className={
@@ -1169,6 +1176,31 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
                       </Badge>
                     </div>
                   </div>
+
+                  {/* Cashback Points Display */}
+                  {(order.cashback_earned > 0 || order.points_earned > 0) && (
+                    <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
+                      <div className="flex items-center gap-2 text-sm">
+                        <svg
+                          className="h-4 w-4 text-blue-600 dark:text-blue-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span className="font-medium text-blue-700 dark:text-blue-300">
+                          +{order.cashback_earned || order.points_earned} points
+                          earned
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Order Items */}
                   {order.items && order.items.length > 0 && (
@@ -1355,7 +1387,7 @@ function CustomerFormInline({ customer, onSave, onCancel, cashier }) {
           expiryDate: formData.expiryDate.trim(),
         }),
       ...(customer && {
-        points: customer.points,
+        pointList: customer.pointList || [], // Preserve existing pointList (new cashback system)
         totalSpent: customer.totalSpent || 0,
         visitCount: customer.visitCount || 0,
       }),
@@ -2130,7 +2162,6 @@ export default function CustomersSection({ cashier }) {
     try {
       const expiry = customerApprovalService.calculateExpiryDate(duration);
       await customersService.update(customer.id, {
-        ...customer,
         expiryDate: expiry,
       });
       toast.success(
@@ -2258,7 +2289,6 @@ export default function CustomersSection({ cashier }) {
     try {
       const newPoints = currentPoints - redeemAmount;
       await customersService.update(customer.id, {
-        ...customer,
         points: newPoints, // Store as number after redemption
       });
       toast.success(

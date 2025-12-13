@@ -1079,6 +1079,25 @@ export default function HistorySection({ cashier: _cashier }) {
                   </p>
                 </div>
 
+                {/* Member (if available) */}
+                {(selectedReceipt.customerName ||
+                  selectedReceipt.customer?.name) && (
+                  <>
+                    {/* Divider */}
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Member
+                      </p>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                        {selectedReceipt.customerName ||
+                          selectedReceipt.customer?.name}
+                      </p>
+                    </div>
+                  </>
+                )}
+
                 {/* Divider */}
                 <div className="border-t border-gray-200 dark:border-gray-700"></div>
 

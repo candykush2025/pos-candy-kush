@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -14,8 +15,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Plus,
+  Minus,
   Search,
   Edit,
   Trash2,
@@ -29,38 +32,49 @@ import {
   Clock,
   AlertTriangle,
   ChevronLeft,
+  Receipt,
+  ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { customersService } from "@/lib/firebase/firestore";
+import { customersService, receiptsService } from "@/lib/firebase/firestore";
 import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
+import { customerPointsService } from "@/lib/firebase/cashbackService";
 import { formatCurrency } from "@/lib/utils/format";
 import { dbService } from "@/lib/db/dbService";
+import { format } from "date-fns";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useRouter } from "next/navigation";
 
-// Helper function to safely get points as a number
+// Helper function to calculate total points from pointList
+const calculateTotalPoints = (pointList) => {
+  if (!Array.isArray(pointList) || pointList.length === 0) {
+    return 0;
+  }
+  return pointList.reduce((total, entry) => {
+    const amount = entry.amount || 0;
+    return total + amount;
+  }, 0);
+};
+
+// Helper function to get points from pointList ONLY (NO HARDCODED FALLBACK)
 const getPointsValue = (customer) => {
   if (!customer) return 0;
-  const points =
-    customer.points || customer.customPoints || customer.totalPoints;
-  if (typeof points === "number") return points;
-  if (Array.isArray(points)) {
-    return points.reduce((sum, p) => {
-      if (typeof p === "number") return sum + p;
-      if (typeof p === "object" && p.amount !== undefined)
-        return sum + (p.amount || 0);
-      return sum;
-    }, 0);
+
+  // ONLY use pointList - new cashback system
+  if (Array.isArray(customer.pointList) && customer.pointList.length > 0) {
+    return calculateTotalPoints(customer.pointList);
   }
-  if (
-    typeof points === "object" &&
-    points !== null &&
-    points.amount !== undefined
-  ) {
-    return points.amount || 0;
-  }
+
+  // No fallback - if no pointList, customer has 0 points
+  // Old customers will show 0 until they earn points through purchases
   return 0;
 };
 
 export default function CustomersPage() {
+  const router = useRouter();
+  const { user } = useAuthStore();
+
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,6 +86,21 @@ export default function CustomersPage() {
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [isForceFetching, setIsForceFetching] = useState(false);
+
+  // Points history state
+  const [pointsHistory, setPointsHistory] = useState([]);
+  const [loadingPointsHistory, setLoadingPointsHistory] = useState(false);
+
+  // Point adjustment modal state
+  const [pointAdjustmentModal, setPointAdjustmentModal] = useState({
+    open: false,
+    type: null, // 'add' or 'reduce'
+    loading: false,
+  });
+  const [pointAdjustmentForm, setPointAdjustmentForm] = useState({
+    points: "",
+    reason: "",
+  });
 
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState([]);
@@ -113,6 +142,15 @@ export default function CustomersPage() {
   useEffect(() => {
     filterCustomers();
   }, [searchQuery, customers]);
+
+  // Load points history when viewing customer details
+  useEffect(() => {
+    if (viewMode === "detail" && selectedCustomer) {
+      loadPointsHistory(selectedCustomer);
+    } else {
+      setPointsHistory([]);
+    }
+  }, [viewMode, selectedCustomer]);
 
   const loadCategoriesFromKiosk = async () => {
     try {
@@ -214,6 +252,209 @@ export default function CustomersPage() {
     }
   };
 
+  const loadPointsHistory = async (customer) => {
+    if (!customer) return;
+
+    try {
+      setLoadingPointsHistory(true);
+
+      // First, check if customer has pointList (new system)
+      if (Array.isArray(customer.pointList) && customer.pointList.length > 0) {
+        // Use pointList from customer data
+        const history = customer.pointList
+          .map((entry) => {
+            const entryDate = entry.createdAt
+              ? new Date(entry.createdAt)
+              : null;
+
+            // Skip entries with invalid dates
+            if (!entryDate || isNaN(entryDate.getTime())) {
+              return null;
+            }
+
+            // Determine display type and description based on entry type
+            let displayType = "earn";
+            let description = "";
+
+            switch (entry.type) {
+              case "earned":
+                displayType = "earn";
+                description = entry.reason || `Earned from purchase`;
+                break;
+              case "used":
+                displayType = "deduct";
+                description = entry.reason || `Redeemed points`;
+                break;
+              case "adjustment_add":
+                displayType = "earn";
+                description = entry.reason || `Admin adjustment (add)`;
+                break;
+              case "adjustment_reduce":
+                displayType = "deduct";
+                description = entry.reason || `Admin adjustment (reduce)`;
+                break;
+              default:
+                displayType = entry.amount >= 0 ? "earn" : "deduct";
+                description = entry.reason || "Point transaction";
+            }
+
+            return {
+              id: entry.id,
+              date: entryDate,
+              type: displayType,
+              points: Math.abs(entry.amount || 0),
+              amount: entry.valueRedeemed || 0,
+              receiptNumber: entry.receiptNumber || null,
+              receiptId: entry.receiptId || null,
+              description,
+              source: entry.source,
+              adjustedBy: entry.adjustedBy,
+              cashbackRule: entry.cashbackRule,
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => b.date - a.date);
+
+        setPointsHistory(history);
+        return;
+      }
+
+      // Fallback: Build history from receipts (legacy support)
+      const allReceipts = await receiptsService.getAll();
+
+      // Filter receipts for this customer
+      const customerReceipts = allReceipts.filter((receipt) => {
+        const receiptCustomerId =
+          receipt.customerId || receipt.customer_id || receipt.customerCode;
+        const customerIds = [
+          customer.id,
+          customer.customerId,
+          customer.memberId,
+          customer.customerCode,
+        ].filter(Boolean);
+
+        return customerIds.some((id) => id === receiptCustomerId);
+      });
+
+      // Build points history from receipts
+      const history = customerReceipts
+        .map((receipt) => {
+          const receiptDate = receipt.receiptDate?.toDate
+            ? receipt.receiptDate.toDate()
+            : receipt.receipt_date?.toDate
+            ? receipt.receipt_date.toDate()
+            : new Date(receipt.createdAt || receipt.created_at);
+
+          // Only include receipts with valid dates
+          if (!receiptDate || isNaN(receiptDate.getTime())) {
+            return null;
+          }
+
+          const total =
+            receipt.totalMoney || receipt.total_money || receipt.total || 0;
+          const pointsEarned = receipt.pointsEarned || Math.floor(total / 10);
+
+          return {
+            id: receipt.id,
+            date: receiptDate,
+            type: receipt.receiptType === "REFUND" ? "deduct" : "earn",
+            points: pointsEarned,
+            amount: total,
+            receiptNumber:
+              receipt.receiptNumber || receipt.receipt_number || receipt.number,
+            receiptId: receipt.id,
+            description:
+              receipt.receiptType === "REFUND"
+                ? `Refund - Receipt #${receipt.receiptNumber || "N/A"}`
+                : `Purchase - Receipt #${receipt.receiptNumber || "N/A"}`,
+          };
+        })
+        .filter(Boolean);
+
+      // Sort by date descending
+      history.sort((a, b) => b.date - a.date);
+
+      setPointsHistory(history);
+    } catch (error) {
+      console.error("Error loading points history:", error);
+      toast.error("Failed to load points history");
+      setPointsHistory([]);
+    } finally {
+      setLoadingPointsHistory(false);
+    }
+  };
+
+  // Handle point adjustment (add or reduce)
+  const handlePointAdjustment = async () => {
+    if (!selectedCustomer) return;
+
+    const points = parseInt(pointAdjustmentForm.points);
+    if (!points || points <= 0) {
+      toast.error("Please enter a valid point amount");
+      return;
+    }
+
+    if (!pointAdjustmentForm.reason.trim()) {
+      toast.error("Please enter a reason for the adjustment");
+      return;
+    }
+
+    setPointAdjustmentModal((prev) => ({ ...prev, loading: true }));
+
+    try {
+      const admin = user || { id: "admin", name: "Admin" };
+
+      if (pointAdjustmentModal.type === "add") {
+        await customerPointsService.recordAdminAdd(
+          selectedCustomer.id,
+          points,
+          pointAdjustmentForm.reason.trim(),
+          admin
+        );
+        toast.success(`Successfully added ${points} points`);
+      } else {
+        // Check if customer has enough points
+        const currentPoints = getPointsValue(selectedCustomer);
+        if (points > currentPoints) {
+          toast.error(
+            `Cannot reduce more points than available (${currentPoints})`
+          );
+          setPointAdjustmentModal((prev) => ({ ...prev, loading: false }));
+          return;
+        }
+
+        await customerPointsService.recordAdminReduce(
+          selectedCustomer.id,
+          points,
+          pointAdjustmentForm.reason.trim(),
+          admin
+        );
+        toast.success(`Successfully reduced ${points} points`);
+      }
+
+      // Refresh customer data
+      const updatedCustomer = await customersService.get(selectedCustomer.id);
+      setSelectedCustomer(updatedCustomer);
+      loadPointsHistory(updatedCustomer);
+
+      // Reset form and close modal
+      setPointAdjustmentForm({ points: "", reason: "" });
+      setPointAdjustmentModal({ open: false, type: null, loading: false });
+    } catch (error) {
+      console.error("Error adjusting points:", error);
+      toast.error("Failed to adjust points");
+    } finally {
+      setPointAdjustmentModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Navigate to receipt detail
+  const handleViewReceipt = (receiptId) => {
+    if (receiptId) {
+      router.push(`/admin/reports/receipts?id=${receiptId}`);
+    }
+  };
+
   const handleFetchFromKiosk = async () => {
     try {
       setIsFetchingFromKiosk(true);
@@ -261,8 +502,8 @@ export default function CustomersPage() {
         isNoMember: kioskCustomer.isNoMember || false,
         isActive: kioskCustomer.isActive !== false,
 
-        // Points & Loyalty
-        customPoints: kioskCustomer.customPoints || kioskCustomer.points || 0,
+        // Points & Loyalty (use pointList system)
+        pointList: kioskCustomer.pointList || [],
         totalSpent: kioskCustomer.totalSpent || 0,
         totalVisits: kioskCustomer.totalVisits || 0,
 
@@ -630,8 +871,7 @@ export default function CustomersPage() {
         // Member Status & Points
         isNoMember: formData.isNoMember,
         isActive: formData.isActive,
-        customPoints: parseInt(formData.customPoints) || 0,
-        points: editingCustomer?.points || [],
+        pointList: editingCustomer?.pointList || [], // Preserve pointList (new cashback system)
 
         // Purchase History (preserve existing or initialize)
         totalSpent: editingCustomer?.totalSpent || 0,
@@ -763,7 +1003,6 @@ export default function CustomersPage() {
     try {
       const expiry = customerApprovalService.calculateExpiryDate(duration);
       await customersService.update(customer.id, {
-        ...customer,
         expiryDate: expiry,
       });
       toast.success(
@@ -966,6 +1205,145 @@ export default function CustomersPage() {
                     <p className="font-medium">
                       {formatDate(selectedCustomer.lastVisit)}
                     </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Points History */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5" />
+                  Points History
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                    onClick={() => {
+                      setPointAdjustmentForm({ points: "", reason: "" });
+                      setPointAdjustmentModal({
+                        open: true,
+                        type: "add",
+                        loading: false,
+                      });
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Points
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => {
+                      setPointAdjustmentForm({ points: "", reason: "" });
+                      setPointAdjustmentModal({
+                        open: true,
+                        type: "reduce",
+                        loading: false,
+                      });
+                    }}
+                  >
+                    <Minus className="h-4 w-4" />
+                    Reduce Points
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* Total Points Display */}
+                <div className="mb-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-purple-700 dark:text-purple-300">
+                      Current Balance
+                    </span>
+                    <span className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                      {getPointsValue(selectedCustomer)} pts
+                    </span>
+                  </div>
+                </div>
+
+                {loadingPointsHistory ? (
+                  <div className="flex items-center justify-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin text-neutral-400" />
+                  </div>
+                ) : pointsHistory.length === 0 ? (
+                  <div className="text-center py-8 text-neutral-500">
+                    <Award className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                    <p>No points history found</p>
+                    <p className="text-xs mt-1">
+                      Points are earned from purchases with cashback rules
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {pointsHistory.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex items-start justify-between p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {entry.type === "earn" ? (
+                              <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                <Plus className="h-4 w-4" />
+                                <span className="font-semibold">
+                                  +{entry.points}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                                <Minus className="h-4 w-4" />
+                                <span className="font-semibold">
+                                  -{entry.points}
+                                </span>
+                              </div>
+                            )}
+                            <span className="text-sm text-neutral-500">
+                              points
+                            </span>
+                            {entry.source === "admin_adjustment" && (
+                              <Badge variant="outline" className="text-xs">
+                                Admin
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm font-medium">
+                            {entry.description}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-neutral-500 mt-1">
+                            {entry.date && !isNaN(entry.date.getTime()) && (
+                              <span>
+                                {format(entry.date, "MMM dd, yyyy hh:mm a")}
+                              </span>
+                            )}
+                            {entry.receiptNumber && (
+                              <>
+                                <span>•</span>
+                                <button
+                                  onClick={() =>
+                                    handleViewReceipt(entry.receiptId)
+                                  }
+                                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  <Receipt className="h-3 w-3" />#
+                                  {entry.receiptNumber}
+                                  <ExternalLink className="h-3 w-3" />
+                                </button>
+                              </>
+                            )}
+                            {entry.adjustedBy && (
+                              <>
+                                <span>•</span>
+                                <span>by {entry.adjustedBy.name}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
@@ -2320,6 +2698,152 @@ export default function CustomersPage() {
               disabled={deleteModal.loading}
             >
               {deleteModal.loading ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Point Adjustment Modal */}
+      <Dialog
+        open={pointAdjustmentModal.open}
+        onOpenChange={(open) => {
+          if (!open && !pointAdjustmentModal.loading) {
+            setPointAdjustmentModal({
+              open: false,
+              type: null,
+              loading: false,
+            });
+            setPointAdjustmentForm({ points: "", reason: "" });
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {pointAdjustmentModal.type === "add" ? (
+                <>
+                  <Plus className="h-5 w-5 text-green-600" />
+                  Add Points
+                </>
+              ) : (
+                <>
+                  <Minus className="h-5 w-5 text-red-600" />
+                  Reduce Points
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {pointAdjustmentModal.type === "add"
+                ? "Add points to this customer's balance"
+                : "Reduce points from this customer's balance"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Current Balance Display */}
+            <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
+              <div className="text-sm text-neutral-500">Current Balance</div>
+              <div className="text-xl font-bold">
+                {selectedCustomer ? getPointsValue(selectedCustomer) : 0} points
+              </div>
+            </div>
+
+            {/* Points Input */}
+            <div className="space-y-2">
+              <Label htmlFor="adjustmentPoints">
+                Points to{" "}
+                {pointAdjustmentModal.type === "add" ? "Add" : "Reduce"}
+              </Label>
+              <Input
+                id="adjustmentPoints"
+                type="number"
+                min="1"
+                placeholder="Enter points amount"
+                value={pointAdjustmentForm.points}
+                onChange={(e) =>
+                  setPointAdjustmentForm({
+                    ...pointAdjustmentForm,
+                    points: e.target.value,
+                  })
+                }
+              />
+            </div>
+
+            {/* Reason Input */}
+            <div className="space-y-2">
+              <Label htmlFor="adjustmentReason">Reason</Label>
+              <Textarea
+                id="adjustmentReason"
+                placeholder="Enter reason for adjustment..."
+                value={pointAdjustmentForm.reason}
+                onChange={(e) =>
+                  setPointAdjustmentForm({
+                    ...pointAdjustmentForm,
+                    reason: e.target.value,
+                  })
+                }
+                rows={3}
+              />
+            </div>
+
+            {/* Preview */}
+            {pointAdjustmentForm.points && (
+              <div
+                className={`p-3 rounded-lg border ${
+                  pointAdjustmentModal.type === "add"
+                    ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                }`}
+              >
+                <div className="text-sm">
+                  New Balance:{" "}
+                  <span className="font-bold">
+                    {pointAdjustmentModal.type === "add"
+                      ? (selectedCustomer
+                          ? getPointsValue(selectedCustomer)
+                          : 0) + parseInt(pointAdjustmentForm.points || 0)
+                      : Math.max(
+                          0,
+                          (selectedCustomer
+                            ? getPointsValue(selectedCustomer)
+                            : 0) - parseInt(pointAdjustmentForm.points || 0)
+                        )}{" "}
+                    points
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPointAdjustmentModal({
+                  open: false,
+                  type: null,
+                  loading: false,
+                });
+                setPointAdjustmentForm({ points: "", reason: "" });
+              }}
+              disabled={pointAdjustmentModal.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={
+                pointAdjustmentModal.type === "add" ? "default" : "destructive"
+              }
+              onClick={handlePointAdjustment}
+              disabled={pointAdjustmentModal.loading}
+              className="gap-2"
+            >
+              {pointAdjustmentModal.loading && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              {pointAdjustmentModal.type === "add"
+                ? "Add Points"
+                : "Reduce Points"}
             </Button>
           </DialogFooter>
         </DialogContent>

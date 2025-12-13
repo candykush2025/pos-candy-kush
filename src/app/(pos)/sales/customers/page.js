@@ -39,27 +39,18 @@ import { formatCurrency } from "@/lib/utils/format";
 import { customersService } from "@/lib/firebase/firestore";
 import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
 
-// Helper function to safely get points as a number
+// Helper function to safely get points from pointList (NEW SYSTEM - NO HARDCODED POINTS)
 const getPointsValue = (customer) => {
   if (!customer) return 0;
-  const points =
-    customer.points || customer.customPoints || customer.totalPoints;
-  if (typeof points === "number") return points;
-  if (Array.isArray(points)) {
-    return points.reduce((sum, p) => {
-      if (typeof p === "number") return sum + p;
-      if (typeof p === "object" && p.amount !== undefined)
-        return sum + (p.amount || 0);
-      return sum;
+
+  // ONLY use pointList - new cashback system
+  if (Array.isArray(customer.pointList) && customer.pointList.length > 0) {
+    return customer.pointList.reduce((sum, entry) => {
+      return sum + (entry.amount || 0);
     }, 0);
   }
-  if (
-    typeof points === "object" &&
-    points !== null &&
-    points.amount !== undefined
-  ) {
-    return points.amount || 0;
-  }
+
+  // No fallback - if no pointList, customer has 0 points
   return 0;
 };
 
@@ -369,8 +360,7 @@ export default function CashierCustomersPage() {
         // Member Status & Points
         isNoMember: formData.isNoMember,
         isActive: formData.isActive,
-        customPoints: Number(formData.customPoints) || 0,
-        points: editingCustomer?.points || [],
+        pointList: editingCustomer?.pointList || [], // Preserve pointList (new cashback system)
         visitCount: editingCustomer?.visitCount || 0,
         totalSpent: editingCustomer?.totalSpent || 0,
 
@@ -538,35 +528,36 @@ export default function CashierCustomersPage() {
                           <h3 className="font-semibold text-lg">
                             {customer.name}
                           </h3>
-                          {customer.source && (
-                            <Badge
-                              variant={
-                                customer.source === "loyverse"
-                                  ? "secondary"
-                                  : "default"
-                              }
-                              className="text-xs"
-                            >
-                              {customer.source}
-                            </Badge>
-                          )}
-                          {customer.syncedToKiosk ? (
+                          {customer.isMember && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                              className="text-xs bg-blue-50 dark:bg-blue-950 border-blue-500 text-blue-700 dark:text-blue-400"
                             >
                               <CheckCircle className="h-3 w-3 mr-1" />
-                              Synced to Kiosk
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-yellow-50 dark:bg-yellow-950 border-yellow-500 text-yellow-700 dark:text-yellow-400"
-                            >
-                              <AlertCircle className="h-3 w-3 mr-1" />
-                              Not Synced
+                              Member
                             </Badge>
                           )}
+                          {customer.expiryDate &&
+                            (() => {
+                              const expiryDate = new Date(customer.expiryDate);
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const isExpired = expiryDate < today;
+
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    isExpired
+                                      ? "text-xs bg-red-50 dark:bg-red-950 border-red-500 text-red-700 dark:text-red-400"
+                                      : "text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-400"
+                                  }
+                                >
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  {isExpired ? "Expired" : "Active"}
+                                </Badge>
+                              );
+                            })()}
                         </div>
                         <p className="text-sm text-neutral-500">
                           {customer.customerCode || customer.customerId}

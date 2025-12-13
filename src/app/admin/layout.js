@@ -238,6 +238,7 @@ export default function AdminLayout({ children }) {
     },
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Customers", href: "/admin/customers", icon: UserCircle },
+    { name: "Cashback", href: "/admin/cashback", icon: Percent },
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { name: "Integration", href: "/admin/integration", icon: Link2 },
