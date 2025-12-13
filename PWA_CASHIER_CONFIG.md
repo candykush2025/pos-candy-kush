@@ -46,7 +46,7 @@ Complete installation guide for cashiers with:
 
 ### For All Users (on /login)
 
-1. Visit `https://your-domain.com` → Redirects to `/login`
+1. Visit `https://pos-candy-kush.vercel.app` → Redirects to `/login`
 2. Login page loads → Install prompt appears **instantly**
 3. Click "Install" → App installs
 4. Access via "CK POS" icon on device

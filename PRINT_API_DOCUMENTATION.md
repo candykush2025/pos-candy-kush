@@ -95,7 +95,7 @@ import java.io.IOException
 
 class PrintApiService {
     private val client = OkHttpClient()
-    private val baseUrl = "https://your-domain.com/api/print"
+    private val baseUrl = "https://pos-candy-kush.vercel.app/api/print"
 
     fun createPrintJob(printData: String, callback: (Boolean, String?) -> Unit) {
         val json = """

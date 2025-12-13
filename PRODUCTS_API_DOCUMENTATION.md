@@ -48,28 +48,28 @@ GET /api/products
 
 ```javascript
 // Fetch all products
-fetch("https://your-domain.vercel.app/api/products", {
+fetch("https://pos-candy-kush.vercel.app/api/products", {
   headers: {
     Origin: "https://pos-candy-kush.vercel.app",
   },
 });
 
 // Fetch products by category
-fetch("https://your-domain.vercel.app/api/products?categoryId=flowers", {
+fetch("https://pos-candy-kush.vercel.app/api/products?categoryId=flowers", {
   headers: {
     Origin: "https://pos-candy-kush.vercel.app",
   },
 });
 
 // Fetch active products only
-fetch("https://your-domain.vercel.app/api/products?isActive=true", {
+fetch("https://pos-candy-kush.vercel.app/api/products?isActive=true", {
   headers: {
     Origin: "https://pos-candy-kush.vercel.app",
   },
 });
 
 // Search products
-fetch("https://your-domain.vercel.app/api/products?search=kush", {
+fetch("https://pos-candy-kush.vercel.app/api/products?search=kush", {
   headers: {
     Origin: "https://pos-candy-kush.vercel.app",
   },

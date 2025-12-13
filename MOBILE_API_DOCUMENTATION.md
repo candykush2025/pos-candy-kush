@@ -5,7 +5,7 @@ This document provides comprehensive documentation for the POS Candy Kush Mobile
 ## Base URL
 
 ```
-https://your-domain.com/api/mobile
+https://pos-candy-kush.vercel.app/api/mobile
 ```
 
 ## Authentication
@@ -160,9 +160,11 @@ Content-Type: application/json
 
 ## 1. Sales Summary
 
-Get overall sales metrics and transaction statistics.
+Get day-by-day sales metrics and transaction statistics. This endpoint returns detailed data for each day in the selected period, allowing the mobile app to perform its own calculations and summaries.
 
 **Authentication:** JWT token required
+
+**Note:** The API returns raw daily data without aggregation. Your mobile app should calculate totals, averages, and summaries from the daily data for better performance.
 
 ### Request
 
@@ -184,16 +186,16 @@ GET /api/mobile?action=sales-summary&period=today
 
 ```bash
 # Today's sales
-curl "https://your-domain.com/api/mobile?action=sales-summary&period=today"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=sales-summary&period=today"
 
 # This month's sales
-curl "https://your-domain.com/api/mobile?action=sales-summary&period=this_month"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=sales-summary&period=this_month"
 
 # Custom date range
-curl "https://your-domain.com/api/mobile?action=sales-summary&period=custom&start_date=2024-01-01&end_date=2024-01-31"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=sales-summary&period=custom&start_date=2024-01-01&end_date=2024-01-31"
 
 # Filter by specific employees
-curl "https://your-domain.com/api/mobile?action=sales-summary&period=this_week&employee_ids=emp_001,emp_002"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=sales-summary&period=this_week&employee_ids=emp_001,emp_002"
 ```
 
 ### Response
@@ -202,10 +204,10 @@ curl "https://your-domain.com/api/mobile?action=sales-summary&period=this_week&e
 {
   "success": true,
   "action": "sales-summary",
-  "period": "today",
+  "period": "this_month",
   "filters": {
     "date_range": {
-      "from": "2024-12-10T00:00:00.000Z",
+      "from": "2024-12-01T00:00:00.000Z",
       "to": "2024-12-10T23:59:59.999Z"
     },
     "employee_ids": null
@@ -213,53 +215,113 @@ curl "https://your-domain.com/api/mobile?action=sales-summary&period=this_week&e
   "generated_at": "2024-12-10T14:30:00.000Z",
   "data": {
     "period": {
-      "from": "2024-12-10T00:00:00.000Z",
+      "from": "2024-12-01T00:00:00.000Z",
       "to": "2024-12-10T23:59:59.999Z"
     },
-    "metrics": {
-      "gross_sales": 15000.0,
-      "refunds": 500.0,
-      "discounts": 200.0,
-      "taxes": 1200.0,
-      "net_sales": 14300.0,
-      "cost_of_goods": 8000.0,
-      "gross_profit": 6300.0,
-      "profit_margin": 44.06
-    },
-    "transactions": {
-      "total_count": 45,
-      "refund_count": 2,
-      "average_value": 333.33,
-      "items_sold": 150
-    }
+    "daily_data": [
+      {
+        "date": "2024-12-01",
+        "metrics": {
+          "gross_sales": 1500.0,
+          "refunds": 0.0,
+          "discounts": 50.0,
+          "taxes": 120.0,
+          "net_sales": 1450.0,
+          "cost_of_goods": 800.0,
+          "gross_profit": 650.0,
+          "profit_margin": 44.83
+        },
+        "transactions": {
+          "total_count": 5,
+          "refund_count": 0,
+          "average_value": 300.0,
+          "items_sold": 15
+        },
+        "receipts": [
+          {
+            "receipt_id": "rec_001",
+            "receipt_number": "R-001",
+            "receipt_type": "SALE",
+            "total": 300.0,
+            "discount": 10.0,
+            "tax": 24.0,
+            "employee_id": "emp_001",
+            "employee_name": "John Doe",
+            "timestamp": "2024-12-01T10:30:00.000Z",
+            "line_items": [
+              {
+                "item_id": "prod_001",
+                "item_name": "Blue Dream - 3.5g",
+                "quantity": 1,
+                "price": 50.0,
+                "total": 50.0,
+                "cost": 30.0,
+                "discount": 0.0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2024-12-02",
+        "metrics": {
+          "gross_sales": 2000.0,
+          "refunds": 100.0,
+          "discounts": 30.0,
+          "taxes": 150.0,
+          "net_sales": 1870.0,
+          "cost_of_goods": 1000.0,
+          "gross_profit": 870.0,
+          "profit_margin": 46.52
+        },
+        "transactions": {
+          "total_count": 8,
+          "refund_count": 1,
+          "average_value": 250.0,
+          "items_sold": 20
+        },
+        "receipts": []
+      }
+    ]
   }
 }
 ```
 
 ### Response Fields
 
-| Field                        | Type   | Description                         |
-| ---------------------------- | ------ | ----------------------------------- |
-| `metrics.gross_sales`        | number | Total sales before deductions       |
-| `metrics.refunds`            | number | Total refund amount                 |
-| `metrics.discounts`          | number | Total discounts applied             |
-| `metrics.taxes`              | number | Total taxes collected               |
-| `metrics.net_sales`          | number | Gross sales - refunds - discounts   |
-| `metrics.cost_of_goods`      | number | Total cost of sold items            |
-| `metrics.gross_profit`       | number | Net sales - cost of goods           |
-| `metrics.profit_margin`      | number | Profit margin percentage            |
-| `transactions.total_count`   | number | Total number of sales transactions  |
-| `transactions.refund_count`  | number | Total number of refund transactions |
-| `transactions.average_value` | number | Average transaction value           |
-| `transactions.items_sold`    | number | Total items sold                    |
+| Field                        | Type   | Description                            |
+| ---------------------------- | ------ | -------------------------------------- |
+| `daily_data`                 | array  | Array of daily sales data              |
+| `daily_data[].date`          | string | Date in YYYY-MM-DD format              |
+| `daily_data[].receipts`      | array  | All receipts for that day              |
+| `metrics.gross_sales`        | number | Total sales before deductions          |
+| `metrics.refunds`            | number | Total refund amount                    |
+| `metrics.discounts`          | number | Total discounts applied                |
+| `metrics.taxes`              | number | Total taxes collected                  |
+| `metrics.net_sales`          | number | Gross sales - refunds - discounts      |
+| `metrics.cost_of_goods`      | number | Total cost of sold items               |
+| `metrics.gross_profit`       | number | Net sales - cost of goods              |
+| `metrics.profit_margin`      | number | Profit margin percentage               |
+| `transactions.total_count`   | number | Total number of sales transactions     |
+| `transactions.refund_count`  | number | Total number of refund transactions    |
+| `transactions.average_value` | number | Average transaction value              |
+| `transactions.items_sold`    | number | Total items sold                       |
+| `receipts[].receipt_id`      | string | Unique receipt identifier              |
+| `receipts[].receipt_number`  | string | Human-readable receipt number          |
+| `receipts[].receipt_type`    | string | SALE or REFUND                         |
+| `receipts[].total`           | number | Receipt total amount                   |
+| `receipts[].employee_id`     | string | Employee who processed the transaction |
+| `receipts[].line_items`      | array  | Items in the receipt                   |
 
 ---
 
 ## 2. Sales by Item
 
-Get sales breakdown by individual products/items.
+Get sales breakdown by individual products/items on a day-by-day basis.
 
 **Authentication:** JWT token required
+
+**Note:** Returns daily breakdown of item sales. The mobile app should aggregate data across days if needed.
 
 ### Request
 
@@ -270,7 +332,7 @@ GET /api/mobile?action=sales-by-item&period=this_month
 ### Example Request
 
 ```bash
-curl "https://your-domain.com/api/mobile?action=sales-by-item&period=this_week"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=sales-by-item&period=this_week"
 ```
 
 ### Response
@@ -293,46 +355,63 @@ curl "https://your-domain.com/api/mobile?action=sales-by-item&period=this_week"
       "from": "2024-12-09T00:00:00.000Z",
       "to": "2024-12-10T23:59:59.999Z"
     },
-    "items": [
+    "daily_data": [
       {
-        "item_id": "prod_001",
-        "item_name": "Blue Dream - 3.5g",
-        "category": "Flower",
-        "sku": "BD-35G",
-        "quantity_sold": 50,
-        "gross_sales": 2500.0,
-        "net_sales": 2400.0,
-        "cost_of_goods": 1500.0,
-        "discounts": 100.0,
-        "gross_profit": 900.0,
-        "profit_margin": 36.0,
-        "average_price": 50.0,
-        "transaction_count": 45
+        "date": "2024-12-09",
+        "items": [
+          {
+            "item_id": "prod_001",
+            "item_name": "Blue Dream - 3.5g",
+            "category": "Flower",
+            "sku": "BD-35G",
+            "quantity_sold": 25,
+            "gross_sales": 1250.0,
+            "net_sales": 1200.0,
+            "cost_of_goods": 750.0,
+            "discounts": 50.0,
+            "gross_profit": 450.0,
+            "profit_margin": 36.0,
+            "average_price": 50.0,
+            "transaction_count": 20
+          }
+        ]
       },
       {
-        "item_id": "prod_002",
-        "item_name": "OG Kush - 1g Cartridge",
-        "category": "Vaporizers",
-        "sku": "OGK-1G",
-        "quantity_sold": 30,
-        "gross_sales": 1500.0,
-        "net_sales": 1450.0,
-        "cost_of_goods": 900.0,
-        "discounts": 50.0,
-        "gross_profit": 550.0,
-        "profit_margin": 36.67,
-        "average_price": 50.0,
-        "transaction_count": 28
+        "date": "2024-12-10",
+        "items": [
+          {
+            "item_id": "prod_001",
+            "item_name": "Blue Dream - 3.5g",
+            "category": "Flower",
+            "sku": "BD-35G",
+            "quantity_sold": 25,
+            "gross_sales": 1250.0,
+            "net_sales": 1200.0,
+            "cost_of_goods": 750.0,
+            "discounts": 50.0,
+            "gross_profit": 450.0,
+            "profit_margin": 36.0,
+            "average_price": 50.0,
+            "transaction_count": 25
+          },
+          {
+            "item_id": "prod_002",
+            "item_name": "OG Kush - 1g Cartridge",
+            "category": "Vaporizers",
+            "sku": "OGK-1G",
+            "quantity_sold": 30,
+            "gross_sales": 1500.0,
+            "net_sales": 1450.0,
+            "cost_of_goods": 900.0,
+            "discounts": 50.0,
+            "gross_profit": 550.0,
+            "profit_margin": 36.67,
+            "average_price": 50.0,
+            "transaction_count": 28
+          }
+        ]
       }
-    ],
-    "totals": {
-      "total_quantity": 80,
-      "total_gross_sales": 4000.0,
-      "total_net_sales": 3850.0,
-      "total_cost": 2400.0,
-      "total_profit": 1450.0,
-      "item_count": 2
-    }
+    ]
   }
 }
 ```
@@ -372,7 +451,7 @@ GET /api/mobile?action=sales-by-category&period=this_month
 ### Example Request
 
 ```bash
-curl "https://your-domain.com/api/mobile?action=sales-by-category&period=this_month"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=sales-by-category&period=this_month"
 ```
 
 ### Response
@@ -395,49 +474,54 @@ curl "https://your-domain.com/api/mobile?action=sales-by-category&period=this_mo
       "from": "2024-12-01T00:00:00.000Z",
       "to": "2024-12-10T23:59:59.999Z"
     },
-    "categories": [
+    "daily_data": [
       {
-        "category_id": "cat_001",
-        "category_name": "Flower",
-        "quantity_sold": 200,
-        "gross_sales": 10000.0,
-        "net_sales": 9500.0,
-        "cost_of_goods": 5500.0,
-        "discounts": 500.0,
-        "gross_profit": 4000.0,
-        "item_count": 150,
-        "percentage_of_sales": 45.45
+        "date": "2024-12-01",
+        "categories": [
+          {
+            "category_id": "cat_001",
+            "category_name": "Flower",
+            "quantity_sold": 20,
+            "gross_sales": 1000.0,
+            "net_sales": 950.0,
+            "cost_of_goods": 550.0,
+            "discounts": 50.0,
+            "gross_profit": 400.0,
+            "item_count": 15,
+            "percentage_of_sales": 50.0
+          },
+          {
+            "category_id": "cat_002",
+            "category_name": "Vaporizers",
+            "quantity_sold": 10,
+            "gross_sales": 1000.0,
+            "net_sales": 1000.0,
+            "cost_of_goods": 600.0,
+            "discounts": 0.0,
+            "gross_profit": 400.0,
+            "item_count": 10,
+            "percentage_of_sales": 50.0
+          }
+        ]
       },
       {
-        "category_id": "cat_002",
-        "category_name": "Vaporizers",
-        "quantity_sold": 100,
-        "gross_sales": 6000.0,
-        "net_sales": 5800.0,
-        "cost_of_goods": 3500.0,
-        "discounts": 200.0,
-        "gross_profit": 2300.0,
-        "item_count": 80,
-        "percentage_of_sales": 27.27
-      },
-      {
-        "category_id": "cat_003",
-        "category_name": "Edibles",
-        "quantity_sold": 150,
-        "gross_sales": 6000.0,
-        "net_sales": 5700.0,
-        "cost_of_goods": 3000.0,
-        "discounts": 300.0,
-        "gross_profit": 2700.0,
-        "item_count": 120,
-        "percentage_of_sales": 27.27
+        "date": "2024-12-02",
+        "categories": [
+          {
+            "category_id": "cat_001",
+            "category_name": "Flower",
+            "quantity_sold": 200,
+            "gross_sales": 10000.0,
+            "net_sales": 9500.0,
+            "cost_of_goods": 5500.0,
+            "discounts": 500.0,
+            "gross_profit": 4000.0,
+            "item_count": 150,
+            "percentage_of_sales": 45.45
+          }
+        ]
       }
-    ],
-    "totals": {
-      "total_categories": 3,
-      "total_gross_sales": 22000.0,
-      "total_items_sold": 450
-    }
+    ]
   }
 }
 ```
@@ -474,7 +558,7 @@ GET /api/mobile?action=sales-by-employee&period=today
 ### Example Request
 
 ```bash
-curl "https://your-domain.com/api/mobile?action=sales-by-employee&period=today"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=sales-by-employee&period=today"
 ```
 
 ### Response
@@ -497,39 +581,37 @@ curl "https://your-domain.com/api/mobile?action=sales-by-employee&period=today"
       "from": "2024-12-10T00:00:00.000Z",
       "to": "2024-12-10T23:59:59.999Z"
     },
-    "employees": [
+    "daily_data": [
       {
-        "employee_id": "emp_001",
-        "employee_name": "John Smith",
-        "gross_sales": 5000.0,
-        "refunds": 100.0,
-        "discounts": 150.0,
-        "net_sales": 4750.0,
-        "transaction_count": 20,
-        "refund_count": 1,
-        "items_sold": 65,
-        "average_transaction": 250.0
-      },
-      {
-        "employee_id": "emp_002",
-        "employee_name": "Jane Doe",
-        "gross_sales": 4500.0,
-        "refunds": 0.0,
-        "discounts": 100.0,
-        "net_sales": 4400.0,
-        "transaction_count": 18,
-        "refund_count": 0,
-        "items_sold": 55,
-        "average_transaction": 250.0
+        "date": "2024-12-10",
+        "employees": [
+          {
+            "employee_id": "emp_001",
+            "employee_name": "John Smith",
+            "gross_sales": 5000.0,
+            "refunds": 100.0,
+            "discounts": 150.0,
+            "net_sales": 4750.0,
+            "transaction_count": 20,
+            "refund_count": 1,
+            "items_sold": 65,
+            "average_transaction": 250.0
+          },
+          {
+            "employee_id": "emp_002",
+            "employee_name": "Jane Doe",
+            "gross_sales": 4500.0,
+            "refunds": 0.0,
+            "discounts": 100.0,
+            "net_sales": 4400.0,
+            "transaction_count": 18,
+            "refund_count": 0,
+            "items_sold": 55,
+            "average_transaction": 250.0
+          }
+        ]
       }
-    ],
-    "totals": {
-      "total_gross_sales": 9500.0,
-      "total_net_sales": 9150.0,
-      "total_transactions": 38,
-      "total_items_sold": 120,
-      "employee_count": 2
-    }
+    ]
   }
 }
 ```
@@ -566,7 +648,7 @@ GET /api/mobile?action=stock
 ### Example Request
 
 ```bash
-curl "https://your-domain.com/api/mobile?action=stock"
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=stock"
 ```
 
 ### Response
@@ -1036,7 +1118,7 @@ class MobileApiService {
 ### React Native (JavaScript/TypeScript)
 
 ```typescript
-const BASE_URL = "https://your-domain.com";
+const BASE_URL = "https://pos-candy-kush.vercel.app";
 
 interface SalesMetrics {
   gross_sales: number;
@@ -1225,6 +1307,16 @@ Currently no rate limiting is applied. In production, consider implementing:
 ---
 
 ## Changelog
+
+### Version 1.2.0 (December 2024)
+
+- **Day-by-day data structure**: All sales endpoints now return daily breakdown instead of aggregated totals
+- Mobile apps can now calculate their own summaries for better performance
+- Sales Summary returns `daily_data` array with metrics, transactions, and receipts for each day
+- Sales by Item returns `daily_data` with items sold each day
+- Sales by Category returns `daily_data` with category sales for each day
+- Sales by Employee returns `daily_data` with employee performance for each day
+- Faster API response times by eliminating server-side aggregation
 
 ### Version 1.1.0 (December 2024)
 

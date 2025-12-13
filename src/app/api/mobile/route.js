@@ -35,6 +35,8 @@ import {
   startOfMonth,
   startOfYear,
   subDays,
+  eachDayOfInterval,
+  format,
 } from "date-fns";
 
 // CORS headers for mobile apps
@@ -153,89 +155,152 @@ function filterReceipts(receipts, dateRange, employeeIds = []) {
   });
 }
 
-// Calculate Sales Summary
-async function getSalesSummary(receipts, dateRange) {
-  const filteredReceipts = receipts;
+// Helper: Group receipts by day
+function groupReceiptsByDay(receipts, dateRange) {
+  // Get all dates in the range
+  const daysInRange = eachDayOfInterval({
+    start: dateRange.from,
+    end: dateRange.to,
+  });
 
-  // Current period metrics
-  const salesReceipts = filteredReceipts.filter(
-    (r) => r.receiptType !== "REFUND"
-  );
-  const refundReceipts = filteredReceipts.filter(
-    (r) => r.receiptType === "REFUND"
-  );
-
-  const grossSales = salesReceipts.reduce(
-    (sum, r) => sum + getReceiptTotal(r),
-    0
-  );
-  const refunds = refundReceipts.reduce(
-    (sum, r) => sum + Math.abs(getReceiptTotal(r)),
-    0
-  );
-  const discounts = filteredReceipts.reduce(
-    (sum, r) => sum + getReceiptDiscount(r),
-    0
-  );
-  const taxes = filteredReceipts.reduce((sum, r) => sum + getReceiptTax(r), 0);
-  const netSales = grossSales - refunds - discounts;
-
-  // Calculate cost of goods and profit
-  let costOfGoods = 0;
-  filteredReceipts.forEach((receipt) => {
-    const lineItems = receipt.lineItems || receipt.line_items || [];
-    lineItems.forEach((item) => {
-      const cost = item.cost || item.item_cost || 0;
-      const qty = item.quantity || 1;
-      costOfGoods += cost * qty;
+  // Create a map for each day
+  const dayMap = new Map();
+  daysInRange.forEach((day) => {
+    const dateKey = format(day, "yyyy-MM-dd");
+    dayMap.set(dateKey, {
+      date: dateKey,
+      receipts: [],
     });
   });
 
-  const grossProfit = netSales - costOfGoods;
-  const profitMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
+  // Group receipts by day
+  receipts.forEach((receipt) => {
+    const receiptDate = getReceiptDate(receipt);
+    const dateKey = format(receiptDate, "yyyy-MM-dd");
+    if (dayMap.has(dateKey)) {
+      dayMap.get(dateKey).receipts.push(receipt);
+    }
+  });
 
-  // Transaction counts
-  const transactionCount = salesReceipts.length;
-  const refundCount = refundReceipts.length;
-  const averageTransaction =
-    transactionCount > 0 ? grossSales / transactionCount : 0;
+  return Array.from(dayMap.values());
+}
 
-  // Items sold
-  const itemsSold = salesReceipts.reduce((sum, receipt) => {
-    const lineItems = receipt.lineItems || receipt.line_items || [];
-    return (
-      sum +
-      lineItems.reduce((itemSum, item) => itemSum + (item.quantity || 1), 0)
+// Calculate Sales Summary - Day by Day
+async function getSalesSummary(receipts, dateRange) {
+  const groupedByDay = groupReceiptsByDay(receipts, dateRange);
+
+  // Calculate metrics for each day
+  const dailyData = groupedByDay.map((dayData) => {
+    const dayReceipts = dayData.receipts;
+    const salesReceipts = dayReceipts.filter((r) => r.receiptType !== "REFUND");
+    const refundReceipts = dayReceipts.filter(
+      (r) => r.receiptType === "REFUND"
     );
-  }, 0);
+
+    const grossSales = salesReceipts.reduce(
+      (sum, r) => sum + getReceiptTotal(r),
+      0
+    );
+    const refunds = refundReceipts.reduce(
+      (sum, r) => sum + Math.abs(getReceiptTotal(r)),
+      0
+    );
+    const discounts = dayReceipts.reduce(
+      (sum, r) => sum + getReceiptDiscount(r),
+      0
+    );
+    const taxes = dayReceipts.reduce((sum, r) => sum + getReceiptTax(r), 0);
+    const netSales = grossSales - refunds - discounts;
+
+    // Calculate cost of goods
+    let costOfGoods = 0;
+    dayReceipts.forEach((receipt) => {
+      const lineItems = receipt.lineItems || receipt.line_items || [];
+      lineItems.forEach((item) => {
+        const cost = item.cost || item.item_cost || 0;
+        const qty = item.quantity || 1;
+        costOfGoods += cost * qty;
+      });
+    });
+
+    const grossProfit = netSales - costOfGoods;
+    const profitMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
+
+    // Transaction counts
+    const transactionCount = salesReceipts.length;
+    const refundCount = refundReceipts.length;
+    const averageTransaction =
+      transactionCount > 0 ? grossSales / transactionCount : 0;
+
+    // Items sold
+    const itemsSold = salesReceipts.reduce((sum, receipt) => {
+      const lineItems = receipt.lineItems || receipt.line_items || [];
+      return (
+        sum +
+        lineItems.reduce((itemSum, item) => itemSum + (item.quantity || 1), 0)
+      );
+    }, 0);
+
+    return {
+      date: dayData.date,
+      metrics: {
+        gross_sales: Math.round(grossSales * 100) / 100,
+        refunds: Math.round(refunds * 100) / 100,
+        discounts: Math.round(discounts * 100) / 100,
+        taxes: Math.round(taxes * 100) / 100,
+        net_sales: Math.round(netSales * 100) / 100,
+        cost_of_goods: Math.round(costOfGoods * 100) / 100,
+        gross_profit: Math.round(grossProfit * 100) / 100,
+        profit_margin: Math.round(profitMargin * 100) / 100,
+      },
+      transactions: {
+        total_count: transactionCount,
+        refund_count: refundCount,
+        average_value: Math.round(averageTransaction * 100) / 100,
+        items_sold: itemsSold,
+      },
+      receipts: dayReceipts.map((receipt) => ({
+        receipt_id: receipt.id,
+        receipt_number: receipt.receiptNumber || receipt.receipt_number,
+        receipt_type: receipt.receiptType || receipt.receipt_type,
+        total: Math.round(getReceiptTotal(receipt) * 100) / 100,
+        discount: Math.round(getReceiptDiscount(receipt) * 100) / 100,
+        tax: Math.round(getReceiptTax(receipt) * 100) / 100,
+        employee_id:
+          receipt.employeeId ||
+          receipt.employee_id ||
+          receipt.userId ||
+          receipt.user_id,
+        employee_name:
+          receipt.employeeName || receipt.cashierName || receipt.userName,
+        timestamp: getReceiptDate(receipt).toISOString(),
+        line_items: (receipt.lineItems || receipt.line_items || []).map(
+          (item) => ({
+            item_id: item.item_id || item.itemId || item.id,
+            item_name: item.item_name || item.itemName || item.name,
+            quantity: item.quantity || 1,
+            price: item.price || item.item_price || 0,
+            total: item.line_total || item.lineTotal || item.total_money || 0,
+            cost: item.cost || item.item_cost || 0,
+            discount: item.discount || item.line_discount || 0,
+          })
+        ),
+      })),
+    };
+  });
 
   return {
     period: {
       from: dateRange.from.toISOString(),
       to: dateRange.to.toISOString(),
     },
-    metrics: {
-      gross_sales: Math.round(grossSales * 100) / 100,
-      refunds: Math.round(refunds * 100) / 100,
-      discounts: Math.round(discounts * 100) / 100,
-      taxes: Math.round(taxes * 100) / 100,
-      net_sales: Math.round(netSales * 100) / 100,
-      cost_of_goods: Math.round(costOfGoods * 100) / 100,
-      gross_profit: Math.round(grossProfit * 100) / 100,
-      profit_margin: Math.round(profitMargin * 100) / 100,
-    },
-    transactions: {
-      total_count: transactionCount,
-      refund_count: refundCount,
-      average_value: Math.round(averageTransaction * 100) / 100,
-      items_sold: itemsSold,
-    },
+    daily_data: dailyData,
   };
 }
 
-// Calculate Sales by Item
-async function getSalesByItem(receipts, products) {
-  const filteredReceipts = receipts.filter((r) => r.receiptType !== "REFUND");
+// Calculate Sales by Item - Day by Day
+async function getSalesByItem(receipts, products, dateRange) {
+  const groupedByDay = groupReceiptsByDay(receipts, dateRange);
 
   // Create product lookup map
   const productMap = new Map();
@@ -251,123 +316,111 @@ async function getSalesByItem(receipts, products) {
     });
   });
 
-  // Aggregate sales by item
-  const itemSalesMap = new Map();
+  // Calculate for each day
+  const dailyData = groupedByDay.map((dayData) => {
+    const dayReceipts = dayData.receipts.filter(
+      (r) => r.receiptType !== "REFUND"
+    );
+    const itemSalesMap = new Map();
 
-  filteredReceipts.forEach((receipt) => {
-    const lineItems = receipt.lineItems || receipt.line_items || [];
-    lineItems.forEach((item) => {
-      const itemId =
-        item.item_id || item.itemId || item.id || item.productId || "unknown";
-      const itemName =
-        item.item_name ||
-        item.itemName ||
-        item.name ||
-        productMap.get(itemId)?.name ||
-        "Unknown Item";
-      const category =
-        item.category ||
-        item.categoryName ||
-        productMap.get(itemId)?.category ||
-        "Uncategorized";
-      const sku = item.sku || productMap.get(itemId)?.sku || "";
+    dayReceipts.forEach((receipt) => {
+      const lineItems = receipt.lineItems || receipt.line_items || [];
+      lineItems.forEach((item) => {
+        const itemId =
+          item.item_id || item.itemId || item.id || item.productId || "unknown";
+        const itemName =
+          item.item_name ||
+          item.itemName ||
+          item.name ||
+          productMap.get(itemId)?.name ||
+          "Unknown Item";
+        const category =
+          item.category ||
+          item.categoryName ||
+          productMap.get(itemId)?.category ||
+          "Uncategorized";
+        const sku = item.sku || productMap.get(itemId)?.sku || "";
 
-      const quantity = item.quantity || 1;
-      const price = item.price || item.item_price || 0;
-      const lineTotal =
-        item.line_total ||
-        item.lineTotal ||
-        item.total_money ||
-        price * quantity;
-      const cost = item.cost || item.item_cost || 0;
-      const costTotal = cost * quantity;
-      const discount = item.discount || item.line_discount || 0;
+        const quantity = item.quantity || 1;
+        const price = item.price || item.item_price || 0;
+        const lineTotal =
+          item.line_total ||
+          item.lineTotal ||
+          item.total_money ||
+          price * quantity;
+        const cost = item.cost || item.item_cost || 0;
+        const costTotal = cost * quantity;
+        const discount = item.discount || item.line_discount || 0;
 
-      if (itemSalesMap.has(itemId)) {
-        const existing = itemSalesMap.get(itemId);
-        existing.quantity_sold += quantity;
-        existing.gross_sales += lineTotal;
-        existing.cost_of_goods += costTotal;
-        existing.discounts += discount;
-        existing.transaction_count += 1;
-      } else {
-        itemSalesMap.set(itemId, {
-          item_id: itemId,
-          item_name: itemName,
-          category: category,
-          sku: sku,
-          quantity_sold: quantity,
-          gross_sales: lineTotal,
-          cost_of_goods: costTotal,
-          discounts: discount,
-          transaction_count: 1,
-        });
-      }
+        if (itemSalesMap.has(itemId)) {
+          const existing = itemSalesMap.get(itemId);
+          existing.quantity_sold += quantity;
+          existing.gross_sales += lineTotal;
+          existing.cost_of_goods += costTotal;
+          existing.discounts += discount;
+          existing.transaction_count += 1;
+        } else {
+          itemSalesMap.set(itemId, {
+            item_id: itemId,
+            item_name: itemName,
+            category: category,
+            sku: sku,
+            quantity_sold: quantity,
+            gross_sales: lineTotal,
+            cost_of_goods: costTotal,
+            discounts: discount,
+            transaction_count: 1,
+          });
+        }
+      });
     });
+
+    // Convert to array and calculate net sales/profit
+    const items = Array.from(itemSalesMap.values()).map((item) => ({
+      ...item,
+      gross_sales: Math.round(item.gross_sales * 100) / 100,
+      net_sales: Math.round((item.gross_sales - item.discounts) * 100) / 100,
+      cost_of_goods: Math.round(item.cost_of_goods * 100) / 100,
+      discounts: Math.round(item.discounts * 100) / 100,
+      gross_profit:
+        Math.round(
+          (item.gross_sales - item.discounts - item.cost_of_goods) * 100
+        ) / 100,
+      profit_margin:
+        item.gross_sales > 0
+          ? Math.round(
+              ((item.gross_sales - item.discounts - item.cost_of_goods) /
+                item.gross_sales) *
+                10000
+            ) / 100
+          : 0,
+      average_price:
+        item.quantity_sold > 0
+          ? Math.round((item.gross_sales / item.quantity_sold) * 100) / 100
+          : 0,
+    }));
+
+    // Sort by gross sales descending
+    items.sort((a, b) => b.gross_sales - a.gross_sales);
+
+    return {
+      date: dayData.date,
+      items: items,
+    };
   });
 
-  // Convert to array and calculate net sales/profit
-  const items = Array.from(itemSalesMap.values()).map((item) => ({
-    ...item,
-    gross_sales: Math.round(item.gross_sales * 100) / 100,
-    net_sales: Math.round((item.gross_sales - item.discounts) * 100) / 100,
-    cost_of_goods: Math.round(item.cost_of_goods * 100) / 100,
-    discounts: Math.round(item.discounts * 100) / 100,
-    gross_profit:
-      Math.round(
-        (item.gross_sales - item.discounts - item.cost_of_goods) * 100
-      ) / 100,
-    profit_margin:
-      item.gross_sales > 0
-        ? Math.round(
-            ((item.gross_sales - item.discounts - item.cost_of_goods) /
-              item.gross_sales) *
-              10000
-          ) / 100
-        : 0,
-    average_price:
-      item.quantity_sold > 0
-        ? Math.round((item.gross_sales / item.quantity_sold) * 100) / 100
-        : 0,
-  }));
-
-  // Sort by gross sales descending
-  items.sort((a, b) => b.gross_sales - a.gross_sales);
-
-  // Calculate totals
-  const totals = items.reduce(
-    (acc, item) => ({
-      total_quantity: acc.total_quantity + item.quantity_sold,
-      total_gross_sales: acc.total_gross_sales + item.gross_sales,
-      total_net_sales: acc.total_net_sales + item.net_sales,
-      total_cost: acc.total_cost + item.cost_of_goods,
-      total_profit: acc.total_profit + item.gross_profit,
-    }),
-    {
-      total_quantity: 0,
-      total_gross_sales: 0,
-      total_net_sales: 0,
-      total_cost: 0,
-      total_profit: 0,
-    }
-  );
-
   return {
-    items,
-    totals: {
-      ...totals,
-      total_gross_sales: Math.round(totals.total_gross_sales * 100) / 100,
-      total_net_sales: Math.round(totals.total_net_sales * 100) / 100,
-      total_cost: Math.round(totals.total_cost * 100) / 100,
-      total_profit: Math.round(totals.total_profit * 100) / 100,
-      item_count: items.length,
+    period: {
+      from: dateRange.from.toISOString(),
+      to: dateRange.to.toISOString(),
     },
+    daily_data: dailyData,
   };
 }
 
-// Calculate Sales by Category
-async function getSalesByCategory(receipts, products, categories) {
-  const filteredReceipts = receipts.filter((r) => r.receiptType !== "REFUND");
+// Calculate Sales by Category - Day by Day
+async function getSalesByCategory(receipts, products, categories, dateRange) {
+  const groupedByDay = groupReceiptsByDay(receipts, dateRange);
 
   // Create category name lookup
   const categoryNameMap = new Map();
@@ -390,99 +443,108 @@ async function getSalesByCategory(receipts, products, categories) {
     }
   });
 
-  // Aggregate sales by category
-  const categorySalesMap = new Map();
+  // Calculate for each day
+  const dailyData = groupedByDay.map((dayData) => {
+    const dayReceipts = dayData.receipts.filter(
+      (r) => r.receiptType !== "REFUND"
+    );
+    const categorySalesMap = new Map();
 
-  filteredReceipts.forEach((receipt) => {
-    const lineItems = receipt.lineItems || receipt.line_items || [];
-    lineItems.forEach((item) => {
-      const itemId = item.item_id || item.itemId || item.id;
-      const itemName = item.item_name || item.itemName || item.name;
+    dayReceipts.forEach((receipt) => {
+      const lineItems = receipt.lineItems || receipt.line_items || [];
+      lineItems.forEach((item) => {
+        const itemId = item.item_id || item.itemId || item.id;
+        const itemName = item.item_name || item.itemName || item.name;
 
-      // Try to get category from item first, then from product mapping
-      let categoryId = item.category_id || item.categoryId || item.category;
-      if (!categoryId && itemId) {
-        categoryId = productCategoryMap.get(itemId);
-      }
-      if (!categoryId && itemName) {
-        categoryId = productCategoryMap.get(itemName);
-      }
-      categoryId = categoryId || "uncategorized";
+        // Try to get category from item first, then from product mapping
+        let categoryId = item.category_id || item.categoryId || item.category;
+        if (!categoryId && itemId) {
+          categoryId = productCategoryMap.get(itemId);
+        }
+        if (!categoryId && itemName) {
+          categoryId = productCategoryMap.get(itemName);
+        }
+        categoryId = categoryId || "uncategorized";
 
-      const categoryName =
-        categoryNameMap.get(categoryId) || categoryId || "Uncategorized";
-      const quantity = item.quantity || 1;
-      const price = item.price || item.item_price || 0;
-      const lineTotal =
-        item.line_total ||
-        item.lineTotal ||
-        item.total_money ||
-        price * quantity;
-      const cost = item.cost || item.item_cost || 0;
-      const costTotal = cost * quantity;
-      const discount = item.discount || item.line_discount || 0;
+        const categoryName =
+          categoryNameMap.get(categoryId) || categoryId || "Uncategorized";
+        const quantity = item.quantity || 1;
+        const price = item.price || item.item_price || 0;
+        const lineTotal =
+          item.line_total ||
+          item.lineTotal ||
+          item.total_money ||
+          price * quantity;
+        const cost = item.cost || item.item_cost || 0;
+        const costTotal = cost * quantity;
+        const discount = item.discount || item.line_discount || 0;
 
-      if (categorySalesMap.has(categoryId)) {
-        const existing = categorySalesMap.get(categoryId);
-        existing.quantity_sold += quantity;
-        existing.gross_sales += lineTotal;
-        existing.cost_of_goods += costTotal;
-        existing.discounts += discount;
-        existing.item_count += 1;
-      } else {
-        categorySalesMap.set(categoryId, {
-          category_id: categoryId,
-          category_name: categoryName,
-          quantity_sold: quantity,
-          gross_sales: lineTotal,
-          cost_of_goods: costTotal,
-          discounts: discount,
-          item_count: 1,
-        });
-      }
+        if (categorySalesMap.has(categoryId)) {
+          const existing = categorySalesMap.get(categoryId);
+          existing.quantity_sold += quantity;
+          existing.gross_sales += lineTotal;
+          existing.cost_of_goods += costTotal;
+          existing.discounts += discount;
+          existing.item_count += 1;
+        } else {
+          categorySalesMap.set(categoryId, {
+            category_id: categoryId,
+            category_name: categoryName,
+            quantity_sold: quantity,
+            gross_sales: lineTotal,
+            cost_of_goods: costTotal,
+            discounts: discount,
+            item_count: 1,
+          });
+        }
+      });
     });
+
+    // Calculate totals for percentages
+    const totalRevenue = Array.from(categorySalesMap.values()).reduce(
+      (sum, cat) => sum + cat.gross_sales,
+      0
+    );
+
+    // Convert to array and add percentages
+    const categoriesList = Array.from(categorySalesMap.values()).map((cat) => ({
+      ...cat,
+      gross_sales: Math.round(cat.gross_sales * 100) / 100,
+      net_sales: Math.round((cat.gross_sales - cat.discounts) * 100) / 100,
+      cost_of_goods: Math.round(cat.cost_of_goods * 100) / 100,
+      discounts: Math.round(cat.discounts * 100) / 100,
+      gross_profit:
+        Math.round(
+          (cat.gross_sales - cat.discounts - cat.cost_of_goods) * 100
+        ) / 100,
+      percentage_of_sales:
+        totalRevenue > 0
+          ? Math.round((cat.gross_sales / totalRevenue) * 10000) / 100
+          : 0,
+    }));
+
+    // Sort by gross sales descending
+    categoriesList.sort((a, b) => b.gross_sales - a.gross_sales);
+
+    return {
+      date: dayData.date,
+      categories: categoriesList,
+    };
   });
 
-  // Calculate totals for percentages
-  const totalRevenue = Array.from(categorySalesMap.values()).reduce(
-    (sum, cat) => sum + cat.gross_sales,
-    0
-  );
-
-  // Convert to array and add percentages
-  const categoriesList = Array.from(categorySalesMap.values()).map((cat) => ({
-    ...cat,
-    gross_sales: Math.round(cat.gross_sales * 100) / 100,
-    net_sales: Math.round((cat.gross_sales - cat.discounts) * 100) / 100,
-    cost_of_goods: Math.round(cat.cost_of_goods * 100) / 100,
-    discounts: Math.round(cat.discounts * 100) / 100,
-    gross_profit:
-      Math.round((cat.gross_sales - cat.discounts - cat.cost_of_goods) * 100) /
-      100,
-    percentage_of_sales:
-      totalRevenue > 0
-        ? Math.round((cat.gross_sales / totalRevenue) * 10000) / 100
-        : 0,
-  }));
-
-  // Sort by gross sales descending
-  categoriesList.sort((a, b) => b.gross_sales - a.gross_sales);
-
   return {
-    categories: categoriesList,
-    totals: {
-      total_categories: categoriesList.length,
-      total_gross_sales: Math.round(totalRevenue * 100) / 100,
-      total_items_sold: categoriesList.reduce(
-        (sum, cat) => sum + cat.quantity_sold,
-        0
-      ),
+    period: {
+      from: dateRange.from.toISOString(),
+      to: dateRange.to.toISOString(),
     },
+    daily_data: dailyData,
   };
 }
 
-// Calculate Sales by Employee
-async function getSalesByEmployee(receipts, users) {
+// Calculate Sales by Employee - Day by Day
+async function getSalesByEmployee(receipts, users, dateRange) {
+  const groupedByDay = groupReceiptsByDay(receipts, dateRange);
+
   // Create user name lookup
   const userNameMap = new Map();
   userNameMap.set("unknown", "Unknown Employee");
@@ -493,104 +555,93 @@ async function getSalesByEmployee(receipts, users) {
     }
   });
 
-  // Aggregate sales by employee
-  const employeeSalesMap = new Map();
+  // Calculate for each day
+  const dailyData = groupedByDay.map((dayData) => {
+    const employeeSalesMap = new Map();
 
-  receipts.forEach((receipt) => {
-    const employeeId =
-      receipt.employee_id ||
-      receipt.employeeId ||
-      receipt.cashier_id ||
-      receipt.cashierId ||
-      receipt.userId ||
-      receipt.user_id ||
-      receipt.processedBy ||
-      "unknown";
+    dayData.receipts.forEach((receipt) => {
+      const employeeId =
+        receipt.employee_id ||
+        receipt.employeeId ||
+        receipt.cashier_id ||
+        receipt.cashierId ||
+        receipt.userId ||
+        receipt.user_id ||
+        receipt.processedBy ||
+        "unknown";
 
-    let employeeName = userNameMap.get(employeeId);
-    if (!employeeName) {
-      employeeName =
-        receipt.employeeName ||
-        receipt.cashierName ||
-        receipt.userName ||
-        "Unknown Employee";
-    }
-
-    const isRefund =
-      receipt.receiptType === "REFUND" || receipt.receipt_type === "REFUND";
-    const total = getReceiptTotal(receipt);
-    const discount = getReceiptDiscount(receipt);
-    const itemCount = (receipt.lineItems || receipt.line_items || []).reduce(
-      (sum, item) => sum + (item.quantity || 1),
-      0
-    );
-
-    if (employeeSalesMap.has(employeeId)) {
-      const existing = employeeSalesMap.get(employeeId);
-      if (isRefund) {
-        existing.refunds += Math.abs(total);
-        existing.refund_count += 1;
-      } else {
-        existing.gross_sales += total;
-        existing.transaction_count += 1;
-        existing.items_sold += itemCount;
+      let employeeName = userNameMap.get(employeeId);
+      if (!employeeName) {
+        employeeName =
+          receipt.employeeName ||
+          receipt.cashierName ||
+          receipt.userName ||
+          "Unknown Employee";
       }
-      existing.discounts += discount;
-    } else {
-      employeeSalesMap.set(employeeId, {
-        employee_id: employeeId,
-        employee_name: employeeName,
-        gross_sales: isRefund ? 0 : total,
-        refunds: isRefund ? Math.abs(total) : 0,
-        discounts: discount,
-        transaction_count: isRefund ? 0 : 1,
-        refund_count: isRefund ? 1 : 0,
-        items_sold: isRefund ? 0 : itemCount,
-      });
-    }
+
+      const isRefund =
+        receipt.receiptType === "REFUND" || receipt.receipt_type === "REFUND";
+      const total = getReceiptTotal(receipt);
+      const discount = getReceiptDiscount(receipt);
+      const itemCount = (receipt.lineItems || receipt.line_items || []).reduce(
+        (sum, item) => sum + (item.quantity || 1),
+        0
+      );
+
+      if (employeeSalesMap.has(employeeId)) {
+        const existing = employeeSalesMap.get(employeeId);
+        if (isRefund) {
+          existing.refunds += Math.abs(total);
+          existing.refund_count += 1;
+        } else {
+          existing.gross_sales += total;
+          existing.transaction_count += 1;
+          existing.items_sold += itemCount;
+        }
+        existing.discounts += discount;
+      } else {
+        employeeSalesMap.set(employeeId, {
+          employee_id: employeeId,
+          employee_name: employeeName,
+          gross_sales: isRefund ? 0 : total,
+          refunds: isRefund ? Math.abs(total) : 0,
+          discounts: discount,
+          transaction_count: isRefund ? 0 : 1,
+          refund_count: isRefund ? 1 : 0,
+          items_sold: isRefund ? 0 : itemCount,
+        });
+      }
+    });
+
+    // Convert to array and calculate net sales
+    const employees = Array.from(employeeSalesMap.values()).map((emp) => ({
+      ...emp,
+      gross_sales: Math.round(emp.gross_sales * 100) / 100,
+      refunds: Math.round(emp.refunds * 100) / 100,
+      discounts: Math.round(emp.discounts * 100) / 100,
+      net_sales:
+        Math.round((emp.gross_sales - emp.refunds - emp.discounts) * 100) / 100,
+      average_transaction:
+        emp.transaction_count > 0
+          ? Math.round((emp.gross_sales / emp.transaction_count) * 100) / 100
+          : 0,
+    }));
+
+    // Sort by gross sales descending
+    employees.sort((a, b) => b.gross_sales - a.gross_sales);
+
+    return {
+      date: dayData.date,
+      employees: employees,
+    };
   });
 
-  // Convert to array and calculate net sales
-  const employees = Array.from(employeeSalesMap.values()).map((emp) => ({
-    ...emp,
-    gross_sales: Math.round(emp.gross_sales * 100) / 100,
-    refunds: Math.round(emp.refunds * 100) / 100,
-    discounts: Math.round(emp.discounts * 100) / 100,
-    net_sales:
-      Math.round((emp.gross_sales - emp.refunds - emp.discounts) * 100) / 100,
-    average_transaction:
-      emp.transaction_count > 0
-        ? Math.round((emp.gross_sales / emp.transaction_count) * 100) / 100
-        : 0,
-  }));
-
-  // Sort by gross sales descending
-  employees.sort((a, b) => b.gross_sales - a.gross_sales);
-
-  // Calculate totals
-  const totals = employees.reduce(
-    (acc, emp) => ({
-      total_gross_sales: acc.total_gross_sales + emp.gross_sales,
-      total_net_sales: acc.total_net_sales + emp.net_sales,
-      total_transactions: acc.total_transactions + emp.transaction_count,
-      total_items_sold: acc.total_items_sold + emp.items_sold,
-    }),
-    {
-      total_gross_sales: 0,
-      total_net_sales: 0,
-      total_transactions: 0,
-      total_items_sold: 0,
-    }
-  );
-
   return {
-    employees,
-    totals: {
-      ...totals,
-      total_gross_sales: Math.round(totals.total_gross_sales * 100) / 100,
-      total_net_sales: Math.round(totals.total_net_sales * 100) / 100,
-      employee_count: employees.length,
+    period: {
+      from: dateRange.from.toISOString(),
+      to: dateRange.to.toISOString(),
     },
+    daily_data: dailyData,
   };
 }
 
@@ -886,31 +937,28 @@ export async function GET(request) {
         break;
 
       case "sales-by-item":
-        data = await getSalesByItem(filteredReceipts, products || []);
-        data.period = {
-          from: dateRange.from.toISOString(),
-          to: dateRange.to.toISOString(),
-        };
+        data = await getSalesByItem(
+          filteredReceipts,
+          products || [],
+          dateRange
+        );
         break;
 
       case "sales-by-category":
         data = await getSalesByCategory(
           filteredReceipts,
           products || [],
-          categories || []
+          categories || [],
+          dateRange
         );
-        data.period = {
-          from: dateRange.from.toISOString(),
-          to: dateRange.to.toISOString(),
-        };
         break;
 
       case "sales-by-employee":
-        data = await getSalesByEmployee(filteredReceipts, users || []);
-        data.period = {
-          from: dateRange.from.toISOString(),
-          to: dateRange.to.toISOString(),
-        };
+        data = await getSalesByEmployee(
+          filteredReceipts,
+          users || [],
+          dateRange
+        );
         break;
 
       default:

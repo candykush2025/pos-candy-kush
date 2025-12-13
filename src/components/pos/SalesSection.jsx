@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -418,80 +418,92 @@ export default function SalesSection({ cashier }) {
     }
   };
 
-  // Calculate cashback using useMemo instead of useEffect to avoid race conditions
-  const calculatedCashbackMemo = useMemo(() => {
+  // State for calculated cashback
+  const [calculatedCashback, setCalculatedCashback] = useState({
+    totalPoints: 0,
+    itemBreakdown: [],
+  });
+
+  // Simple synchronous function to calculate cashback - called on click events
+  const calculateCashbackNow = (
+    currentItems,
+    currentCustomer,
+    currentRules
+  ) => {
+    console.log("💰 calculateCashbackNow called");
+
+    // Use passed values or current state
+    const itemsToUse = currentItems || items;
+    const customerToUse = currentCustomer || cartCustomer;
+    const rulesToUse = currentRules || cashbackRules;
+
     // Skip if no customer or non-member
-    if (!cartCustomer || cartCustomer.isNoMember === true) {
+    if (!customerToUse || customerToUse.isNoMember === true) {
+      console.log("💰 No member customer");
+      setCalculatedCashback({ totalPoints: 0, itemBreakdown: [] });
       return { totalPoints: 0, itemBreakdown: [] };
     }
 
-    // Skip if no items or rules
-    if (!items?.length || !cashbackRules?.length) {
+    // Skip if no items
+    if (!itemsToUse?.length) {
+      console.log("💰 No items");
+      setCalculatedCashback({ totalPoints: 0, itemBreakdown: [] });
       return { totalPoints: 0, itemBreakdown: [] };
     }
 
-    console.log("🎯 CASHBACK CALC - Customer:", cartCustomer.name, "Items:", items.length, "Rules:", cashbackRules.length);
-
-    console.log("🎯 Step A: About to call getTotal()");
-    let total = 0;
-    try {
-      total = getTotal();
-      console.log("🎯 Step B: getTotal() returned:", total);
-    } catch (e) {
-      console.error("🎯 ERROR in getTotal():", e);
+    // Skip if no rules
+    if (!rulesToUse?.length) {
+      console.log("💰 No rules loaded");
+      setCalculatedCashback({ totalPoints: 0, itemBreakdown: [] });
       return { totalPoints: 0, itemBreakdown: [] };
     }
 
+    console.log(
+      "💰 Calculating for",
+      customerToUse.name,
+      "-",
+      itemsToUse.length,
+      "items,",
+      rulesToUse.length,
+      "rules"
+    );
+
+    const total = getTotal();
     let totalPoints = 0;
     const itemBreakdown = [];
 
-    console.log("🎯 Step C: Starting loop, items count:", items.length);
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      console.log("🎯 Step D: Processing item", i, ":", item?.name);
-
+    for (const item of itemsToUse) {
       const itemData = {
         productId: item.productId || item.id,
         categoryId: item.categoryId,
         price: item.price,
         quantity: item.quantity,
       };
-      console.log("🎯 Step E: itemData =", JSON.stringify(itemData));
 
-      try {
-        console.log("🎯 Step F: Calling calculateItemCashback...");
-        const result = cashbackRulesService.calculateItemCashback(
-          itemData,
-          cashbackRules,
-          total
-        );
-        console.log("🎯 Step G: Result =", result);
+      console.log("💰 Item:", item.name, "cat:", item.categoryId);
 
-        if (result && result.points > 0) {
-          totalPoints += result.points;
-          itemBreakdown.push({
-            itemId: itemData.productId,
-            itemName: item.name,
-            points: result.points,
-            ruleApplied: result.ruleApplied,
-          });
-        }
-      } catch (err) {
-        console.error("🎯 ERROR in calculateItemCashback:", err);
+      const result = cashbackRulesService.calculateItemCashback(
+        itemData,
+        rulesToUse,
+        total
+      );
+
+      console.log("💰 Points:", result?.points || 0);
+
+      if (result && result.points > 0) {
+        totalPoints += result.points;
+        itemBreakdown.push({
+          itemId: itemData.productId,
+          itemName: item.name,
+          points: result.points,
+          ruleApplied: result.ruleApplied,
+        });
       }
     }
 
-    console.log("🎯 FINAL TOTAL POINTS:", totalPoints);
+    console.log("💰 ✅ TOTAL:", totalPoints, "points");
+    setCalculatedCashback({ totalPoints, itemBreakdown });
     return { totalPoints, itemBreakdown };
-  }, [items, cartCustomer, cashbackRules]);
-
-  // Use the memoized value
-  const calculatedCashback = calculatedCashbackMemo;
-
-  // Legacy function kept for reference
-  const calculateCashbackForCart = () => {
-    // Now handled in useMemo above
   };
 
   // Check for active shift
@@ -1223,6 +1235,8 @@ export default function SalesSection({ cashier }) {
       addItem(matchingProduct);
       toast.success(`Added "${matchingProduct.name}" to cart`);
       console.log("[Barcode Scanner] Product matched:", matchingProduct.name);
+      // Calculate cashback after adding item
+      setTimeout(() => calculateCashbackNow(), 100);
       return;
     }
 
@@ -1270,6 +1284,8 @@ export default function SalesSection({ cashier }) {
       setCartCustomer(matchingCustomer);
       toast.success(`Customer "${matchingCustomer.name}" selected via QR scan`);
       console.log("[Barcode Scanner] Customer matched:", matchingCustomer);
+      // Calculate cashback after selecting customer
+      setTimeout(() => calculateCashbackNow(null, matchingCustomer, null), 100);
     } else {
       console.log("[Barcode Scanner] No match found for:", scannedCode);
       toast.info(`No customer or product found for code: ${scannedCode}`);
@@ -1507,6 +1523,9 @@ export default function SalesSection({ cashier }) {
     }
 
     addItem(product, 1);
+
+    // Calculate cashback after adding item
+    setTimeout(() => calculateCashbackNow(), 100);
   };
 
   const handleWeightKeypad = (value) => {
@@ -1557,6 +1576,9 @@ export default function SalesSection({ cashier }) {
     setShowWeightModal(false);
     setSelectedWeightProduct(null);
     setWeightInput("");
+
+    // Calculate cashback after adding item
+    setTimeout(() => calculateCashbackNow(), 100);
   };
 
   // Helper to ALWAYS ensure array is exactly 20 slots
@@ -4785,7 +4807,14 @@ export default function SalesSection({ cashier }) {
                           ? "border-green-500 bg-green-900/30 dark:bg-green-900/30"
                           : "border-gray-300 dark:border-gray-700 hover:border-green-300 hover:bg-gray-800 dark:hover:bg-gray-800"
                       }`}
-                      onClick={() => setCartCustomer(customer)}
+                      onClick={() => {
+                        setCartCustomer(customer);
+                        // Calculate cashback after selecting customer
+                        setTimeout(
+                          () => calculateCashbackNow(null, customer, null),
+                          100
+                        );
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -4913,6 +4942,11 @@ export default function SalesSection({ cashier }) {
                           setCustomerSearchQuery("");
                           toast.success(
                             `Customer ${customer.name} added to cart`
+                          );
+                          // Calculate cashback after selecting customer
+                          setTimeout(
+                            () => calculateCashbackNow(null, customer, null),
+                            100
                           );
                         }}
                       >
