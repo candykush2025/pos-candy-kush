@@ -9,6 +9,7 @@
  * - GET /api/mobile?action=sales-by-category - Sales breakdown by category
  * - GET /api/mobile?action=sales-by-employee - Sales breakdown by employee
  * - GET /api/mobile?action=stock - Current inventory stock levels
+ * - GET /api/mobile?action=stock-history - Complete stock movement history
  *
  * Authentication: All endpoints except login require JWT token in Authorization header
  * Filter Parameters (for all sales endpoints):
@@ -24,6 +25,7 @@ import {
   categoriesService,
   getDocuments,
 } from "@/lib/firebase/firestore";
+import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
@@ -740,6 +742,60 @@ async function getStock(products) {
   };
 }
 
+// Get stock history for mobile app
+async function getStockHistory(limit = 1000) {
+  try {
+    const { history } = await stockHistoryService.getAllHistory(limit);
+
+    // Group by product for easier mobile processing
+    const productHistory = {};
+
+    history.forEach((entry) => {
+      const productId = entry.productId;
+      if (!productHistory[productId]) {
+        productHistory[productId] = {
+          product_id: productId,
+          product_name: entry.productName,
+          product_sku: entry.productSku,
+          movements: [],
+        };
+      }
+
+      productHistory[productId].movements.push({
+        id: entry.id,
+        type: entry.type, // 'initial', 'sale', 'purchase_order', 'adjustment'
+        quantity: entry.quantity,
+        previous_stock: entry.previousStock,
+        new_stock: entry.newStock,
+        reason: entry.reason,
+        reference_id: entry.referenceId,
+        user_id: entry.userId,
+        user_name: entry.userName,
+        timestamp: entry.createdAt?.toDate?.()
+          ? entry.createdAt.toDate().toISOString()
+          : entry.createdAt,
+      });
+    });
+
+    // Convert to array and sort movements by timestamp desc
+    const products = Object.values(productHistory).map((product) => ({
+      ...product,
+      movements: product.movements.sort(
+        (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+      ),
+    }));
+
+    return {
+      products,
+      total_movements: history.length,
+      generated_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching stock history:", error);
+    throw error;
+  }
+}
+
 // OPTIONS handler for CORS preflight
 export async function OPTIONS() {
   return new Response(null, {
@@ -852,6 +908,7 @@ export async function GET(request) {
       "sales-by-category",
       "sales-by-employee",
       "stock",
+      "stock-history",
     ];
     if (!action || !validActions.includes(action)) {
       return Response.json(
@@ -909,6 +966,21 @@ export async function GET(request) {
           action: "stock",
           generated_at: new Date().toISOString(),
           data: stockData,
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    // Handle stock-history action (doesn't need date range)
+    if (action === "stock-history") {
+      const stockHistoryData = await getStockHistory();
+
+      return Response.json(
+        {
+          success: true,
+          action: "stock-history",
+          generated_at: new Date().toISOString(),
+          data: stockHistoryData,
         },
         { headers: corsHeaders }
       );

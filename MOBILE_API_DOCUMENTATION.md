@@ -100,6 +100,7 @@ All sales-related endpoints (`sales-summary`, `sales-by-item`, `sales-by-categor
 4. [Sales by Category](#3-sales-by-category) - GET (JWT required)
 5. [Sales by Employee](#4-sales-by-employee) - GET (JWT required)
 6. [Stock/Inventory](#5-stockinventory) - GET (JWT required)
+7. [Stock History](#6-stock-history) - GET (JWT required)
 
 ---
 
@@ -782,6 +783,172 @@ curl "https://pos-candy-kush.vercel.app/api/mobile?action=stock"
 
 ---
 
+## 6. Stock History
+
+Get complete stock movement history for all products. This endpoint provides all stock in/out transactions, allowing mobile apps to calculate current stock levels and track inventory changes over time.
+
+**Authentication:** JWT token required
+
+**Note:** This endpoint returns the complete history of all stock movements. Mobile apps can use this data to calculate current stock levels by processing the movements chronologically.
+
+### Request
+
+```http
+GET /api/mobile?action=stock-history
+```
+
+### Example Request
+
+```bash
+curl "https://pos-candy-kush.vercel.app/api/mobile?action=stock-history"
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "action": "stock-history",
+  "generated_at": "2024-12-10T14:30:00.000Z",
+  "data": {
+    "products": [
+      {
+        "product_id": "prod_001",
+        "product_name": "Blue Dream - 3.5g",
+        "product_sku": "BD-35G",
+        "movements": [
+          {
+            "id": "hist_001",
+            "type": "sale",
+            "quantity": -1,
+            "previous_stock": 10,
+            "new_stock": 9,
+            "reason": "Sale transaction",
+            "reference_id": "rec_123",
+            "user_id": "emp_001",
+            "user_name": "John Doe",
+            "timestamp": "2024-12-10T14:25:00.000Z"
+          },
+          {
+            "id": "hist_002",
+            "type": "purchase_order",
+            "quantity": 5,
+            "previous_stock": 4,
+            "new_stock": 9,
+            "reason": "Restock from supplier",
+            "reference_id": "po_456",
+            "user_id": "emp_001",
+            "user_name": "John Doe",
+            "timestamp": "2024-12-09T10:00:00.000Z"
+          },
+          {
+            "id": "hist_003",
+            "type": "adjustment",
+            "quantity": -2,
+            "previous_stock": 6,
+            "new_stock": 4,
+            "reason": "Damaged goods",
+            "reference_id": null,
+            "user_id": "emp_001",
+            "user_name": "John Doe",
+            "timestamp": "2024-12-08T16:30:00.000Z"
+          },
+          {
+            "id": "hist_004",
+            "type": "initial",
+            "quantity": 6,
+            "previous_stock": 0,
+            "new_stock": 6,
+            "reason": "Initial stock setup",
+            "reference_id": null,
+            "user_id": "emp_001",
+            "user_name": "John Doe",
+            "timestamp": "2024-12-01T09:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "product_id": "prod_002",
+        "product_name": "OG Kush - 1g Cartridge",
+        "product_sku": "OGK-1G",
+        "movements": [
+          {
+            "id": "hist_005",
+            "type": "sale",
+            "quantity": -2,
+            "previous_stock": 15,
+            "new_stock": 13,
+            "reason": "Sale transaction",
+            "reference_id": "rec_124",
+            "user_id": "emp_002",
+            "user_name": "Jane Smith",
+            "timestamp": "2024-12-10T13:45:00.000Z"
+          }
+        ]
+      }
+    ],
+    "total_movements": 5,
+    "generated_at": "2024-12-10T14:30:00.000Z"
+  }
+}
+```
+
+### Response Fields
+
+| Field                        | Type   | Description                                      |
+| ---------------------------- | ------ | ------------------------------------------------ |
+| `products`                   | array  | Array of products with their movements           |
+| `products[].product_id`      | string | Unique product identifier                        |
+| `products[].product_name`    | string | Product name                                     |
+| `products[].product_sku`     | string | Product SKU                                      |
+| `products[].movements`       | array  | Array of stock movements for this product        |
+| `movements[].id`             | string | Unique movement identifier                       |
+| `movements[].type`           | string | Movement type (see below)                        |
+| `movements[].quantity`       | number | Quantity changed (positive = in, negative = out) |
+| `movements[].previous_stock` | number | Stock level before this movement                 |
+| `movements[].new_stock`      | number | Stock level after this movement                  |
+| `movements[].reason`         | string | Description of the movement                      |
+| `movements[].reference_id`   | string | Reference ID (receipt, PO, etc.)                 |
+| `movements[].user_id`        | string | User who made the change                         |
+| `movements[].user_name`      | string | User name                                        |
+| `movements[].timestamp`      | string | ISO 8601 timestamp of the movement               |
+| `total_movements`            | number | Total number of movements across all products    |
+
+### Movement Types
+
+| Type             | Description                  | Quantity Sign     |
+| ---------------- | ---------------------------- | ----------------- |
+| `initial`        | Initial stock setup          | Positive          |
+| `sale`           | Stock sold in transaction    | Negative          |
+| `purchase_order` | Stock received from supplier | Positive          |
+| `adjustment`     | Manual stock adjustment      | Positive/Negative |
+
+### Mobile App Usage
+
+Mobile apps can calculate current stock levels by:
+
+1. Starting with 0 stock for each product
+2. Processing movements in chronological order (oldest first)
+3. Adding/subtracting quantities to get current stock
+
+```javascript
+function calculateCurrentStock(movements) {
+  // Sort movements by timestamp (oldest first)
+  const sortedMovements = movements.sort(
+    (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+  );
+
+  let currentStock = 0;
+  sortedMovements.forEach((movement) => {
+    currentStock = movement.new_stock; // Or currentStock += movement.quantity
+  });
+
+  return currentStock;
+}
+```
+
+---
+
 ## Error Responses
 
 ### Authentication Errors
@@ -824,12 +991,13 @@ curl "https://pos-candy-kush.vercel.app/api/mobile?action=stock"
     "sales-by-item",
     "sales-by-category",
     "sales-by-employee",
-    "stock"
+    "stock",
+    "stock-history"
   ],
   "usage": {
     "endpoint": "/api/mobile",
     "parameters": {
-      "action": "Required. One of: sales-summary, sales-by-item, sales-by-category, sales-by-employee, stock",
+      "action": "Required. One of: sales-summary, sales-by-item, sales-by-category, sales-by-employee, stock, stock-history",
       "period": "Optional. One of: today, this_week, this_month, this_year, custom, last_30_days (default)",
       "start_date": "Required if period=custom. ISO 8601 date format (YYYY-MM-DD)",
       "end_date": "Required if period=custom. ISO 8601 date format (YYYY-MM-DD)",
@@ -1245,6 +1413,11 @@ class MobileApiService {
     return this.makeAuthenticatedRequest(url);
   }
 
+  async getStockHistory(): Promise<ApiResponse<any>> {
+    const url = `${this.baseUrl}/api/mobile?action=stock-history`;
+    return this.makeAuthenticatedRequest(url);
+  }
+
   async getCustomDateRange(
     action: string,
     startDate: string,
@@ -1284,6 +1457,27 @@ try {
   const stock = await api.getStock();
   console.log("Out of stock items:", stock.data.summary.out_of_stock_count);
 
+  // Get stock history to calculate current stock
+  const stockHistory = await api.getStockHistory();
+  console.log("Total stock movements:", stockHistory.data.total_movements);
+
+  // Calculate current stock for a product
+  function calculateCurrentStock(movements) {
+    const sortedMovements = movements.sort(
+      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+    );
+    return sortedMovements.length > 0
+      ? sortedMovements[sortedMovements.length - 1].new_stock
+      : 0;
+  }
+
+  // Example: Get current stock for first product
+  if (stockHistory.data.products.length > 0) {
+    const firstProduct = stockHistory.data.products[0];
+    const currentStock = calculateCurrentStock(firstProduct.movements);
+    console.log(`${firstProduct.product_name} current stock:`, currentStock);
+  }
+
   // Custom date range
   const customSales = await api.getCustomDateRange(
     "sales-summary",
@@ -1307,6 +1501,14 @@ Currently no rate limiting is applied. In production, consider implementing:
 ---
 
 ## Changelog
+
+### Version 1.3.0 (December 2024)
+
+- **Stock History endpoint**: Added `stock-history` action to provide complete stock movement history
+- Mobile apps can now calculate current stock levels from historical movements
+- Returns all stock in/out transactions grouped by product with chronological ordering
+- Includes movement types: initial, sale, purchase_order, adjustment
+- Each movement shows quantity change, previous/new stock levels, and reference information
 
 ### Version 1.2.0 (December 2024)
 
