@@ -60,7 +60,7 @@ export default function StockManagementSection() {
         .map((p) => ({
           ...p,
           // Use stock from stock history if available, otherwise 0
-          stock: latestStockMap[p.id] !== undefined ? latestStockMap[p.id] : 0,
+          stock: latestStockMap.has(p.id) ? latestStockMap.get(p.id) : 0,
         }));
 
       setProducts(stockTrackedProducts);
