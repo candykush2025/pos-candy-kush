@@ -607,6 +607,159 @@ curl -X DELETE https://pos-candy-kush.vercel.app/api/print
 
 ---
 
+## Print Job Types
+
+The API supports two types of print jobs:
+
+### 1. Receipt Print (`type: "receipt"`)
+
+Standard order receipt - see above examples.
+
+### 2. Shift Report Print (`type: "shift_report"`)
+
+Sent when a cashier closes their shift.
+
+**Example Data Structure:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "type": "shift_report",
+    "shiftReport": {
+      "cashierName": "John Doe",
+      "startTime": "Dec 14, 2024, 09:00 AM",
+      "endTime": "Dec 14, 2024, 05:30 PM",
+      "startingCash": 100.0,
+      "cashPayments": 850.5,
+      "cashRefunds": 25.0,
+      "paidIn": 50.0,
+      "paidOut": 30.0,
+      "expectedCash": 945.5,
+      "actualCash": 945.5,
+      "variance": 0,
+      "varianceStatus": "PERFECT",
+      "grossSales": 1250.75,
+      "totalRefunds": 45.0,
+      "totalDiscounts": 30.0,
+      "netSales": 1175.75,
+      "transactionCount": 42,
+      "notes": "Good shift, busy afternoon"
+    },
+    "cashier": "John Doe",
+    "timestamp": "2024-12-14T17:30:00.000Z"
+  },
+  "jobId": "PJ-1734198600000-abc12",
+  "timestamp": "2024-12-14T17:30:00.000Z"
+}
+```
+
+**Variance Status Values:**
+| Value | Meaning |
+|-------|---------|
+| `PERFECT` | Actual cash matches expected exactly |
+| `SHORT` | Drawer is short (negative variance) |
+| `OVER` | Drawer has excess (positive variance) |
+
+**Android Formatting Example for Shift Report:**
+
+```kotlin
+private fun formatShiftReport(data: PrintData): String {
+    val sb = StringBuilder()
+    val report = data.shiftReport ?: return "Invalid shift report data"
+
+    sb.appendLine("================================")
+    sb.appendLine("       SHIFT REPORT")
+    sb.appendLine("================================")
+    sb.appendLine()
+    sb.appendLine("Cashier: ${report.cashierName}")
+    sb.appendLine("Start: ${report.startTime}")
+    sb.appendLine("End: ${report.endTime}")
+    sb.appendLine("--------------------------------")
+    sb.appendLine()
+    sb.appendLine("CASH DRAWER")
+    sb.appendLine("--------------------------------")
+    sb.appendLine("Starting Cash:    $${String.format("%.2f", report.startingCash)}")
+    sb.appendLine("+ Cash Sales:     $${String.format("%.2f", report.cashPayments)}")
+    sb.appendLine("- Cash Refunds:   $${String.format("%.2f", report.cashRefunds)}")
+    sb.appendLine("+ Paid In:        $${String.format("%.2f", report.paidIn)}")
+    sb.appendLine("- Paid Out:       $${String.format("%.2f", report.paidOut)}")
+    sb.appendLine("--------------------------------")
+    sb.appendLine("Expected Cash:    $${String.format("%.2f", report.expectedCash)}")
+    sb.appendLine("Actual Cash:      $${String.format("%.2f", report.actualCash)}")
+    sb.appendLine("--------------------------------")
+
+    val varianceStr = when(report.varianceStatus) {
+        "PERFECT" -> "PERFECT"
+        "SHORT" -> "-$${String.format("%.2f", Math.abs(report.variance))} SHORT"
+        "OVER" -> "+$${String.format("%.2f", Math.abs(report.variance))} OVER"
+        else -> "$${String.format("%.2f", report.variance)}"
+    }
+    sb.appendLine("VARIANCE:         $varianceStr")
+    sb.appendLine()
+    sb.appendLine("SALES SUMMARY")
+    sb.appendLine("--------------------------------")
+    sb.appendLine("Gross Sales:      $${String.format("%.2f", report.grossSales)}")
+    sb.appendLine("Refunds:          $${String.format("%.2f", report.totalRefunds)}")
+    sb.appendLine("Discounts:        $${String.format("%.2f", report.totalDiscounts)}")
+    sb.appendLine("--------------------------------")
+    sb.appendLine("NET SALES:        $${String.format("%.2f", report.netSales)}")
+    sb.appendLine("Transactions:     ${report.transactionCount}")
+
+    if (!report.notes.isNullOrEmpty()) {
+        sb.appendLine()
+        sb.appendLine("Notes: ${report.notes}")
+    }
+
+    sb.appendLine()
+    sb.appendLine("================================")
+    sb.appendLine("    END OF SHIFT REPORT")
+    sb.appendLine("================================")
+
+    return sb.toString()
+}
+```
+
+**Updated Process Print Job Method:**
+
+```kotlin
+private fun processPrintJob(job: PrintJob) {
+    stopPolling()
+
+    try {
+        // Check print type and format accordingly
+        val printText = when (job.data.type) {
+            "shift_report" -> formatShiftReport(job.data)
+            else -> formatReceipt(job.data)  // Default to receipt
+        }
+
+        val success = printToThermalPrinter(printText)
+
+        if (success) {
+            printService.confirmPrinted(job.jobId) { confirmed, error ->
+                runOnUiThread {
+                    if (confirmed) {
+                        showSuccess("${job.data.type ?: "Receipt"} printed")
+                    }
+                    startPolling()
+                }
+            }
+        } else {
+            throw Exception("Printer error")
+        }
+    } catch (e: Exception) {
+        printService.reportFailed(job.jobId, e.message ?: "Unknown") { _, _ ->
+            runOnUiThread {
+                showError("Print failed: ${e.message}")
+                startPolling()
+            }
+        }
+    }
+}
+```
+
+---
+
 ## Error Handling
 
 | Scenario                   | What Happens                                                 |

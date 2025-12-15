@@ -30,6 +30,7 @@ import {
   ArrowDownCircle,
   Loader2,
   Calculator,
+  Printer,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -52,6 +53,9 @@ export default function ShiftsSection({ cashier }) {
   const [closingShiftLoading, setClosingShiftLoading] = useState(false);
   const [cashManagementLoading, setCashManagementLoading] = useState(false);
   const [recalculatingShiftId, setRecalculatingShiftId] = useState(null);
+  const [showShiftClosedModal, setShowShiftClosedModal] = useState(false);
+  const [closedShiftData, setClosedShiftData] = useState(null);
+  const [printingShiftReport, setPrintingShiftReport] = useState(false);
 
   useEffect(() => {
     if (cashier?.id) {
@@ -151,9 +155,24 @@ export default function ShiftsSection({ cashier }) {
         return;
       }
 
+      const actualCash = parseFloat(closingCash);
+      const expectedCash =
+        selectedShift.expectedCash || selectedShift.startingCash || 0;
+      const variance = actualCash - expectedCash;
+
       await shiftsService.endShift(selectedShift.id, {
-        actualCash: parseFloat(closingCash),
+        actualCash: actualCash,
         notes: closeNotes,
+      });
+
+      // Store closed shift data for the summary modal
+      setClosedShiftData({
+        ...selectedShift,
+        actualCash: actualCash,
+        endingCash: actualCash,
+        variance: variance,
+        notes: closeNotes,
+        endTime: new Date(),
       });
 
       // Clear localStorage
@@ -165,6 +184,9 @@ export default function ShiftsSection({ cashier }) {
       setClosingCash("");
       setCloseNotes("");
       loadShifts();
+
+      // Show the shift closed summary modal
+      setShowShiftClosedModal(true);
       toast.success("Shift closed successfully!");
     } catch (error) {
       console.error("Error closing shift:", error);
@@ -245,6 +267,88 @@ export default function ShiftsSection({ cashier }) {
       toast.error("Failed to recalculate shift");
     } finally {
       setRecalculatingShiftId(null);
+    }
+  };
+
+  // Print shift report
+  const handlePrintShiftReport = async (shiftData) => {
+    if (!shiftData) return;
+
+    try {
+      setPrintingShiftReport(true);
+
+      const formatShiftDateTime = (timestamp) => {
+        if (!timestamp) return "N/A";
+        const date = timestamp.toDate
+          ? timestamp.toDate()
+          : new Date(timestamp);
+        return date.toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      };
+
+      const variance = shiftData.variance || 0;
+      const netSales =
+        (shiftData.grossSales || shiftData.totalSales || 0) -
+        (shiftData.totalRefunds || 0) -
+        (shiftData.totalDiscounts || 0);
+
+      // Send shift report to print API
+      const response = await fetch("/api/print", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "shift_report",
+            shiftReport: {
+              cashierName: shiftData.userName || cashier?.name || "Staff",
+              startTime: formatShiftDateTime(shiftData.startTime),
+              endTime: formatShiftDateTime(shiftData.endTime),
+              // Cash Drawer Section
+              startingCash: shiftData.startingCash || 0,
+              cashPayments: shiftData.totalCashSales || 0,
+              cashRefunds: shiftData.totalCashRefunds || 0,
+              paidIn: shiftData.totalPaidIn || 0,
+              paidOut: shiftData.totalPaidOut || 0,
+              expectedCash:
+                shiftData.expectedCash || shiftData.startingCash || 0,
+              actualCash: shiftData.actualCash || 0,
+              variance: variance,
+              varianceStatus:
+                variance === 0 ? "PERFECT" : variance < 0 ? "SHORT" : "OVER",
+              // Sales Summary
+              grossSales: shiftData.grossSales || shiftData.totalSales || 0,
+              totalRefunds: shiftData.totalRefunds || 0,
+              totalDiscounts: shiftData.totalDiscounts || 0,
+              netSales: netSales,
+              transactionCount: shiftData.transactionCount || 0,
+              // Notes
+              notes: shiftData.notes || "",
+            },
+            cashier: shiftData.userName || cashier?.name || "Staff",
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success("Shift report sent to printer!");
+      } else {
+        toast.error(result.error || "Failed to print shift report");
+      }
+    } catch (error) {
+      console.error("Error printing shift report:", error);
+      toast.error("Failed to print shift report");
+    } finally {
+      setPrintingShiftReport(false);
     }
   };
 
@@ -695,25 +799,43 @@ export default function ShiftsSection({ cashier }) {
                             </div>
 
                             {/* Recalculate Button */}
-                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleRecalculateShift(shift.id)}
-                                disabled={recalculatingShiftId === shift.id}
-                                className="w-full"
-                              >
-                                {recalculatingShiftId === shift.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Calculator className="h-4 w-4 mr-2" />
-                                )}
-                                {recalculatingShiftId === shift.id
-                                  ? "Recalculating..."
-                                  : "Recalculate Expected Cash & Variance"}
-                              </Button>
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleRecalculateShift(shift.id)
+                                  }
+                                  disabled={recalculatingShiftId === shift.id}
+                                  className="flex-1"
+                                >
+                                  {recalculatingShiftId === shift.id ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Calculator className="h-4 w-4 mr-2" />
+                                  )}
+                                  {recalculatingShiftId === shift.id
+                                    ? "Recalculating..."
+                                    : "Recalculate"}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handlePrintShiftReport(shift)}
+                                  disabled={printingShiftReport}
+                                  className="flex-1"
+                                >
+                                  {printingShiftReport ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Printer className="h-4 w-4 mr-2" />
+                                  )}
+                                  Print Report
+                                </Button>
+                              </div>
                               {shift.recalculatedAt && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
                                   Last recalculated:{" "}
                                   {new Date(
                                     shift.recalculatedAt?.toDate?.()
@@ -1267,6 +1389,207 @@ export default function ShiftsSection({ cashier }) {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shift Closed Summary Modal */}
+      <Dialog
+        open={showShiftClosedModal}
+        onOpenChange={setShowShiftClosedModal}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Shift Closed Successfully
+            </DialogTitle>
+            <DialogDescription>
+              Here is the summary of your closed shift
+            </DialogDescription>
+          </DialogHeader>
+          {closedShiftData && (
+            <div className="space-y-4 py-4">
+              {/* Cash Drawer Summary */}
+              <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg space-y-3">
+                <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">
+                  Cash Drawer
+                </h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Starting Cash:</span>
+                    <span className="font-medium">
+                      {formatCurrency(closedShiftData.startingCash || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Cash Sales:</span>
+                    <span className="font-medium text-green-600">
+                      +{formatCurrency(closedShiftData.totalCashSales || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Cash Refunds:</span>
+                    <span className="font-medium text-red-600">
+                      -{formatCurrency(closedShiftData.totalCashRefunds || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Paid In:</span>
+                    <span className="font-medium text-blue-600">
+                      +{formatCurrency(closedShiftData.totalPaidIn || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Paid Out:</span>
+                    <span className="font-medium text-orange-600">
+                      -{formatCurrency(closedShiftData.totalPaidOut || 0)}
+                    </span>
+                  </div>
+                </div>
+                <div className="border-t border-gray-300 dark:border-gray-600 pt-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                      Expected Cash:
+                    </span>
+                    <span className="font-bold text-blue-600">
+                      {formatCurrency(
+                        closedShiftData.expectedCash ||
+                          closedShiftData.startingCash ||
+                          0
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm mt-1">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                      Actual Cash:
+                    </span>
+                    <span className="font-bold">
+                      {formatCurrency(closedShiftData.actualCash || 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Variance */}
+              <div
+                className={`p-4 rounded-lg ${
+                  closedShiftData.variance === 0
+                    ? "bg-green-100 dark:bg-green-900/30"
+                    : closedShiftData.variance < 0
+                    ? "bg-red-100 dark:bg-red-900/30"
+                    : "bg-yellow-100 dark:bg-yellow-900/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                    Variance:
+                  </span>
+                  <span
+                    className={`font-bold text-lg ${
+                      closedShiftData.variance === 0
+                        ? "text-green-600"
+                        : closedShiftData.variance < 0
+                        ? "text-red-600"
+                        : "text-yellow-600"
+                    }`}
+                  >
+                    {closedShiftData.variance === 0 ? (
+                      "✓ Perfect"
+                    ) : (
+                      <>
+                        {closedShiftData.variance < 0 ? "↓ Short " : "↑ Over "}
+                        {formatCurrency(Math.abs(closedShiftData.variance))}
+                      </>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Sales Summary */}
+              <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg space-y-2">
+                <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">
+                  Sales Summary
+                </h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Gross Sales:</span>
+                    <span className="font-medium">
+                      {formatCurrency(
+                        closedShiftData.grossSales ||
+                          closedShiftData.totalSales ||
+                          0
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Refunds:</span>
+                    <span className="font-medium text-red-600">
+                      -{formatCurrency(closedShiftData.totalRefunds || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Discounts:</span>
+                    <span className="font-medium text-orange-600">
+                      -{formatCurrency(closedShiftData.totalDiscounts || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Transactions:</span>
+                    <span className="font-medium">
+                      {closedShiftData.transactionCount || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="border-t border-gray-300 dark:border-gray-600 pt-2">
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">
+                      Net Sales:
+                    </span>
+                    <span className="font-bold text-green-600 text-lg">
+                      {formatCurrency(
+                        (closedShiftData.grossSales ||
+                          closedShiftData.totalSales ||
+                          0) -
+                          (closedShiftData.totalRefunds || 0) -
+                          (closedShiftData.totalDiscounts || 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowShiftClosedModal(false);
+                    setClosedShiftData(null);
+                  }}
+                  className="flex-1"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => handlePrintShiftReport(closedShiftData)}
+                  disabled={printingShiftReport}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {printingShiftReport ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Printing...
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print Report
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
