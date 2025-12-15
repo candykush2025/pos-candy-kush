@@ -149,7 +149,11 @@ export default function SalesByPaymentPage() {
             payment.name ||
             "Other";
           const amount =
-            payment.paid_money || payment.paidMoney || payment.amount || 0;
+            payment.money_amount ||
+            payment.paid_money ||
+            payment.paidMoney ||
+            payment.amount ||
+            0;
 
           const normalizedType = normalizePaymentType(paymentType);
 

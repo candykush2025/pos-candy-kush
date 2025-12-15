@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,6 +29,8 @@ import {
   endOfYear,
   subYears,
 } from "date-fns";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const PERIOD_OPTIONS = [
   { label: "Today", value: "today" },
@@ -56,6 +58,24 @@ export function DateRangePicker({
   const [isAllDay, setIsAllDay] = useState(true);
   const [customFromHour, setCustomFromHour] = useState("00:00");
   const [customToHour, setCustomToHour] = useState("23:59");
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarStartDate, setCalendarStartDate] = useState(null);
+  const calendarRef = useRef(null);
+
+  // Close calendar when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setShowCalendar(false);
+        setCalendarStartDate(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const calculateDateRange = (period) => {
     const now = new Date();
@@ -175,6 +195,46 @@ export function DateRangePicker({
     }
   };
 
+  const handleCalendarDateChange = (dates) => {
+    if (Array.isArray(dates)) {
+      const [start, end] = dates;
+      if (start && end) {
+        // Range selected
+        onDateRangeChange({ from: start, to: end });
+        setShowCalendar(false);
+        setCalendarStartDate(null);
+        setSelectedPeriod("custom");
+      }
+    }
+  };
+
+  const handleCalendarSelect = (date) => {
+    if (!calendarStartDate) {
+      // First date selected - set as start
+      setCalendarStartDate(date);
+    } else if (calendarStartDate.getTime() === date.getTime()) {
+      // Same date clicked again - single date selection
+      onDateRangeChange({ from: date, to: date });
+      setShowCalendar(false);
+      setCalendarStartDate(null);
+      setSelectedPeriod("custom");
+    } else {
+      // Different date clicked - create range
+      const start = calendarStartDate < date ? calendarStartDate : date;
+      const end = calendarStartDate < date ? date : calendarStartDate;
+      onDateRangeChange({ from: start, to: end });
+      setShowCalendar(false);
+      setCalendarStartDate(null);
+      setSelectedPeriod("custom");
+    }
+  };
+
+  const handleSingleDateSelect = (date) => {
+    onDateRangeChange({ from: date, to: date });
+    setShowCalendar(false);
+    setSelectedPeriod("custom");
+  };
+
   const handleCustomTimeChange = (type, value) => {
     if (type === "from") {
       setCustomFromHour(value);
@@ -221,21 +281,62 @@ export function DateRangePicker({
       </div>
 
       {/* Date range display */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-neutral-800 border rounded-lg text-sm">
-        <Calendar className="h-4 w-4 text-neutral-500" />
-        <span>
-          {dateRange?.from &&
-          dateRange?.to &&
-          format(new Date(dateRange.from), "MMM dd, yyyy") ===
-            format(new Date(dateRange.to), "MMM dd, yyyy")
-            ? format(new Date(dateRange.from), "MMM dd, yyyy")
-            : dateRange?.from && dateRange?.to
-            ? `${format(new Date(dateRange.from), "MMM dd, yyyy")} - ${format(
-                new Date(dateRange.to),
-                "MMM dd, yyyy"
-              )}`
-            : "Select dates"}
-        </span>
+      <div className="relative" ref={calendarRef}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setShowCalendar(!showCalendar);
+            if (!showCalendar) {
+              setCalendarStartDate(null);
+            }
+          }}
+          className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-neutral-800 border rounded-lg text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700"
+        >
+          <Calendar className="h-4 w-4 text-neutral-500" />
+          <span>
+            {dateRange?.from &&
+            dateRange?.to &&
+            format(new Date(dateRange.from), "MMM dd, yyyy") ===
+              format(new Date(dateRange.to), "MMM dd, yyyy")
+              ? format(new Date(dateRange.from), "MMM dd, yyyy")
+              : dateRange?.from && dateRange?.to
+              ? `${format(new Date(dateRange.from), "MMM dd, yyyy")} - ${format(
+                  new Date(dateRange.to),
+                  "MMM dd, yyyy"
+                )}`
+              : "Select dates"}
+          </span>
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+
+        {/* Calendar Popup */}
+        {showCalendar && (
+          <div className="absolute top-full mt-2 z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg p-4">
+            <DatePicker
+              selected={
+                calendarStartDate ||
+                (dateRange?.from ? new Date(dateRange.from) : null)
+              }
+              onChange={handleCalendarDateChange}
+              onSelect={handleCalendarSelect}
+              startDate={calendarStartDate}
+              endDate={calendarStartDate}
+              selectsRange={!!calendarStartDate}
+              inline
+              calendarClassName="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+              dayClassName={(date) =>
+                "hover:bg-green-100 dark:hover:bg-green-900/30 rounded-md"
+              }
+              monthClassName="text-neutral-900 dark:text-neutral-100"
+              yearClassName="text-neutral-900 dark:text-neutral-100"
+              highlightDates={calendarStartDate ? [calendarStartDate] : []}
+            />
+            <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400 text-center">
+              Click a date for single day, or click start date then end date for
+              range
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Period selector dropdown */}
