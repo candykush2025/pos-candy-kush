@@ -58,6 +58,40 @@ const getReceiptDate = (receipt) => {
   return null;
 };
 
+// Determine which icon to show for a receipt's payment method.
+// Prefers descriptive name fields (name, payment_type_name) before short type codes.
+export function getPaymentIconForReceipt(receipt) {
+  const payments = receipt?.payments || [];
+
+  // Prefer the first payment that has a descriptive field, otherwise fallback to first
+  let payment = payments.find(
+    (p) => p?.name || p?.payment_type_name || p?.paymentTypeName || p?.type || p?.payment_type || p?.payment_type_id
+  );
+  if (!payment) payment = payments[0];
+
+  const rawType =
+    payment?.payment_type_name ||
+    payment?.paymentTypeName ||
+    payment?.name ||
+    payment?.type ||
+    receipt?.paymentMethod ||
+    receipt?.payment_method ||
+    "cash";
+
+  const type = String(rawType).toLowerCase();
+
+  if (type.includes("card") || type.includes("credit") || type.includes("debit")) {
+    return "💳";
+  }
+  if (type.includes("crypto") || type.includes("bitcoin") || type.includes("btc") || type.includes("usdt")) {
+    return "₿";
+  }
+  if (type.includes("transfer") || type.includes("bank")) {
+    return "🏦";
+  }
+  return "💵"; // Cash default
+}
+
 const resolveMoneyValue = (value) => {
   if (typeof value === "number") return value;
   if (typeof value === "string") {
@@ -187,10 +221,18 @@ const normalizeLineItems = (items = []) => {
   });
 };
 
-const buildSearchPool = (receipt) => {
-  const payments = receipt.payments?.map(
-    (payment) => payment.name || payment.payment_type?.name
-  );
+export const buildSearchPool = (receipt) => {
+  // Collect multiple payment-related tokens to ensure searches for 'transfer' or 'crypto'
+  // match regardless of whether the data uses `name`, `type`, `payment_type_name`, or ids.
+  const payments = (receipt.payments || []).flatMap((payment) => [
+    payment?.name,
+    payment?.payment_type?.name,
+    payment?.paymentTypeName,
+    payment?.payment_type_name,
+    payment?.type,
+    payment?.payment_type,
+    payment?.payment_type_id,
+  ]);
 
   const lineItemTokens = (receipt.lineItems || []).flatMap((item) => [
     item._name,
@@ -209,7 +251,14 @@ const buildSearchPool = (receipt) => {
     receipt.cashierId,
     receipt.source,
     receipt.location?.name,
-    ...(payments || []),
+  ...(payments || []),
+  // Also include top-level payment method fields and payment type/name fields
+  receipt.paymentMethod,
+  receipt.payment_method,
+  receipt.paymentTypeName,
+  receipt.paymentType,
+  receipt.payment_type_name,
+  receipt.payment_type,
     ...lineItemTokens,
   ]
     .filter(Boolean)
@@ -226,7 +275,14 @@ const getCustomerLabel = (receipt) => {
 const getPaymentSummary = (receipt) => {
   if (!receipt?.payments || receipt.payments.length === 0) return "Unknown";
   return receipt.payments
-    .map((payment) => payment.name || payment.payment_type?.name || "Cash")
+    .map((payment) =>
+      payment?.name ||
+      payment?.payment_type_name ||
+      payment?.paymentTypeName ||
+      payment?.payment_type?.name ||
+      payment?.type ||
+      "Cash"
+    )
     .join(", ");
 };
 
@@ -507,25 +563,46 @@ export default function HistorySection({ cashier: _cashier }) {
       console.log("Current last receipt date:", lastReceipt._receiptDate);
 
       // Check if we have the DocumentSnapshot for pagination
+      // Try using the DocumentSnapshot for pagination first, but fall back to
+      // using the last receipt's created date if a snapshot isn't available.
+      let moreFirebaseData = [];
       const lastDocSnapshot = lastReceipt._docSnapshot;
-      if (!lastDocSnapshot) {
-        console.warn("No DocumentSnapshot available for pagination");
-        console.log("Last receipt keys:", Object.keys(lastReceipt));
-        setLoadingMore(false);
-        return;
+      if (lastDocSnapshot) {
+        console.log(
+          "Using DocumentSnapshot for pagination, doc.id:",
+          lastDocSnapshot.id
+        );
+        moreFirebaseData = await receiptsService.getAll({
+          orderBy: ["createdAt", "desc"],
+          startAfter: lastDocSnapshot, // Use the DocumentSnapshot for proper pagination
+          limit: 50, // Load next 50 receipts
+        });
+      } else {
+        // Fallback: startAfter by timestamp value (createdAt/receipt_date)
+        try {
+          const lastDate = lastReceipt._receiptDate ||
+            lastReceipt.createdAt ||
+            lastReceipt.created_at ||
+            null;
+          if (!lastDate) {
+            console.warn(
+              "No createdAt/receiptDate available for pagination fallback"
+            );
+            setLoadingMore(false);
+            return;
+          }
+          console.log("Falling back to timestamp pagination, startAfter:", lastDate);
+          moreFirebaseData = await receiptsService.getAll({
+            orderBy: ["createdAt", "desc"],
+            startAfter: lastDate,
+            limit: 50,
+          });
+        } catch (err) {
+          console.warn("Timestamp pagination fallback failed:", err?.message || err);
+          setLoadingMore(false);
+          return;
+        }
       }
-
-      console.log(
-        "Using DocumentSnapshot for pagination, doc.id:",
-        lastDocSnapshot.id
-      );
-
-      // Fetch the next batch of receipts starting after the last document
-      const moreFirebaseData = await receiptsService.getAll({
-        orderBy: ["createdAt", "desc"],
-        startAfter: lastDocSnapshot, // Use the DocumentSnapshot for proper pagination
-        limit: 50, // Load next 50 receipts
-      });
 
       if (moreFirebaseData.length > 0) {
         console.log(
@@ -712,29 +789,11 @@ export default function HistorySection({ cashier: _cashier }) {
   };
 
   const getPaymentIcon = (receipt) => {
-    const payment = receipt.payments?.[0];
-    const paymentType = payment?.type || payment?.name || "cash";
-    const type = paymentType.toLowerCase();
-
-    if (
-      type.includes("card") ||
-      type.includes("credit") ||
-      type.includes("debit")
-    ) {
-      return "💳";
-    }
-    if (
-      type.includes("crypto") ||
-      type.includes("bitcoin") ||
-      type.includes("btc")
-    ) {
-      return "₿";
-    }
-    if (type.includes("transfer") || type.includes("bank")) {
-      return "🏦";
-    }
-    return "💵"; // Cash default
+      // Use a small helper that prefers descriptive name fields first (name, payment_type_name)
+      return getPaymentIconForReceipt(receipt);
   };
+
+  // helper moved to top-level: getPaymentIconForReceipt
 
   const handleRefundRequest = async () => {
     if (!selectedReceipt) return;
@@ -946,6 +1005,7 @@ export default function HistorySection({ cashier: _cashier }) {
                               ? formatDate(receipt._receiptDate, "time")
                               : "Unknown time"}
                           </p>
+                          {/* payment debug tokens removed to restore original styling */}
                         </div>
 
                         {/* Receipt ID */}

@@ -13,6 +13,51 @@ import {
 } from "@/components/reports";
 import { useReceipts } from "@/hooks/useReportData";
 
+export function normalizePaymentType(type) {
+  if (!type && type !== 0) return "Other";
+  const lowerType = String(type).toLowerCase();
+  if (lowerType.includes("cash")) return "Cash";
+  if (
+    lowerType.includes("card") ||
+    lowerType.includes("credit") ||
+    lowerType.includes("debit")
+  )
+    return "Card";
+  if (
+    lowerType.includes("transfer") ||
+    lowerType.includes("bank") ||
+    lowerType.includes("custom")
+  )
+    return "Bank Transfer";
+  if (
+    lowerType.includes("crypto") ||
+    lowerType.includes("bitcoin") ||
+    lowerType.includes("usdt")
+  )
+    return "Crypto";
+  if (lowerType.includes("promptpay") || lowerType.includes("qr"))
+    return "PromptPay/QR";
+  if (lowerType.includes("other")) return "Other";
+  // Return capitalized version of original
+  return String(type).charAt(0).toUpperCase() + String(type).slice(1);
+}
+
+export function ensureDefaultPaymentTypes(paymentMap) {
+  const requiredTypes = ["Cash", "Card", "Bank Transfer", "Crypto"];
+  for (const t of requiredTypes) {
+    if (!paymentMap.has(t)) {
+      paymentMap.set(t, {
+        id: t,
+        name: t,
+        paymentAmount: 0,
+        paymentTransactions: 0,
+        refundAmount: 0,
+        refundTransactions: 0,
+      });
+    }
+  }
+}
+
 export default function SalesByPaymentPage() {
   // Use optimized hook with caching
   const {
@@ -142,11 +187,12 @@ export default function SalesByPaymentPage() {
       } else {
         // Process each payment in the payments array
         payments.forEach((payment) => {
+          // Prefer descriptive name fields first (name, paymentTypeName)
           const paymentType =
             payment.payment_type_name ||
             payment.paymentTypeName ||
-            payment.type ||
             payment.name ||
+            payment.type ||
             "Other";
           const amount =
             payment.money_amount ||
@@ -180,6 +226,9 @@ export default function SalesByPaymentPage() {
       }
     });
 
+    // Ensure the report always contains the 4 main payment types
+    ensureDefaultPaymentTypes(paymentMap);
+
     // Calculate net amounts
     const paymentsArray = Array.from(paymentMap.values()).map((payment) => ({
       ...payment,
@@ -189,30 +238,7 @@ export default function SalesByPaymentPage() {
     return paymentsArray.sort((a, b) => b.paymentAmount - a.paymentAmount);
   }, [filteredReceipts]);
 
-  // Helper to normalize payment type names
-  function normalizePaymentType(type) {
-    const lowerType = type.toLowerCase();
-    if (lowerType.includes("cash")) return "Cash";
-    if (
-      lowerType.includes("card") ||
-      lowerType.includes("credit") ||
-      lowerType.includes("debit")
-    )
-      return "Card";
-    if (lowerType.includes("transfer") || lowerType.includes("bank"))
-      return "Bank Transfer";
-    if (
-      lowerType.includes("crypto") ||
-      lowerType.includes("bitcoin") ||
-      lowerType.includes("usdt")
-    )
-      return "Crypto";
-    if (lowerType.includes("promptpay") || lowerType.includes("qr"))
-      return "PromptPay/QR";
-    if (lowerType.includes("other")) return "Other";
-    // Return capitalized version of original
-    return type.charAt(0).toUpperCase() + type.slice(1);
-  }
+  // Use exported normalizePaymentType declared above
 
   // Calculate totals for the Total row
   const totals = useMemo(() => {
