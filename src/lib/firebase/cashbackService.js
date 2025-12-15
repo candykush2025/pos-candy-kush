@@ -343,7 +343,6 @@ export const customerPointsService = {
         id: `pt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         createdAt: new Date().toISOString(),
       };
-
       await updateDoc(customerRef, {
         pointList: arrayUnion(entry),
         updatedAt: serverTimestamp(),
@@ -352,7 +351,28 @@ export const customerPointsService = {
       return entry;
     } catch (error) {
       console.error("Error adding points to customer:", error);
-      throw error;
+
+      // If writing to Firestore failed (likely offline), queue the point entry
+      // to local syncQueue so it can be retried later. This keeps point history
+      // consistent even when checkout occurs offline.
+      try {
+        // Lazily require db to avoid circular import issues in some environments
+        const dbLocal = require("@/lib/db/index").default;
+        await dbLocal.syncQueue.add({
+          type: "customer_points",
+          action: "create",
+          data: { customerId, entry },
+          timestamp: new Date().toISOString(),
+          status: "pending",
+          attempts: 0,
+        });
+
+        console.warn("Customer points queued for sync (offline mode)");
+        return { ...entry, queued: true };
+      } catch (queueErr) {
+        console.error("Failed to queue customer points for sync:", queueErr);
+        throw error; // rethrow original error
+      }
     }
   },
 

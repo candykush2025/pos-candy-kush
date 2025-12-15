@@ -1450,6 +1450,155 @@ export default function CustomersPage() {
             )}
           </div>
         </div>
+
+        {/* Point Adjustment Modal */}
+        <Dialog
+          open={pointAdjustmentModal.open}
+          onOpenChange={(open) => {
+            if (!open && !pointAdjustmentModal.loading) {
+              setPointAdjustmentModal({
+                open: false,
+                type: null,
+                loading: false,
+              });
+              setPointAdjustmentForm({ points: "", reason: "" });
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {pointAdjustmentModal.type === "add" ? (
+                  <>
+                    <Plus className="h-5 w-5 text-green-600" />
+                    Add Points
+                  </>
+                ) : (
+                  <>
+                    <Minus className="h-5 w-5 text-red-600" />
+                    Reduce Points
+                  </>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                {pointAdjustmentModal.type === "add"
+                  ? "Add points to this customer's balance"
+                  : "Reduce points from this customer's balance"}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Current Balance Display */}
+              <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
+                <div className="text-sm text-neutral-500">Current Balance</div>
+                <div className="text-xl font-bold">
+                  {selectedCustomer ? getPointsValue(selectedCustomer) : 0}{" "}
+                  points
+                </div>
+              </div>
+
+              {/* Points Input */}
+              <div className="space-y-2">
+                <Label htmlFor="adjustmentPoints">
+                  Points to{" "}
+                  {pointAdjustmentModal.type === "add" ? "Add" : "Reduce"}
+                </Label>
+                <Input
+                  id="adjustmentPoints"
+                  type="number"
+                  min="1"
+                  placeholder="Enter points amount"
+                  value={pointAdjustmentForm.points}
+                  onChange={(e) =>
+                    setPointAdjustmentForm({
+                      ...pointAdjustmentForm,
+                      points: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              {/* Reason Input */}
+              <div className="space-y-2">
+                <Label htmlFor="adjustmentReason">Reason</Label>
+                <Textarea
+                  id="adjustmentReason"
+                  placeholder="Enter reason for adjustment..."
+                  value={pointAdjustmentForm.reason}
+                  onChange={(e) =>
+                    setPointAdjustmentForm({
+                      ...pointAdjustmentForm,
+                      reason: e.target.value,
+                    })
+                  }
+                  rows={3}
+                />
+              </div>
+
+              {/* Preview */}
+              {pointAdjustmentForm.points && (
+                <div
+                  className={`p-3 rounded-lg border ${
+                    pointAdjustmentModal.type === "add"
+                      ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                      : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                  }`}
+                >
+                  <div className="text-sm">
+                    New Balance:{" "}
+                    <span className="font-bold">
+                      {pointAdjustmentModal.type === "add"
+                        ? (selectedCustomer
+                            ? getPointsValue(selectedCustomer)
+                            : 0) + parseInt(pointAdjustmentForm.points || 0)
+                        : Math.max(
+                            0,
+                            (selectedCustomer
+                              ? getPointsValue(selectedCustomer)
+                              : 0) - parseInt(pointAdjustmentForm.points || 0)
+                          )}{" "}
+                      points
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPointAdjustmentModal({
+                    open: false,
+                    type: null,
+                    loading: false,
+                  });
+                  setPointAdjustmentForm({ points: "", reason: "" });
+                }}
+                disabled={pointAdjustmentModal.loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant={
+                  pointAdjustmentModal.type === "add"
+                    ? "default"
+                    : "destructive"
+                }
+                onClick={handlePointAdjustment}
+                disabled={pointAdjustmentModal.loading}
+                className="gap-2"
+              >
+                {pointAdjustmentModal.loading && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                {pointAdjustmentModal.type === "add"
+                  ? "Add Points"
+                  : "Reduce Points"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -2698,152 +2847,6 @@ export default function CustomersPage() {
               disabled={deleteModal.loading}
             >
               {deleteModal.loading ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Point Adjustment Modal */}
-      <Dialog
-        open={pointAdjustmentModal.open}
-        onOpenChange={(open) => {
-          if (!open && !pointAdjustmentModal.loading) {
-            setPointAdjustmentModal({
-              open: false,
-              type: null,
-              loading: false,
-            });
-            setPointAdjustmentForm({ points: "", reason: "" });
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {pointAdjustmentModal.type === "add" ? (
-                <>
-                  <Plus className="h-5 w-5 text-green-600" />
-                  Add Points
-                </>
-              ) : (
-                <>
-                  <Minus className="h-5 w-5 text-red-600" />
-                  Reduce Points
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {pointAdjustmentModal.type === "add"
-                ? "Add points to this customer's balance"
-                : "Reduce points from this customer's balance"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Current Balance Display */}
-            <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
-              <div className="text-sm text-neutral-500">Current Balance</div>
-              <div className="text-xl font-bold">
-                {selectedCustomer ? getPointsValue(selectedCustomer) : 0} points
-              </div>
-            </div>
-
-            {/* Points Input */}
-            <div className="space-y-2">
-              <Label htmlFor="adjustmentPoints">
-                Points to{" "}
-                {pointAdjustmentModal.type === "add" ? "Add" : "Reduce"}
-              </Label>
-              <Input
-                id="adjustmentPoints"
-                type="number"
-                min="1"
-                placeholder="Enter points amount"
-                value={pointAdjustmentForm.points}
-                onChange={(e) =>
-                  setPointAdjustmentForm({
-                    ...pointAdjustmentForm,
-                    points: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            {/* Reason Input */}
-            <div className="space-y-2">
-              <Label htmlFor="adjustmentReason">Reason</Label>
-              <Textarea
-                id="adjustmentReason"
-                placeholder="Enter reason for adjustment..."
-                value={pointAdjustmentForm.reason}
-                onChange={(e) =>
-                  setPointAdjustmentForm({
-                    ...pointAdjustmentForm,
-                    reason: e.target.value,
-                  })
-                }
-                rows={3}
-              />
-            </div>
-
-            {/* Preview */}
-            {pointAdjustmentForm.points && (
-              <div
-                className={`p-3 rounded-lg border ${
-                  pointAdjustmentModal.type === "add"
-                    ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                    : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-                }`}
-              >
-                <div className="text-sm">
-                  New Balance:{" "}
-                  <span className="font-bold">
-                    {pointAdjustmentModal.type === "add"
-                      ? (selectedCustomer
-                          ? getPointsValue(selectedCustomer)
-                          : 0) + parseInt(pointAdjustmentForm.points || 0)
-                      : Math.max(
-                          0,
-                          (selectedCustomer
-                            ? getPointsValue(selectedCustomer)
-                            : 0) - parseInt(pointAdjustmentForm.points || 0)
-                        )}{" "}
-                    points
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPointAdjustmentModal({
-                  open: false,
-                  type: null,
-                  loading: false,
-                });
-                setPointAdjustmentForm({ points: "", reason: "" });
-              }}
-              disabled={pointAdjustmentModal.loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant={
-                pointAdjustmentModal.type === "add" ? "default" : "destructive"
-              }
-              onClick={handlePointAdjustment}
-              disabled={pointAdjustmentModal.loading}
-              className="gap-2"
-            >
-              {pointAdjustmentModal.loading && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
-              {pointAdjustmentModal.type === "add"
-                ? "Add Points"
-                : "Reduce Points"}
             </Button>
           </DialogFooter>
         </DialogContent>

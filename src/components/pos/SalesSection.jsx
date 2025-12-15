@@ -33,6 +33,7 @@ import {
 import { discountsService } from "@/lib/firebase/discountsService";
 import { shiftsService } from "@/lib/firebase/shiftsService";
 import { customerApprovalService } from "@/lib/firebase/customerApprovalService";
+import { isCustomerEligibleForPoints } from "@/lib/services/customerPointsUtils";
 import {
   cashbackRulesService,
   pointUsageRulesService,
@@ -2278,15 +2279,7 @@ export default function SalesSection({ cashier }) {
       );
 
       if (isMember) {
-        let isEligibleForCashback = true;
-
-        // Check expiry if exists
-        if (cartCustomer.expiryDate) {
-          isEligibleForCashback = !customerApprovalService.isCustomerExpired(
-            cartCustomer.expiryDate
-          );
-        }
-
+        const isEligibleForCashback = isCustomerEligibleForPoints(cartCustomer);
         console.log(
           "💰 PAYMENT - Eligible for cashback:",
           isEligibleForCashback
@@ -2645,13 +2638,23 @@ export default function SalesSection({ cashier }) {
               const pointValue = pointUsageRules?.pointValue || 1;
               const valueRedeemed = pointsToUse * pointValue;
               console.log("📉 Recording USED points:", pointsToUse);
-              await customerPointsService.recordUsedPoints(
-                cartCustomer.id,
-                pointsToUse,
-                orderNumber,
-                receiptData.id || orderNumber,
-                valueRedeemed
-              );
+              try {
+                const usedEntry = await customerPointsService.recordUsedPoints(
+                  cartCustomer.id,
+                  pointsToUse,
+                  orderNumber,
+                  receiptData.id || orderNumber,
+                  valueRedeemed
+                );
+
+                // Update local customer object so UI reflects point deduction immediately
+                setCartCustomer({
+                  ...cartCustomer,
+                  pointList: [usedEntry, ...(cartCustomer.pointList || [])],
+                });
+              } catch (err) {
+                console.error("Failed to record used points:", err);
+              }
             }
 
             // Check if customer should earn cashback
@@ -2671,13 +2674,24 @@ export default function SalesSection({ cashier }) {
                 "📈 Recording EARNED points:",
                 calculatedCashback.totalPoints
               );
-              await customerPointsService.recordEarnedPoints(
-                cartCustomer.id,
-                calculatedCashback.totalPoints,
-                orderNumber,
-                receiptData.id || orderNumber,
-                calculatedCashback.itemBreakdown
-              );
+              try {
+                const earnedEntry =
+                  await customerPointsService.recordEarnedPoints(
+                    cartCustomer.id,
+                    calculatedCashback.totalPoints,
+                    orderNumber,
+                    receiptData.id || orderNumber,
+                    calculatedCashback.itemBreakdown
+                  );
+
+                // Update local customer so points show immediately in UI
+                setCartCustomer({
+                  ...cartCustomer,
+                  pointList: [earnedEntry, ...(cartCustomer.pointList || [])],
+                });
+              } catch (err) {
+                console.error("Failed to record earned points:", err);
+              }
             }
           } else {
             console.log(

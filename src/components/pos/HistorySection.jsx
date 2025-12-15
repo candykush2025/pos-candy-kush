@@ -1069,6 +1069,73 @@ export default function HistorySection({ cashier: _cashier }) {
                 {/* Divider */}
                 <div className="border-t border-gray-200 dark:border-gray-700"></div>
 
+                {/* Cashback / Points Summary */}
+                {(selectedReceipt.cashback_earned ||
+                  selectedReceipt.points_earned ||
+                  selectedReceipt.cashback_breakdown) && (
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Cashback / Points
+                    </p>
+                    <div className="mt-1 rounded-lg bg-green-50 dark:bg-green-900/10 p-3 border border-green-100 dark:border-green-800">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-lg font-semibold text-green-700 dark:text-green-200">
+                            {selectedReceipt.cashback_earned ||
+                              selectedReceipt.points_earned ||
+                              0}{" "}
+                            points
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                            Earned from this sale
+                          </p>
+                        </div>
+                        {selectedReceipt.points_deducted > 0 && (
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-red-600">
+                              -{selectedReceipt.points_deducted} pts
+                            </p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              Used
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedReceipt.cashback_breakdown &&
+                        selectedReceipt.cashback_breakdown.length > 0 && (
+                          <div className="mt-3 text-sm text-gray-700 dark:text-gray-300 space-y-2">
+                            {selectedReceipt.cashback_breakdown.map((b, i) => (
+                              <div
+                                key={i}
+                                className="flex items-start justify-between"
+                              >
+                                <div>
+                                  <div className="font-medium">
+                                    {b.itemName ||
+                                      b.item_name ||
+                                      b.itemId ||
+                                      b.itemId}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Rule:{" "}
+                                    {b.ruleApplied?.name ||
+                                      b.ruleApplied?.ruleName ||
+                                      b.rule ||
+                                      "—"}
+                                  </div>
+                                </div>
+                                <div className="font-semibold">
+                                  {b.points} pts
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Employee */}
                 <div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
