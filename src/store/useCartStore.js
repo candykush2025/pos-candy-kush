@@ -48,12 +48,24 @@ export const useCartStore = create((set, get) => ({
         variantId = product.variants[0].variant_id || product.variants[0].id;
       }
 
+      // Normalize category fields from product so downstream logic (cashback rules)
+      // can match by categoryId. Products may store category in multiple fields.
+      const categoryId =
+        product.categoryId || product.category || product.category_id || null;
+      const categoryName =
+        product.categoryName ||
+        product.categoryLabel ||
+        product.category ||
+        null;
+
       const newItem = {
         id: nanoid(),
         productId: product.id,
         variantId: variantId, // Loyverse variant_id
         name: product.name,
         price: usePrice, // Use member price if applicable
+        categoryId,
+        categoryName,
         originalPrice: product.price, // Keep original for reference
         memberPrice: product.memberPrice || null,
         source: product.source || null,
@@ -264,8 +276,15 @@ export const useCartStore = create((set, get) => ({
 
   // Load cart from saved state
   loadCart: (cartData) => {
+    // Ensure items have normalized categoryId so cashback rules can match
+    const sanitizedItems = (cartData.items || []).map((it) => ({
+      ...it,
+      categoryId: it.categoryId || it.category_id || it.category || null,
+      categoryName: it.categoryName || it.category_label || it.category || null,
+    }));
+
     set({
-      items: cartData.items || [],
+      items: sanitizedItems,
       discounts: cartData.discounts || [],
       discount: cartData.discount || { type: "percentage", value: 0 },
       tax: cartData.tax || { rate: 0, amount: 0 },

@@ -506,6 +506,13 @@ export default function SalesSection({ cashier }) {
     return { totalPoints, itemBreakdown };
   };
 
+  // Recalculate cashback automatically when items, customer or rules change
+  useEffect(() => {
+    // Slight debounce to allow store updates to settle
+    const t = setTimeout(() => calculateCashbackNow(), 50);
+    return () => clearTimeout(t);
+  }, [items, cartCustomer, cashbackRules]);
+
   // Check for active shift
   const checkActiveShift = () => {
     try {
@@ -4188,6 +4195,14 @@ export default function SalesSection({ cashier }) {
                 <span>Total</span>
                 <span>{formatCurrency(getTotal())}</span>
               </div>
+              {cartCustomer && calculatedCashback.totalPoints > 0 && (
+                <div className="mt-2 text-sm text-green-600 dark:text-green-400">
+                  Estimated cashback:{" "}
+                  <span className="font-semibold">
+                    {calculatedCashback.totalPoints} points
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
