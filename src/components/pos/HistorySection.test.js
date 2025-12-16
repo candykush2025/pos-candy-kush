@@ -23,13 +23,21 @@ describe("getPaymentIconForReceipt", () => {
   });
 
   test("buildSearchPool includes transfer and crypto tokens", () => {
-    const r1 = { payments: [{ type: "OTHER", name: "Crypto transfer", payment_type_id: "d813" }] };
+    const r1 = {
+      payments: [
+        { type: "OTHER", name: "Crypto transfer", payment_type_id: "d813" },
+      ],
+    };
     const pool1 = buildSearchPool(r1);
-    expect(pool1.some((t) => String(t).toLowerCase().includes("crypto"))).toBe(true);
+    expect(pool1.some((t) => String(t).toLowerCase().includes("crypto"))).toBe(
+      true
+    );
 
     const r2 = { payments: [{ payment_type_name: "Transfer" }] };
     const pool2 = buildSearchPool(r2);
-    expect(pool2.some((t) => String(t).toLowerCase().includes("transfer"))).toBe(true);
+    expect(
+      pool2.some((t) => String(t).toLowerCase().includes("transfer"))
+    ).toBe(true);
   });
 
   test("includes top-level paymentTypeName and paymentType fields", () => {

@@ -65,7 +65,13 @@ export function getPaymentIconForReceipt(receipt) {
 
   // Prefer the first payment that has a descriptive field, otherwise fallback to first
   let payment = payments.find(
-    (p) => p?.name || p?.payment_type_name || p?.paymentTypeName || p?.type || p?.payment_type || p?.payment_type_id
+    (p) =>
+      p?.name ||
+      p?.payment_type_name ||
+      p?.paymentTypeName ||
+      p?.type ||
+      p?.payment_type ||
+      p?.payment_type_id
   );
   if (!payment) payment = payments[0];
 
@@ -80,10 +86,19 @@ export function getPaymentIconForReceipt(receipt) {
 
   const type = String(rawType).toLowerCase();
 
-  if (type.includes("card") || type.includes("credit") || type.includes("debit")) {
+  if (
+    type.includes("card") ||
+    type.includes("credit") ||
+    type.includes("debit")
+  ) {
     return "💳";
   }
-  if (type.includes("crypto") || type.includes("bitcoin") || type.includes("btc") || type.includes("usdt")) {
+  if (
+    type.includes("crypto") ||
+    type.includes("bitcoin") ||
+    type.includes("btc") ||
+    type.includes("usdt")
+  ) {
     return "₿";
   }
   if (type.includes("transfer") || type.includes("bank")) {
@@ -251,14 +266,14 @@ export const buildSearchPool = (receipt) => {
     receipt.cashierId,
     receipt.source,
     receipt.location?.name,
-  ...(payments || []),
-  // Also include top-level payment method fields and payment type/name fields
-  receipt.paymentMethod,
-  receipt.payment_method,
-  receipt.paymentTypeName,
-  receipt.paymentType,
-  receipt.payment_type_name,
-  receipt.payment_type,
+    ...(payments || []),
+    // Also include top-level payment method fields and payment type/name fields
+    receipt.paymentMethod,
+    receipt.payment_method,
+    receipt.paymentTypeName,
+    receipt.paymentType,
+    receipt.payment_type_name,
+    receipt.payment_type,
     ...lineItemTokens,
   ]
     .filter(Boolean)
@@ -275,13 +290,14 @@ const getCustomerLabel = (receipt) => {
 const getPaymentSummary = (receipt) => {
   if (!receipt?.payments || receipt.payments.length === 0) return "Unknown";
   return receipt.payments
-    .map((payment) =>
-      payment?.name ||
-      payment?.payment_type_name ||
-      payment?.paymentTypeName ||
-      payment?.payment_type?.name ||
-      payment?.type ||
-      "Cash"
+    .map(
+      (payment) =>
+        payment?.name ||
+        payment?.payment_type_name ||
+        payment?.paymentTypeName ||
+        payment?.payment_type?.name ||
+        payment?.type ||
+        "Cash"
     )
     .join(", ");
 };
@@ -452,6 +468,8 @@ export default function HistorySection({ cashier: _cashier }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedReceiptHasPendingRefund, setSelectedReceiptHasPendingRefund] =
+    useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [displayCount, setDisplayCount] = useState(50); // Lazy loading
   const [showRefundModal, setShowRefundModal] = useState(false);
@@ -580,7 +598,8 @@ export default function HistorySection({ cashier: _cashier }) {
       } else {
         // Fallback: startAfter by timestamp value (createdAt/receipt_date)
         try {
-          const lastDate = lastReceipt._receiptDate ||
+          const lastDate =
+            lastReceipt._receiptDate ||
             lastReceipt.createdAt ||
             lastReceipt.created_at ||
             null;
@@ -591,14 +610,20 @@ export default function HistorySection({ cashier: _cashier }) {
             setLoadingMore(false);
             return;
           }
-          console.log("Falling back to timestamp pagination, startAfter:", lastDate);
+          console.log(
+            "Falling back to timestamp pagination, startAfter:",
+            lastDate
+          );
           moreFirebaseData = await receiptsService.getAll({
             orderBy: ["createdAt", "desc"],
             startAfter: lastDate,
             limit: 50,
           });
         } catch (err) {
-          console.warn("Timestamp pagination fallback failed:", err?.message || err);
+          console.warn(
+            "Timestamp pagination fallback failed:",
+            err?.message || err
+          );
           setLoadingMore(false);
           return;
         }
@@ -770,7 +795,27 @@ export default function HistorySection({ cashier: _cashier }) {
   const handleViewDetails = (receipt) => {
     setSelectedReceipt(receipt);
     setShowDetailsModal(true);
+    // Check for existing pending refund requests for this receipt
+    (async () => {
+      try {
+        const requests = await receiptsService.getEditRequests({
+          where: ["receiptId", "==", receipt.id],
+        });
+        const pendingRefund = requests.some(
+          (r) => r.type === "refund" && r.status === "pending"
+        );
+        setSelectedReceiptHasPendingRefund(!!pendingRefund);
+      } catch (err) {
+        console.error("Error checking pending refund requests:", err);
+        setSelectedReceiptHasPendingRefund(false);
+      }
+    })();
   };
+
+  // Reset pending-refund flag when closing details
+  useEffect(() => {
+    if (!selectedReceipt) setSelectedReceiptHasPendingRefund(false);
+  }, [selectedReceipt]);
 
   const getCashierLabel = (receipt) => {
     if (receipt.employeeName) return receipt.employeeName;
@@ -789,8 +834,24 @@ export default function HistorySection({ cashier: _cashier }) {
   };
 
   const getPaymentIcon = (receipt) => {
-      // Use a small helper that prefers descriptive name fields first (name, payment_type_name)
-      return getPaymentIconForReceipt(receipt);
+    // Show a trash icon for refunded receipts, otherwise show payment icon
+    const total = resolveMoneyValue(
+      receipt.totalMoney ?? receipt.total ?? receipt.total_money ?? 0
+    );
+    const isRefund =
+      receipt.refund ||
+      receipt.isRefunded ||
+      total < 0 ||
+      String(
+        receipt.receiptType || receipt.receipt_type || ""
+      ).toUpperCase() === "REFUND";
+
+    if (isRefund) {
+      return <Trash2 className="h-6 w-6 text-red-600" />;
+    }
+
+    // Use a small helper that prefers descriptive name fields first (name, payment_type_name)
+    return <span>{getPaymentIconForReceipt(receipt)}</span>;
   };
 
   // helper moved to top-level: getPaymentIconForReceipt
@@ -805,6 +866,30 @@ export default function HistorySection({ cashier: _cashier }) {
     }
 
     try {
+      // Double-check: cannot request refund for already refunded receipts
+      const total = resolveMoneyValue(
+        selectedReceipt.totalMoney ?? selectedReceipt.total ?? 0
+      );
+      if (selectedReceipt.refund || selectedReceipt.isRefunded || total < 0) {
+        alert("This receipt has already been refunded");
+        setShowRefundModal(false);
+        return;
+      }
+
+      // Check for existing pending refund requests
+      const existing = await receiptsService.getEditRequests({
+        where: ["receiptId", "==", selectedReceipt.id],
+      });
+      const hasPending = existing.some(
+        (r) => r.type === "refund" && r.status === "pending"
+      );
+      if (hasPending) {
+        alert("A refund request for this receipt is already pending approval");
+        setSelectedReceiptHasPendingRefund(true);
+        setShowRefundModal(false);
+        return;
+      }
+
       setSubmittingRefundRequest(true);
       const editRequest = {
         receiptId: selectedReceipt.id,
@@ -815,13 +900,7 @@ export default function HistorySection({ cashier: _cashier }) {
         requestedByName: _cashier?.name || "Unknown Cashier",
         requestedAt: new Date().toISOString(),
         status: "pending",
-        originalAmount: resolveMoneyValue(
-          selectedReceipt.totalMoney ??
-            selectedReceipt.total_money ??
-            selectedReceipt.total ??
-            selectedReceipt._total ??
-            0
-        ),
+        originalAmount: total,
         originalPaymentMethod: getPaymentSummary(selectedReceipt),
       };
 
@@ -829,6 +908,7 @@ export default function HistorySection({ cashier: _cashier }) {
       await receiptsService.createEditRequest(editRequest);
 
       alert("Refund request submitted for admin approval");
+      setSelectedReceiptHasPendingRefund(true);
       setShowRefundModal(false);
     } catch (error) {
       console.error("Error submitting refund request:", error);
@@ -1064,7 +1144,36 @@ export default function HistorySection({ cashier: _cashier }) {
                       variant="outline"
                       size="sm"
                       onClick={() => setShowRefundModal(true)}
-                      className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400"
+                      className={`flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 ${
+                        selectedReceipt?.refund ||
+                        selectedReceipt?.isRefunded ||
+                        resolveMoneyValue(
+                          selectedReceipt?.totalMoney ??
+                            selectedReceipt?.total ??
+                            0
+                        ) < 0 ||
+                        selectedReceiptHasPendingRefund
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }`}
+                      disabled={
+                        selectedReceipt?.refund ||
+                        selectedReceipt?.isRefunded ||
+                        resolveMoneyValue(
+                          selectedReceipt?.totalMoney ??
+                            selectedReceipt?.total ??
+                            0
+                        ) < 0 ||
+                        selectedReceiptHasPendingRefund
+                      }
+                      title={
+                        selectedReceiptHasPendingRefund
+                          ? "Refund request pending approval"
+                          : selectedReceipt?.refund ||
+                            selectedReceipt?.isRefunded
+                          ? "Already refunded"
+                          : undefined
+                      }
                     >
                       <Trash2 className="h-4 w-4" />
                       Refund
@@ -1124,6 +1233,22 @@ export default function HistorySection({ cashier: _cashier }) {
                     )}
                   </p>
                   <p className="text-gray-500 dark:text-gray-400 mt-2">Total</p>
+
+                  {/* Refunded badge */}
+                  {(selectedReceipt.refund ||
+                    selectedReceipt.isRefunded ||
+                    (selectedReceipt.totalMoney ?? selectedReceipt.total ?? 0) <
+                      0) && (
+                    <div className="mt-4 flex items-center justify-center">
+                      <Badge
+                        variant="destructive"
+                        className="flex items-center gap-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Refunded
+                      </Badge>
+                    </div>
+                  )}
                 </div>
 
                 {/* Divider */}

@@ -55,6 +55,7 @@ export default function AdminOrders() {
   const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState(null);
   const [editedPaymentMethod, setEditedPaymentMethod] = useState("");
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [pendingRefundRequests, setPendingRefundRequests] = useState([]);
   const [processingRequestId, setProcessingRequestId] = useState(null); // Track which request is being processed
   const [editPaymentLoading, setEditPaymentLoading] = useState(false); // Loading state for edit payment
 
@@ -303,9 +304,82 @@ export default function AdminOrders() {
       });
       // Filter only pending requests
       const pending = requests.filter((r) => r.status === "pending");
-      setPendingRequests(pending);
+      // Split pending requests by type
+      const paymentChangePending = pending.filter((r) => r.type !== "refund");
+      const refundPending = pending.filter((r) => r.type === "refund");
+      setPendingRequests(paymentChangePending);
+      setPendingRefundRequests(refundPending);
     } catch (error) {
       console.error("Error loading pending requests:", error);
+    }
+  };
+
+  // Approve refund request
+  const handleApproveRefund = async (request) => {
+    if (!request) return;
+    try {
+      const receiptId = request.receiptId;
+      const actualReceipt = await receiptsService.get(receiptId);
+      if (!actualReceipt) {
+        toast.error("Receipt not found");
+        return;
+      }
+
+      // Mark the receipt as refunded
+      const existingHistory = actualReceipt.paymentHistory || [];
+      await receiptsService.update(receiptId, {
+        isRefunded: true,
+        refund: true,
+        refundAmount: request.amount || request.originalAmount || 0,
+        refundApprovedBy: "admin",
+        refundedAt: new Date().toISOString(),
+        paymentHistory: [
+          ...existingHistory,
+          {
+            type: "refund",
+            amount: request.amount || request.originalAmount || 0,
+            requestedBy: request.requestedByName,
+            approvedBy: "admin",
+            refundedAt: new Date().toISOString(),
+            status: "refunded",
+          },
+        ],
+      });
+
+      // Update the edit request status
+      if (request.id) {
+        await receiptsService.updateEditRequest(request.id, {
+          status: "refunded",
+          refundedAt: new Date().toISOString(),
+          refundedBy: "admin",
+        });
+      }
+
+      toast.success("Refund approved");
+      loadReceipts();
+      loadPendingRequests();
+    } catch (error) {
+      console.error("Error approving refund:", error);
+      toast.error("Failed to approve refund");
+    }
+  };
+
+  // Decline refund request
+  const handleDeclineRefund = async (request) => {
+    if (!request) return;
+    try {
+      if (request.id) {
+        await receiptsService.updateEditRequest(request.id, {
+          status: "declined",
+          declinedAt: new Date().toISOString(),
+          declinedBy: "admin",
+        });
+      }
+      toast.success("Refund request declined");
+      loadPendingRequests();
+    } catch (error) {
+      console.error("Error declining refund request:", error);
+      toast.error("Failed to decline refund request");
     }
   };
 
@@ -524,10 +598,21 @@ export default function AdminOrders() {
       r.employeeId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.source?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Receipt type filter
+    // Determine effective receipt type (treat receipts flagged as refunded as REFUND)
+    const effectiveType = (() => {
+      const total = r.totalMoney || r.total_money || 0;
+      const baseType = (r.receiptType || r.receipt_type || "")
+        .toString()
+        .toUpperCase();
+      const isRefundFlag = r.refund || r.isRefunded || total < 0;
+      if (isRefundFlag) return "REFUND";
+      if (baseType) return baseType;
+      return "SALE";
+    })();
+
+    // Receipt type filter: support selecting REFUND even if receipt_type === 'SALE' but flagged as refund
     const typeMatch =
-      receiptTypeFilter === "all" ||
-      (r.receiptType || r.receipt_type) === receiptTypeFilter;
+      receiptTypeFilter === "all" || effectiveType === receiptTypeFilter;
 
     // Source filter
     const sourceMatch = sourceFilter === "all" || r.source === sourceFilter;
@@ -608,13 +693,37 @@ export default function AdminOrders() {
     }
   };
 
+  const getEffectiveReceiptType = (r) => {
+    const total = r.totalMoney || r.total_money || 0;
+    if (r.refund || r.isRefunded || total < 0) return "REFUND";
+    const baseType = (r.receiptType || r.receipt_type || "")
+      .toString()
+      .toUpperCase();
+    return baseType || "SALE";
+  };
+
+  // Helper to detect refunded receipts
+  const isRefundReceipt = (r) => {
+    const total = r.totalMoney || r.total_money || 0;
+    return (
+      r.refund ||
+      r.isRefunded ||
+      total < 0 ||
+      (r.receiptType || r.receipt_type) === "REFUND"
+    );
+  };
+
   // Calculate stats
   const totalSales = filteredReceipts
-    .filter((r) => (r.receiptType || r.receipt_type) === "SALE")
+    .filter(
+      (r) =>
+        !isRefundReceipt(r) &&
+        (r.receiptType || r.receipt_type || "").toUpperCase() === "SALE"
+    )
     .reduce((sum, r) => sum + (r.totalMoney || r.total_money || 0), 0);
   const totalRefunds = filteredReceipts
-    .filter((r) => (r.receiptType || r.receipt_type) === "REFUND")
-    .reduce((sum, r) => sum + (r.totalMoney || r.total_money || 0), 0);
+    .filter((r) => isRefundReceipt(r))
+    .reduce((sum, r) => sum + Math.abs(r.totalMoney || r.total_money || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -798,6 +907,101 @@ export default function AdminOrders() {
                     >
                       <Edit2 className="h-4 w-4 mr-1" />
                       Edit
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending Refund Requests */}
+      {pendingRefundRequests.length > 0 && (
+        <Card className="border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-300">
+              <Clock className="h-5 w-5" />
+              Pending Refund Requests ({pendingRefundRequests.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingRefundRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">
+                          Receipt ID: {request.receiptId}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Requested by {request.requestedByName} •{" "}
+                          {formatDate(
+                            new Date(request.requestedAt),
+                            "datetime"
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
+                        Amount:{" "}
+                        {formatCurrency(
+                          request.amount || request.originalAmount || 0
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      disabled={processingRequestId === request.id}
+                      onClick={async () => {
+                        setProcessingRequestId(request.id);
+                        try {
+                          await handleApproveRefund(request);
+                        } finally {
+                          setProcessingRequestId(null);
+                        }
+                      }}
+                    >
+                      {processingRequestId === request.id ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                      )}
+                      {processingRequestId === request.id
+                        ? "Processing..."
+                        : "Approve"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      disabled={processingRequestId === request.id}
+                      onClick={async () => {
+                        setProcessingRequestId(request.id);
+                        try {
+                          await handleDeclineRefund(request);
+                        } finally {
+                          setProcessingRequestId(null);
+                        }
+                      }}
+                    >
+                      {processingRequestId === request.id ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mr-1" />
+                      )}
+                      {processingRequestId === request.id
+                        ? "Processing..."
+                        : "Decline"}
                     </Button>
                   </div>
                 </div>
@@ -1386,12 +1590,10 @@ export default function AdminOrders() {
                         <div className="flex flex-col items-center gap-1">
                           <Badge
                             className={getReceiptTypeColor(
-                              receipt.receiptType || receipt.receipt_type
+                              getEffectiveReceiptType(receipt)
                             )}
                           >
-                            {receipt.receiptType ||
-                              receipt.receipt_type ||
-                              "SALE"}
+                            {getEffectiveReceiptType(receipt)}
                           </Badge>
                           {receipt.cancelledAt && (
                             <Badge variant="destructive" className="text-xs">
