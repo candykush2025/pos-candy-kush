@@ -83,6 +83,7 @@ export default function NewProductPage() {
     lowStock: "5",
     trackStock: false,
     soldByWeight: false,
+    soldBy: "each",
     availableForSale: true,
     form: "",
     color: "GREY",
@@ -165,6 +166,7 @@ export default function NewProductPage() {
           lowStock: product.lowStock?.toString() || "5",
           trackStock: product.trackStock || false,
           soldByWeight: product.soldByWeight || false,
+          soldBy: product.soldBy || (product.soldByWeight ? "weight" : "each"),
           availableForSale: product.availableForSale !== false,
           form: product.form || "",
           color: product.color || "GREY",
@@ -349,6 +351,7 @@ export default function NewProductPage() {
         lowStock: formData.trackStock ? parseInt(formData.lowStock) || 5 : 5,
         trackStock: formData.trackStock,
         soldByWeight: formData.soldByWeight,
+        soldBy: formData.soldBy || (formData.soldByWeight ? "weight" : "each"),
         availableForSale: formData.availableForSale,
         color: formData.color,
         form: formData.form,
@@ -581,6 +584,7 @@ export default function NewProductPage() {
                     setFormData({
                       ...formData,
                       soldByWeight: e.target.value === "weight",
+                      soldBy: e.target.value,
                     })
                   }
                   required

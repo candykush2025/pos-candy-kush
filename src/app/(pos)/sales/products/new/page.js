@@ -102,6 +102,7 @@ export default function POSNewProductPage() {
     lowStock: "5",
     trackStock: false,
     soldByWeight: false,
+    soldBy: "each",
     color: "GREY",
     representationType: "color",
     image: null,
@@ -175,6 +176,7 @@ export default function POSNewProductPage() {
           lowStock: product.lowStock?.toString() || "5",
           trackStock: product.trackStock || false,
           soldByWeight: product.soldByWeight || false,
+          soldBy: product.soldBy || (product.soldByWeight ? "weight" : "each"),
           color: product.color || "GREY",
           representationType: product.imageUrl ? "image" : "color",
           image: null,
@@ -342,6 +344,7 @@ export default function POSNewProductPage() {
         lowStock: formData.trackStock ? parseInt(formData.lowStock) || 5 : 5,
         trackStock: formData.trackStock,
         soldByWeight: formData.soldByWeight,
+        soldBy: formData.soldBy || (formData.soldByWeight ? "weight" : "each"),
         availableForSale: true,
         color: formData.color,
         representationType: formData.representationType,
@@ -608,6 +611,7 @@ export default function POSNewProductPage() {
                       setFormData({
                         ...formData,
                         soldByWeight: e.target.value === "weight",
+                        soldBy: e.target.value,
                       })
                     }
                     required

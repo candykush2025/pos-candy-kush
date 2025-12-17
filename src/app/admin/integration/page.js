@@ -602,6 +602,7 @@ export default function IntegrationPage() {
           categoryId: item.category_id || null,
           trackStock: item.track_stock || false,
           soldByWeight: item.sold_by_weight || false,
+          soldBy: item.sold_by_weight ? "weight" : "each",
           isComposite: item.is_composite || false,
           useProduction: item.use_production || false,
 

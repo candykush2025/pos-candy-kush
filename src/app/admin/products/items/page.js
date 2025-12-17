@@ -112,6 +112,7 @@ export default function ItemListPage() {
     stock: "",
     trackStock: false,
     soldByWeight: false,
+    soldBy: "each",
     availableForSale: true,
     form: "",
     color: "GREY",
@@ -748,6 +749,7 @@ export default function ItemListPage() {
         lowStock: formData.trackStock ? parseInt(formData.lowStock) || 0 : null,
         trackStock: formData.trackStock,
         soldByWeight: formData.soldByWeight,
+        soldBy: formData.soldByWeight ? "weight" : "each",
         availableForSale: formData.availableForSale,
 
         // Visual
@@ -1371,6 +1373,7 @@ export default function ItemListPage() {
       stock: "",
       trackStock: false,
       soldByWeight: false,
+      soldBy: "each",
       availableForSale: true,
       form: "",
       color: "GREY",
