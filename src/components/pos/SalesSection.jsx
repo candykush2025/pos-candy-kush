@@ -236,6 +236,7 @@ export default function SalesSection({ cashier }) {
   const longPressTimer = useRef(null);
   const searchInputRef = useRef(null);
   const searchBlurTimerRef = useRef(null);
+  const cartScrollRef = useRef(null);
 
   // Category SLOT colors (for boxes in grid) - key: "categoryName-index-categoryId"
   const [categorySlotColors, setCategorySlotColors] = useState({});
@@ -772,6 +773,66 @@ export default function SalesSection({ cashier }) {
       clearInterval(cartClearingTimer);
     };
   }, [items.length, cartCustomer]);
+
+  // Cart scroll handling - prevent freezing and improve scroll behavior
+  useEffect(() => {
+    const scrollContainer = cartScrollRef.current;
+    if (!scrollContainer) return;
+
+    let isScrolling = false;
+    let scrollTimeout;
+
+    const handleScroll = () => {
+      if (!isScrolling) {
+        isScrolling = true;
+        scrollContainer.style.pointerEvents = 'none';
+      }
+
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        isScrolling = false;
+        scrollContainer.style.pointerEvents = 'auto';
+      }, 150);
+    };
+
+    const handleTouchStart = (e) => {
+      // Prevent default only if we're at scroll boundaries and trying to scroll further
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const atTop = scrollTop === 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+      if ((atTop && e.touches[0].clientY > e.touches[0].clientY) || 
+          (atBottom && e.touches[0].clientY < e.touches[0].clientY)) {
+        // Don't prevent default - allow normal scrolling
+        return;
+      }
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      scrollContainer.removeEventListener('touchstart', handleTouchStart);
+      clearTimeout(scrollTimeout);
+    };
+  }, []);
+
+  // Preserve scroll position when cart items change
+  useEffect(() => {
+    const scrollContainer = cartScrollRef.current;
+    if (!scrollContainer) return;
+
+    // Small delay to ensure DOM has updated
+    const timeoutId = setTimeout(() => {
+      // Force a reflow to ensure proper height calculations
+      scrollContainer.style.display = 'none';
+      scrollContainer.offsetHeight; // Trigger reflow
+      scrollContainer.style.display = '';
+    }, 10);
+
+    return () => clearTimeout(timeoutId);
+  }, [items.length]);
 
   const loadCustomTabsFromUser = async () => {
     if (!userId || products.length === 0) return;
@@ -3349,7 +3410,7 @@ export default function SalesSection({ cashier }) {
             )}
 
           {/* Products Grid */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 min-h-0 products-grid-debug">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 min-h-0 products-grid-debug overscroll-y-contain scroll-smooth">
             {viewingCategoryId ? (
               /* Category Products View - Regular Grid of Products from Category */
               <div className="grid gap-4 grid-cols-5 auto-rows-fr">
@@ -3963,7 +4024,17 @@ export default function SalesSection({ cashier }) {
           </div>
 
           {/* Cart Items */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 min-h-0">
+          <div 
+            ref={cartScrollRef}
+            className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 min-h-0 overscroll-y-contain scroll-smooth"
+            style={{ 
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgb(156 163 175) transparent',
+              touchAction: 'pan-y',
+              overscrollBehavior: 'contain'
+            }}
+          >
             {items.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-full text-gray-400">
                 <ShoppingCart className="h-16 w-16 mb-2" />
