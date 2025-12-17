@@ -916,9 +916,10 @@ export async function GET(request) {
           success: false,
           error: "Invalid or missing action parameter",
           valid_actions: validActions,
+          post_only_actions: ["edit-product-cost"],
           usage: {
             endpoint: "/api/mobile",
-            parameters: {
+            get_parameters: {
               action: "Required. One of: " + validActions.join(", "),
               period:
                 "Optional. One of: today, this_week, this_month, this_year, custom, last_30_days (default)",
@@ -928,6 +929,13 @@ export async function GET(request) {
                 "Required if period=custom. ISO 8601 date format (YYYY-MM-DD)",
               employee_ids:
                 "Optional. Comma-separated list of employee IDs to filter by",
+            },
+            post_parameters: {
+              action: "Required. One of: login, edit-product-cost",
+              email: "Required for login. User email address",
+              password: "Required for login. User password",
+              productId: "Required for edit-product-cost. Product ID to update",
+              cost: "Required for edit-product-cost. New cost value (number, non-negative)",
             },
           },
         },
@@ -1078,35 +1086,102 @@ export async function GET(request) {
   }
 }
 
-// POST handler - Login endpoint
+// POST handler - Login and edit operations
 export async function POST(request) {
   try {
-    const { action, email, password } = await request.json();
+    const { action, email, password, productId, cost } = await request.json();
 
-    // Only allow login action for POST
-    if (action !== "login") {
-      return Response.json(
-        { success: false, error: "Invalid action for POST method" },
-        { status: 400, headers: corsHeaders }
-      );
+    // Handle login action
+    if (action === "login") {
+      // Validate required fields
+      if (!email || !password) {
+        return Response.json(
+          { success: false, error: "Email and password are required" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      // Attempt login
+      const result = await handleLogin(email, password);
+
+      if (!result.success) {
+        return Response.json(result, { status: 401, headers: corsHeaders });
+      }
+
+      return Response.json(result, { status: 200, headers: corsHeaders });
     }
 
-    // Validate required fields
-    if (!email || !password) {
-      return Response.json(
-        { success: false, error: "Email and password are required" },
-        { status: 400, headers: corsHeaders }
-      );
+    // Handle edit-product-cost action
+    if (action === "edit-product-cost") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      // Validate required fields
+      if (!productId || cost === undefined || cost === null) {
+        return Response.json(
+          {
+            success: false,
+            error: "productId and cost are required",
+            required_fields: ["productId", "cost"],
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      // Validate cost is a number and non-negative
+      const numericCost = parseFloat(cost);
+      if (isNaN(numericCost) || numericCost < 0) {
+        return Response.json(
+          { success: false, error: "Cost must be a non-negative number" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      try {
+        // Update product cost in Firestore
+        await productsService.update(productId, {
+          cost: numericCost,
+          updatedAt: new Date(),
+        });
+
+        return Response.json(
+          {
+            success: true,
+            action: "edit-product-cost",
+            product_id: productId,
+            new_cost: numericCost,
+            updated_at: new Date().toISOString(),
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error updating product cost:", error);
+        return Response.json(
+          {
+            success: false,
+            error: "Failed to update product cost",
+            details: error.message,
+          },
+          { status: 500, headers: corsHeaders }
+        );
+      }
     }
 
-    // Attempt login
-    const result = await handleLogin(email, password);
-
-    if (!result.success) {
-      return Response.json(result, { status: 401, headers: corsHeaders });
-    }
-
-    return Response.json(result, { status: 200, headers: corsHeaders });
+    // Invalid action for POST
+    return Response.json(
+      {
+        success: false,
+        error: "Invalid action for POST method",
+        valid_post_actions: ["login", "edit-product-cost"],
+      },
+      { status: 400, headers: corsHeaders }
+    );
   } catch (error) {
     console.error("POST error:", error);
     return Response.json(

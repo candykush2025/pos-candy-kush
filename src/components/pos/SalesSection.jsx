@@ -785,13 +785,13 @@ export default function SalesSection({ cashier }) {
     const handleScroll = () => {
       if (!isScrolling) {
         isScrolling = true;
-        scrollContainer.style.pointerEvents = 'none';
+        scrollContainer.style.pointerEvents = "none";
       }
 
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         isScrolling = false;
-        scrollContainer.style.pointerEvents = 'auto';
+        scrollContainer.style.pointerEvents = "auto";
       }, 150);
     };
 
@@ -801,19 +801,23 @@ export default function SalesSection({ cashier }) {
       const atTop = scrollTop === 0;
       const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
 
-      if ((atTop && e.touches[0].clientY > e.touches[0].clientY) || 
-          (atBottom && e.touches[0].clientY < e.touches[0].clientY)) {
+      if (
+        (atTop && e.touches[0].clientY > e.touches[0].clientY) ||
+        (atBottom && e.touches[0].clientY < e.touches[0].clientY)
+      ) {
         // Don't prevent default - allow normal scrolling
         return;
       }
     };
 
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-    scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+    scrollContainer.addEventListener("touchstart", handleTouchStart, {
+      passive: false,
+    });
 
     return () => {
-      scrollContainer.removeEventListener('scroll', handleScroll);
-      scrollContainer.removeEventListener('touchstart', handleTouchStart);
+      scrollContainer.removeEventListener("scroll", handleScroll);
+      scrollContainer.removeEventListener("touchstart", handleTouchStart);
       clearTimeout(scrollTimeout);
     };
   }, []);
@@ -826,9 +830,9 @@ export default function SalesSection({ cashier }) {
     // Small delay to ensure DOM has updated
     const timeoutId = setTimeout(() => {
       // Force a reflow to ensure proper height calculations
-      scrollContainer.style.display = 'none';
+      scrollContainer.style.display = "none";
       scrollContainer.offsetHeight; // Trigger reflow
-      scrollContainer.style.display = '';
+      scrollContainer.style.display = "";
     }, 10);
 
     return () => clearTimeout(timeoutId);
@@ -4024,15 +4028,15 @@ export default function SalesSection({ cashier }) {
           </div>
 
           {/* Cart Items */}
-          <div 
+          <div
             ref={cartScrollRef}
             className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 min-h-0 overscroll-y-contain scroll-smooth"
-            style={{ 
-              WebkitOverflowScrolling: 'touch',
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'rgb(156 163 175) transparent',
-              touchAction: 'pan-y',
-              overscrollBehavior: 'contain'
+            style={{
+              WebkitOverflowScrolling: "touch",
+              scrollbarWidth: "thin",
+              scrollbarColor: "rgb(156 163 175) transparent",
+              touchAction: "pan-y",
+              overscrollBehavior: "contain",
             }}
           >
             {items.length === 0 ? (
