@@ -640,7 +640,7 @@ export default function CashbackPage() {
 
       {/* Add/Edit Rule Modal */}
       <Dialog open={isRuleModalOpen} onOpenChange={setIsRuleModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingRule ? "Edit Cashback Rule" : "Add Cashback Rule"}
