@@ -36,6 +36,7 @@ export const COLLECTIONS = {
   SETTINGS: "settings",
   SYNC_HISTORY: "sync_history",
   CUSTOM_TABS: "custom_tabs",
+  INVOICES: "invoices",
 };
 
 /**
@@ -388,6 +389,18 @@ export const receiptsService = {
   deleteEditRequest: (id) => deleteDocument("receipt_edit_requests", id),
 };
 
+// Invoices
+export const invoicesService = {
+  create: (data) => createDocument(COLLECTIONS.INVOICES, data),
+  set: (id, data) => setDocument(COLLECTIONS.INVOICES, id, data),
+  get: (id) => getDocument(COLLECTIONS.INVOICES, id),
+  getAll: (options) => getDocuments(COLLECTIONS.INVOICES, options),
+  update: (id, data) => updateDocument(COLLECTIONS.INVOICES, id, data),
+  delete: (id) => deleteDocument(COLLECTIONS.INVOICES, id),
+  subscribe: (callback, options) =>
+    subscribeToCollection(COLLECTIONS.INVOICES, callback, options),
+};
+
 // Custom Tabs - store per user
 export const customTabsService = {
   // Save custom tabs to SHARED document (all users use same tabs)
@@ -561,5 +574,6 @@ export default {
   customers: customersService,
   categories: categoriesService,
   receipts: receiptsService,
+  invoices: invoicesService,
   customTabs: customTabsService,
 };

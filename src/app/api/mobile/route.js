@@ -23,6 +23,7 @@ import {
   receiptsService,
   productsService,
   categoriesService,
+  invoicesService,
   getDocuments,
 } from "@/lib/firebase/firestore";
 import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
@@ -796,6 +797,385 @@ async function getStockHistory(limit = 1000) {
   }
 }
 
+// Get Invoices for mobile app
+async function getInvoices() {
+  try {
+    const invoices = await invoicesService.getAll({
+      orderBy: ["createdAt", "desc"],
+    });
+
+    // Format invoices for mobile app
+    const formattedInvoices = invoices.map((invoice) => ({
+      id: invoice.id,
+      number: invoice.number || `INV-${invoice.id.slice(-6).toUpperCase()}`,
+      date:
+        invoice.date ||
+        (invoice.createdAt?.toDate?.()
+          ? invoice.createdAt.toDate().toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0]),
+      due_date: invoice.due_date,
+      customer_name:
+        invoice.customer_name || invoice.customerName || "Unknown Customer",
+      items: (invoice.items || []).map((item) => ({
+        product_id: item.product_id || item.productId,
+        product_name: item.product_name || item.productName || item.name,
+        quantity: item.quantity || 1,
+        price: item.price || 0,
+        total: item.total || item.quantity * item.price || 0,
+      })),
+      total:
+        invoice.total ||
+        (invoice.items || []).reduce(
+          (sum, item) => sum + (item.total || item.quantity * item.price || 0),
+          0
+        ),
+    }));
+
+    return {
+      invoices: formattedInvoices,
+    };
+  } catch (error) {
+    console.error("Error fetching invoices:", error);
+    throw error;
+  }
+}
+
+// Get single invoice by ID for mobile app
+async function getInvoiceById(invoiceId) {
+  try {
+    const invoice = await invoicesService.get(invoiceId);
+
+    if (!invoice) {
+      throw new Error("Invoice not found");
+    }
+
+    // Format invoice for mobile app
+    const formattedInvoice = {
+      id: invoice.id,
+      number: invoice.number || `INV-${invoice.id.slice(-6).toUpperCase()}`,
+      date:
+        invoice.date ||
+        (invoice.createdAt?.toDate?.()
+          ? invoice.createdAt.toDate().toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0]),
+      due_date: invoice.due_date,
+      customer_name:
+        invoice.customer_name || invoice.customerName || "Unknown Customer",
+      items: (invoice.items || []).map((item) => ({
+        product_id: item.product_id || item.productId,
+        product_name: item.product_name || item.productName || item.name,
+        quantity: item.quantity || 1,
+        price: item.price || 0,
+        total: item.total || item.quantity * item.price || 0,
+      })),
+      total:
+        invoice.total ||
+        (invoice.items || []).reduce(
+          (sum, item) => sum + (item.total || item.quantity * item.price || 0),
+          0
+        ),
+      created_at: invoice.createdAt?.toDate?.()
+        ? invoice.createdAt.toDate().toISOString()
+        : invoice.createdAt,
+      updated_at: invoice.updatedAt?.toDate?.()
+        ? invoice.updatedAt.toDate().toISOString()
+        : invoice.updatedAt,
+    };
+
+    return {
+      invoice: formattedInvoice,
+    };
+  } catch (error) {
+    console.error("Error fetching invoice by ID:", error);
+    throw error;
+  }
+}
+
+// Generate unique invoice number
+async function generateInvoiceNumber() {
+  try {
+    // Get current year
+    const year = new Date().getFullYear();
+
+    // Get all invoices to find the highest number for this year
+    const invoices = await invoicesService.getAll({
+      orderBy: ["createdAt", "desc"],
+    });
+
+    // Find the highest number for this year
+    let maxNumber = 0;
+    for (const invoice of invoices) {
+      if (invoice.number && invoice.number.startsWith(`INV-${year}-`)) {
+        const numberPart = invoice.number.split("-")[2];
+        const num = parseInt(numberPart, 10);
+        if (!isNaN(num) && num > maxNumber) {
+          maxNumber = num;
+        }
+      }
+    }
+
+    // Generate next number
+    const nextNumber = maxNumber + 1;
+    return `INV-${year}-${nextNumber.toString().padStart(3, "0")}`;
+  } catch (error) {
+    console.error("Error generating invoice number:", error);
+    // Fallback: use timestamp-based number
+    const timestamp = Date.now();
+    return `INV-${new Date().getFullYear()}-${timestamp.toString().slice(-6)}`;
+  }
+}
+
+// Validate and create invoice
+async function createInvoice(invoiceData) {
+  try {
+    // Validate required fields
+    const { customer_name, date, due_date, items, total } = invoiceData;
+
+    if (!customer_name || !customer_name.trim()) {
+      throw new Error("Customer name is required");
+    }
+
+    if (!date) {
+      throw new Error("Date is required");
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error("At least one item is required");
+    }
+
+    if (typeof total !== "number" || total < 0) {
+      throw new Error("Total must be a non-negative number");
+    }
+
+    // Validate date format and ensure it's not in the future
+    const invoiceDate = new Date(date);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+
+    if (isNaN(invoiceDate.getTime())) {
+      throw new Error("Invalid date format. Use YYYY-MM-DD");
+    }
+
+    if (invoiceDate > today) {
+      throw new Error("Invoice date cannot be in the future");
+    }
+
+    // Validate due_date if provided (optional field)
+    let validatedDueDate = null;
+    if (due_date) {
+      const dueDateObj = new Date(due_date);
+      if (isNaN(dueDateObj.getTime())) {
+        throw new Error("Invalid due_date format. Use YYYY-MM-DD");
+      }
+      if (dueDateObj <= invoiceDate) {
+        throw new Error("Due date must be after the invoice date");
+      }
+      validatedDueDate = due_date;
+    }
+
+    // Validate items
+    let calculatedTotal = 0;
+    for (const item of items) {
+      if (!item.product_id || !item.product_name) {
+        throw new Error("Each item must have product_id and product_name");
+      }
+
+      if (typeof item.quantity !== "number" || item.quantity <= 0) {
+        throw new Error("Item quantity must be a positive number");
+      }
+
+      if (typeof item.price !== "number" || item.price < 0) {
+        throw new Error("Item price must be a non-negative number");
+      }
+
+      const itemTotal = item.quantity * item.price;
+      if (Math.abs(item.total - itemTotal) > 0.01) {
+        // Allow small rounding differences
+        throw new Error("Item total does not match quantity × price");
+      }
+
+      calculatedTotal += itemTotal;
+    }
+
+    // Validate total matches calculated total
+    if (Math.abs(total - calculatedTotal) > 0.01) {
+      throw new Error("Invoice total does not match sum of item totals");
+    }
+
+    // Check if products exist (optional - for stock validation)
+    // Note: We're not deducting stock for now as per the API docs
+
+    // Generate invoice number
+    const invoiceNumber = await generateInvoiceNumber();
+
+    // Create invoice data
+    const invoiceToCreate = {
+      number: invoiceNumber,
+      customer_name: customer_name.trim(),
+      date: date,
+      due_date: validatedDueDate,
+      items: items.map((item) => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.total,
+      })),
+      total: total,
+      created_by: "mobile-api", // Could be enhanced to use actual user
+    };
+
+    // Save to database
+    const createdInvoice = await invoicesService.create(invoiceToCreate);
+
+    return {
+      id: createdInvoice.id,
+      number: invoiceNumber,
+      customer_name: customer_name.trim(),
+      date: date,
+      due_date: validatedDueDate,
+      items: invoiceToCreate.items,
+      total: total,
+      created_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error creating invoice:", error);
+    throw error;
+  }
+}
+
+// Validate and edit invoice
+async function editInvoice(invoiceData) {
+  try {
+    const { id } = invoiceData;
+
+    if (!id) {
+      throw new Error("Invoice ID is required for editing");
+    }
+
+    // Check if invoice exists
+    const existingInvoice = await invoicesService.get(id);
+    if (!existingInvoice) {
+      throw new Error("Invoice not found");
+    }
+
+    const { customer_name, date, due_date, items, total } = invoiceData;
+
+    // Validate required fields
+    if (!customer_name || !customer_name.trim()) {
+      throw new Error("Customer name is required");
+    }
+
+    if (!date) {
+      throw new Error("Date is required");
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error("At least one item is required");
+    }
+
+    if (typeof total !== "number" || total < 0) {
+      throw new Error("Total must be a non-negative number");
+    }
+
+    // Validate date format and ensure it's not in the future
+    const invoiceDate = new Date(date);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+
+    if (isNaN(invoiceDate.getTime())) {
+      throw new Error("Invalid date format. Use YYYY-MM-DD");
+    }
+
+    if (invoiceDate > today) {
+      throw new Error("Invoice date cannot be in the future");
+    }
+
+    // Validate due_date if provided (optional field)
+    let validatedDueDate = null;
+    if (due_date) {
+      const dueDateObj = new Date(due_date);
+      if (isNaN(dueDateObj.getTime())) {
+        throw new Error("Invalid due_date format. Use YYYY-MM-DD");
+      }
+      if (dueDateObj <= invoiceDate) {
+        throw new Error("Due date must be after the invoice date");
+      }
+      validatedDueDate = due_date;
+    }
+
+    // Validate items
+    let calculatedTotal = 0;
+    for (const item of items) {
+      if (!item.product_id || !item.product_name) {
+        throw new Error("Each item must have product_id and product_name");
+      }
+
+      if (typeof item.quantity !== "number" || item.quantity <= 0) {
+        throw new Error("Item quantity must be a positive number");
+      }
+
+      if (typeof item.price !== "number" || item.price < 0) {
+        throw new Error("Item price must be a non-negative number");
+      }
+
+      const itemTotal = item.quantity * item.price;
+      if (Math.abs(item.total - itemTotal) > 0.01) {
+        // Allow small rounding differences
+        throw new Error("Item total does not match quantity × price");
+      }
+
+      calculatedTotal += itemTotal;
+    }
+
+    // Validate total matches calculated total
+    if (Math.abs(total - calculatedTotal) > 0.01) {
+      throw new Error("Invoice total does not match sum of item totals");
+    }
+
+    // Prepare update data
+    const updateData = {
+      customer_name: customer_name.trim(),
+      date: date,
+      due_date: validatedDueDate,
+      items: items.map((item) => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.total,
+      })),
+      total: total,
+      updatedAt: new Date(),
+    };
+
+    // Update in database
+    await invoicesService.update(id, updateData);
+
+    // Get updated invoice
+    const updatedInvoice = await invoicesService.get(id);
+
+    return {
+      id: updatedInvoice.id,
+      number: updatedInvoice.number,
+      customer_name: updatedInvoice.customer_name,
+      date: updatedInvoice.date,
+      due_date: updatedInvoice.due_date,
+      items: updatedInvoice.items,
+      total: updatedInvoice.total,
+      created_at: updatedInvoice.createdAt?.toDate?.()
+        ? updatedInvoice.createdAt.toDate().toISOString()
+        : updatedInvoice.createdAt,
+      updated_at: updatedInvoice.updatedAt?.toDate?.()
+        ? updatedInvoice.updatedAt.toDate().toISOString()
+        : updatedInvoice.updatedAt,
+    };
+  } catch (error) {
+    console.error("Error editing invoice:", error);
+    throw error;
+  }
+}
+
 // OPTIONS handler for CORS preflight
 export async function OPTIONS() {
   return new Response(null, {
@@ -909,6 +1289,8 @@ export async function GET(request) {
       "sales-by-employee",
       "stock",
       "stock-history",
+      "get-invoices",
+      "get-invoice",
     ];
     if (!action || !validActions.includes(action)) {
       return Response.json(
@@ -989,6 +1371,47 @@ export async function GET(request) {
           action: "stock-history",
           generated_at: new Date().toISOString(),
           data: stockHistoryData,
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    // Handle get-invoices action (doesn't need date range)
+    if (action === "get-invoices") {
+      const invoicesData = await getInvoices();
+
+      return Response.json(
+        {
+          success: true,
+          action: "get-invoices",
+          generated_at: new Date().toISOString(),
+          data: invoicesData,
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    // Handle get-invoice action (get single invoice by ID)
+    if (action === "get-invoice") {
+      const invoiceId = searchParams.get("id");
+      if (!invoiceId) {
+        return Response.json(
+          {
+            success: false,
+            error: "Invoice ID is required for get-invoice action",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const invoiceData = await getInvoiceById(invoiceId);
+
+      return Response.json(
+        {
+          success: true,
+          action: "get-invoice",
+          generated_at: new Date().toISOString(),
+          data: invoiceData,
         },
         { headers: corsHeaders }
       );
@@ -1089,10 +1512,12 @@ export async function GET(request) {
 // POST handler - Login and edit operations
 export async function POST(request) {
   try {
-    const { action, email, password, productId, cost } = await request.json();
+    const requestBody = await request.json();
+    const { action } = requestBody;
 
     // Handle login action
     if (action === "login") {
+      const { email, password } = requestBody;
       // Validate required fields
       if (!email || !password) {
         return Response.json(
@@ -1121,6 +1546,8 @@ export async function POST(request) {
           { status: 401, headers: corsHeaders }
         );
       }
+
+      const { productId, cost } = requestBody;
 
       // Validate required fields
       if (!productId || cost === undefined || cost === null) {
@@ -1173,12 +1600,89 @@ export async function POST(request) {
       }
     }
 
+    // Handle create-invoice action
+    if (action === "create-invoice") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const createdInvoice = await createInvoice(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "create-invoice",
+            data: {
+              invoice: createdInvoice,
+            },
+          },
+          { status: 201, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error creating invoice:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to create invoice",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Handle edit-invoice action
+    if (action === "edit-invoice") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const editedInvoice = await editInvoice(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "edit-invoice",
+            data: {
+              invoice: editedInvoice,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error editing invoice:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to edit invoice",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
     // Invalid action for POST
     return Response.json(
       {
         success: false,
         error: "Invalid action for POST method",
-        valid_post_actions: ["login", "edit-product-cost"],
+        valid_post_actions: [
+          "login",
+          "edit-product-cost",
+          "create-invoice",
+          "edit-invoice",
+        ],
       },
       { status: 400, headers: corsHeaders }
     );
