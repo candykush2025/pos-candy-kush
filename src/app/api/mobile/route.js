@@ -1824,7 +1824,9 @@ async function updateInvoiceStatus(invoiceId, status) {
     // Validate status
     const validStatuses = ["pending", "paid", "cancelled"];
     if (!validStatuses.includes(status.toLowerCase())) {
-      throw new Error(`Invalid status. Must be one of: ${validStatuses.join(", ")}`);
+      throw new Error(
+        `Invalid status. Must be one of: ${validStatuses.join(", ")}`
+      );
     }
 
     // Check if invoice exists
@@ -1836,7 +1838,10 @@ async function updateInvoiceStatus(invoiceId, status) {
     // Update status in database
     const updateData = {
       status: status.toLowerCase(),
-      payment_status: status.toLowerCase() === "paid" ? "paid" : existingInvoice.payment_status || "pending",
+      payment_status:
+        status.toLowerCase() === "paid"
+          ? "paid"
+          : existingInvoice.payment_status || "pending",
       updatedAt: new Date(),
     };
 
@@ -1848,9 +1853,18 @@ async function updateInvoiceStatus(invoiceId, status) {
     return {
       id: updatedInvoice.id,
       invoice_id: updatedInvoice.id,
-      number: updatedInvoice.number || `INV-${updatedInvoice.id.slice(-6).toUpperCase()}`,
-      customer_name: updatedInvoice.customer_name || updatedInvoice.customerName || "Unknown Customer",
-      date: updatedInvoice.date || (updatedInvoice.createdAt?.toDate?.() ? updatedInvoice.createdAt.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0]),
+      number:
+        updatedInvoice.number ||
+        `INV-${updatedInvoice.id.slice(-6).toUpperCase()}`,
+      customer_name:
+        updatedInvoice.customer_name ||
+        updatedInvoice.customerName ||
+        "Unknown Customer",
+      date:
+        updatedInvoice.date ||
+        (updatedInvoice.createdAt?.toDate?.()
+          ? updatedInvoice.createdAt.toDate().toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0]),
       due_date: updatedInvoice.due_date,
       items: updatedInvoice.items || [],
       total: updatedInvoice.total || 0,
