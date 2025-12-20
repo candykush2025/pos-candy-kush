@@ -1429,6 +1429,7 @@ async function getInvoices() {
     // Format invoices for mobile app
     const formattedInvoices = invoices.map((invoice) => ({
       id: invoice.id,
+      invoice_id: invoice.id, // Add invoice_id for backward compatibility
       number: invoice.number || `INV-${invoice.id.slice(-6).toUpperCase()}`,
       date:
         invoice.date ||
@@ -1451,6 +1452,14 @@ async function getInvoices() {
           (sum, item) => sum + (item.total || item.quantity * item.price || 0),
           0
         ),
+      status: invoice.status || "pending", // Add status field
+      payment_status: invoice.payment_status || invoice.status || "pending", // Add payment_status
+      created_at: invoice.createdAt?.toDate?.()
+        ? invoice.createdAt.toDate().toISOString()
+        : invoice.createdAt,
+      updated_at: invoice.updatedAt?.toDate?.()
+        ? invoice.updatedAt.toDate().toISOString()
+        : invoice.updatedAt,
     }));
 
     return {
@@ -1474,6 +1483,7 @@ async function getInvoiceById(invoiceId) {
     // Format invoice for mobile app
     const formattedInvoice = {
       id: invoice.id,
+      invoice_id: invoice.id, // Add invoice_id for backward compatibility
       number: invoice.number || `INV-${invoice.id.slice(-6).toUpperCase()}`,
       date:
         invoice.date ||
@@ -1496,6 +1506,8 @@ async function getInvoiceById(invoiceId) {
           (sum, item) => sum + (item.total || item.quantity * item.price || 0),
           0
         ),
+      status: invoice.status || "pending", // Add status field
+      payment_status: invoice.payment_status || invoice.status || "pending", // Add payment_status
       created_at: invoice.createdAt?.toDate?.()
         ? invoice.createdAt.toDate().toISOString()
         : invoice.createdAt,
@@ -1794,6 +1806,65 @@ async function editInvoice(invoiceData) {
     };
   } catch (error) {
     console.error("Error editing invoice:", error);
+    throw error;
+  }
+}
+
+// Update invoice status (pending, paid, cancelled)
+async function updateInvoiceStatus(invoiceId, status) {
+  try {
+    if (!invoiceId) {
+      throw new Error("Invoice ID is required");
+    }
+
+    if (!status) {
+      throw new Error("Status is required");
+    }
+
+    // Validate status
+    const validStatuses = ["pending", "paid", "cancelled"];
+    if (!validStatuses.includes(status.toLowerCase())) {
+      throw new Error(`Invalid status. Must be one of: ${validStatuses.join(", ")}`);
+    }
+
+    // Check if invoice exists
+    const existingInvoice = await invoicesService.get(invoiceId);
+    if (!existingInvoice) {
+      throw new Error("Invoice not found");
+    }
+
+    // Update status in database
+    const updateData = {
+      status: status.toLowerCase(),
+      payment_status: status.toLowerCase() === "paid" ? "paid" : existingInvoice.payment_status || "pending",
+      updatedAt: new Date(),
+    };
+
+    await invoicesService.update(invoiceId, updateData);
+
+    // Get updated invoice
+    const updatedInvoice = await invoicesService.get(invoiceId);
+
+    return {
+      id: updatedInvoice.id,
+      invoice_id: updatedInvoice.id,
+      number: updatedInvoice.number || `INV-${updatedInvoice.id.slice(-6).toUpperCase()}`,
+      customer_name: updatedInvoice.customer_name || updatedInvoice.customerName || "Unknown Customer",
+      date: updatedInvoice.date || (updatedInvoice.createdAt?.toDate?.() ? updatedInvoice.createdAt.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0]),
+      due_date: updatedInvoice.due_date,
+      items: updatedInvoice.items || [],
+      total: updatedInvoice.total || 0,
+      status: updatedInvoice.status || "pending",
+      payment_status: updatedInvoice.payment_status || "pending",
+      created_at: updatedInvoice.createdAt?.toDate?.()
+        ? updatedInvoice.createdAt.toDate().toISOString()
+        : updatedInvoice.createdAt,
+      updated_at: updatedInvoice.updatedAt?.toDate?.()
+        ? updatedInvoice.updatedAt.toDate().toISOString()
+        : updatedInvoice.updatedAt,
+    };
+  } catch (error) {
+    console.error("Error updating invoice status:", error);
     throw error;
   }
 }
@@ -2491,6 +2562,64 @@ export async function POST(request) {
           {
             success: false,
             error: error.message || "Failed to edit invoice",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Handle update-invoice-status action
+    if (action === "update-invoice-status") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { invoice_id, status } = requestBody;
+
+        if (!invoice_id) {
+          return Response.json(
+            {
+              success: false,
+              error: "invoice_id is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        if (!status) {
+          return Response.json(
+            {
+              success: false,
+              error: "status is required (pending, paid, or cancelled)",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const updatedInvoice = await updateInvoiceStatus(invoice_id, status);
+
+        return Response.json(
+          {
+            success: true,
+            action: "update-invoice-status",
+            data: {
+              invoice: updatedInvoice,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error updating invoice status:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to update invoice status",
           },
           { status: 400, headers: corsHeaders }
         );
