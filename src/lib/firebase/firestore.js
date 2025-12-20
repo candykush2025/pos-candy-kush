@@ -37,6 +37,8 @@ export const COLLECTIONS = {
   SYNC_HISTORY: "sync_history",
   CUSTOM_TABS: "custom_tabs",
   INVOICES: "invoices",
+  PURCHASES: "purchases",
+  EXPENSES: "expenses",
 };
 
 /**
@@ -561,6 +563,28 @@ export const customTabsService = {
   },
 };
 
+/**
+ * Purchases Service
+ */
+export const purchasesService = {
+  create: async (data) => createDocument(COLLECTIONS.PURCHASES, data),
+  get: async (id) => getDocument(COLLECTIONS.PURCHASES, id),
+  getAll: async () => getDocuments(COLLECTIONS.PURCHASES),
+  update: async (id, data) => updateDocument(COLLECTIONS.PURCHASES, id, data),
+  delete: async (id) => deleteDocument(COLLECTIONS.PURCHASES, id),
+};
+
+/**
+ * Expenses Service
+ */
+export const expensesService = {
+  create: async (data) => createDocument(COLLECTIONS.EXPENSES, data),
+  get: async (id) => getDocument(COLLECTIONS.EXPENSES, id),
+  getAll: async () => getDocuments(COLLECTIONS.EXPENSES),
+  update: async (id, data) => updateDocument(COLLECTIONS.EXPENSES, id, data),
+  delete: async (id) => deleteDocument(COLLECTIONS.EXPENSES, id),
+};
+
 export default {
   createDocument,
   getDocument,
@@ -576,4 +600,6 @@ export default {
   receipts: receiptsService,
   invoices: invoicesService,
   customTabs: customTabsService,
+  purchases: purchasesService,
+  expenses: expensesService,
 };

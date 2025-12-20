@@ -24,6 +24,8 @@ import {
   productsService,
   categoriesService,
   invoicesService,
+  purchasesService,
+  expensesService,
   getDocuments,
 } from "@/lib/firebase/firestore";
 import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
@@ -45,7 +47,7 @@ import {
 // CORS headers for mobile apps
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Cache-Control": "no-cache, no-store, must-revalidate",
 };
@@ -797,6 +799,502 @@ async function getStockHistory(limit = 1000) {
   }
 }
 
+// ==================== PURCHASES HELPER FUNCTIONS ====================
+
+// Get all purchases
+async function getPurchases() {
+  try {
+    const purchases = await purchasesService.getAll({
+      orderBy: ["createdAt", "desc"],
+    });
+
+    // Format purchases for mobile app
+    const formattedPurchases = purchases.map((purchase) => ({
+      id: purchase.id,
+      supplier_name: purchase.supplier_name || "",
+      purchase_date: purchase.purchase_date || "",
+      due_date: purchase.due_date || "",
+      items: (purchase.items || []).map((item) => ({
+        product_id: item.product_id || "",
+        product_name: item.product_name || "",
+        quantity: item.quantity || 0,
+        price: item.price || 0,
+        total: item.total || 0,
+      })),
+      total: purchase.total || 0,
+      status: purchase.status || "pending",
+      reminder_type: purchase.reminder_type || "no_reminder",
+      reminder_value: purchase.reminder_value || "",
+      reminder_time: purchase.reminder_time || "",
+      createdAt: purchase.createdAt?.toDate?.()
+        ? purchase.createdAt.toDate().toISOString()
+        : new Date().toISOString(),
+    }));
+
+    return {
+      purchases: formattedPurchases,
+    };
+  } catch (error) {
+    console.error("Error fetching purchases:", error);
+    throw error;
+  }
+}
+
+// Get single purchase by ID
+async function getPurchaseById(purchaseId) {
+  try {
+    const purchase = await purchasesService.get(purchaseId);
+
+    if (!purchase) {
+      throw new Error("Purchase not found");
+    }
+
+    // Format purchase
+    return {
+      id: purchase.id,
+      supplier_name: purchase.supplier_name || "",
+      purchase_date: purchase.purchase_date || "",
+      due_date: purchase.due_date || "",
+      items: (purchase.items || []).map((item) => ({
+        product_id: item.product_id || "",
+        product_name: item.product_name || "",
+        quantity: item.quantity || 0,
+        price: item.price || 0,
+        total: item.total || 0,
+      })),
+      total: purchase.total || 0,
+      status: purchase.status || "pending",
+      reminder_type: purchase.reminder_type || "no_reminder",
+      reminder_value: purchase.reminder_value || "",
+      reminder_time: purchase.reminder_time || "",
+      createdAt: purchase.createdAt?.toDate?.()
+        ? purchase.createdAt.toDate().toISOString()
+        : new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching purchase by ID:", error);
+    throw error;
+  }
+}
+
+// Create new purchase
+async function createPurchase(purchaseData) {
+  try {
+    // Validate required fields
+    const {
+      supplier_name,
+      purchase_date,
+      due_date,
+      items,
+      total,
+      reminder_type,
+      reminder_value,
+      reminder_time,
+    } = purchaseData;
+
+    if (!supplier_name || !supplier_name.trim()) {
+      throw new Error("Supplier name is required");
+    }
+
+    if (!purchase_date) {
+      throw new Error("Purchase date is required");
+    }
+
+    if (!due_date) {
+      throw new Error("Due date is required");
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error("At least one item is required");
+    }
+
+    if (typeof total !== "number" || total < 0) {
+      throw new Error("Total must be a non-negative number");
+    }
+
+    // Create purchase document
+    const newPurchase = {
+      supplier_name: supplier_name.trim(),
+      purchase_date,
+      due_date,
+      items: items.map((item) => ({
+        product_id: item.product_id || "",
+        product_name: item.product_name || "",
+        quantity: item.quantity || 0,
+        price: item.price || 0,
+        total: item.total || item.quantity * item.price || 0,
+      })),
+      total,
+      status: "pending",
+      reminder_type: reminder_type || "no_reminder",
+      reminder_value: reminder_value || "",
+      reminder_time: reminder_time || "",
+    };
+
+    const createdPurchase = await purchasesService.create(newPurchase);
+
+    return {
+      id: createdPurchase.id,
+      ...newPurchase,
+    };
+  } catch (error) {
+    console.error("Error creating purchase:", error);
+    throw error;
+  }
+}
+
+// Edit existing purchase
+async function editPurchase(purchaseData) {
+  try {
+    const {
+      id,
+      supplier_name,
+      purchase_date,
+      due_date,
+      items,
+      total,
+      status,
+      reminder_type,
+      reminder_value,
+      reminder_time,
+    } = purchaseData;
+
+    if (!id) {
+      throw new Error("Purchase ID is required");
+    }
+
+    // Check if purchase exists
+    const existingPurchase = await purchasesService.get(id);
+    if (!existingPurchase) {
+      throw new Error("Purchase not found");
+    }
+
+    // Validate fields if provided
+    if (supplier_name !== undefined && !supplier_name.trim()) {
+      throw new Error("Supplier name cannot be empty");
+    }
+
+    if (
+      items !== undefined &&
+      (!Array.isArray(items) || items.length === 0)
+    ) {
+      throw new Error("At least one item is required");
+    }
+
+    if (total !== undefined && (typeof total !== "number" || total < 0)) {
+      throw new Error("Total must be a non-negative number");
+    }
+
+    // Update purchase
+    const updateData = {};
+    if (supplier_name !== undefined)
+      updateData.supplier_name = supplier_name.trim();
+    if (purchase_date !== undefined) updateData.purchase_date = purchase_date;
+    if (due_date !== undefined) updateData.due_date = due_date;
+    if (items !== undefined) {
+      updateData.items = items.map((item) => ({
+        product_id: item.product_id || "",
+        product_name: item.product_name || "",
+        quantity: item.quantity || 0,
+        price: item.price || 0,
+        total: item.total || item.quantity * item.price || 0,
+      }));
+    }
+    if (total !== undefined) updateData.total = total;
+    if (status !== undefined) updateData.status = status;
+    if (reminder_type !== undefined) updateData.reminder_type = reminder_type;
+    if (reminder_value !== undefined) updateData.reminder_value = reminder_value;
+    if (reminder_time !== undefined) updateData.reminder_time = reminder_time;
+
+    await purchasesService.update(id, updateData);
+
+    // Return updated purchase
+    const updatedPurchase = await purchasesService.get(id);
+    return {
+      id: updatedPurchase.id,
+      supplier_name: updatedPurchase.supplier_name || "",
+      purchase_date: updatedPurchase.purchase_date || "",
+      due_date: updatedPurchase.due_date || "",
+      items: (updatedPurchase.items || []).map((item) => ({
+        product_id: item.product_id || "",
+        product_name: item.product_name || "",
+        quantity: item.quantity || 0,
+        price: item.price || 0,
+        total: item.total || 0,
+      })),
+      total: updatedPurchase.total || 0,
+      status: updatedPurchase.status || "pending",
+      reminder_type: updatedPurchase.reminder_type || "no_reminder",
+      reminder_value: updatedPurchase.reminder_value || "",
+      reminder_time: updatedPurchase.reminder_time || "",
+    };
+  } catch (error) {
+    console.error("Error editing purchase:", error);
+    throw error;
+  }
+}
+
+// Delete purchase
+async function deletePurchase(purchaseId) {
+  try {
+    if (!purchaseId) {
+      throw new Error("Purchase ID is required");
+    }
+
+    // Check if purchase exists
+    const existingPurchase = await purchasesService.get(purchaseId);
+    if (!existingPurchase) {
+      throw new Error("Purchase not found");
+    }
+
+    await purchasesService.delete(purchaseId);
+
+    return { success: true, message: "Purchase deleted successfully" };
+  } catch (error) {
+    console.error("Error deleting purchase:", error);
+    throw error;
+  }
+}
+
+// Complete purchase (mark as completed)
+async function completePurchase(purchaseId) {
+  try {
+    if (!purchaseId) {
+      throw new Error("Purchase ID is required");
+    }
+
+    // Check if purchase exists
+    const existingPurchase = await purchasesService.get(purchaseId);
+    if (!existingPurchase) {
+      throw new Error("Purchase not found");
+    }
+
+    // Update status to completed
+    await purchasesService.update(purchaseId, { status: "completed" });
+
+    // Return updated purchase
+    const updatedPurchase = await purchasesService.get(purchaseId);
+    return {
+      id: updatedPurchase.id,
+      supplier_name: updatedPurchase.supplier_name || "",
+      purchase_date: updatedPurchase.purchase_date || "",
+      due_date: updatedPurchase.due_date || "",
+      items: (updatedPurchase.items || []).map((item) => ({
+        product_id: item.product_id || "",
+        product_name: item.product_name || "",
+        quantity: item.quantity || 0,
+        price: item.price || 0,
+        total: item.total || 0,
+      })),
+      total: updatedPurchase.total || 0,
+      status: updatedPurchase.status || "completed",
+      reminder_type: updatedPurchase.reminder_type || "no_reminder",
+      reminder_value: updatedPurchase.reminder_value || "",
+      reminder_time: updatedPurchase.reminder_time || "",
+    };
+  } catch (error) {
+    console.error("Error completing purchase:", error);
+    throw error;
+  }
+}
+
+// ==================== EXPENSES HELPER FUNCTIONS ====================
+
+// Get all expenses
+async function getExpenses(filters = {}) {
+  try {
+    const expenses = await expensesService.getAll({
+      orderBy: ["createdAt", "desc"],
+    });
+
+    // Filter by date range if provided
+    let filteredExpenses = expenses;
+    if (filters.start_date || filters.end_date) {
+      filteredExpenses = expenses.filter((expense) => {
+        const expenseDate = new Date(expense.date);
+        if (filters.start_date && expenseDate < new Date(filters.start_date)) {
+          return false;
+        }
+        if (filters.end_date && expenseDate > new Date(filters.end_date)) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Format expenses for mobile app
+    const formattedExpenses = filteredExpenses.map((expense) => ({
+      id: expense.id,
+      description: expense.description || "",
+      amount: expense.amount || 0,
+      date: expense.date || "",
+      time: expense.time || "",
+      createdAt: expense.createdAt?.toDate?.()
+        ? expense.createdAt.toDate().toISOString()
+        : new Date().toISOString(),
+    }));
+
+    // Calculate total
+    const totalExpense = formattedExpenses.reduce(
+      (sum, expense) => sum + expense.amount,
+      0
+    );
+
+    return {
+      expenses: formattedExpenses,
+      total: totalExpense,
+      count: formattedExpenses.length,
+    };
+  } catch (error) {
+    console.error("Error fetching expenses:", error);
+    throw error;
+  }
+}
+
+// Get single expense by ID
+async function getExpenseById(expenseId) {
+  try {
+    const expense = await expensesService.get(expenseId);
+
+    if (!expense) {
+      throw new Error("Expense not found");
+    }
+
+    // Format expense
+    return {
+      id: expense.id,
+      description: expense.description || "",
+      amount: expense.amount || 0,
+      date: expense.date || "",
+      time: expense.time || "",
+      createdAt: expense.createdAt?.toDate?.()
+        ? expense.createdAt.toDate().toISOString()
+        : new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching expense by ID:", error);
+    throw error;
+  }
+}
+
+// Create new expense
+async function createExpense(expenseData) {
+  try {
+    // Validate required fields
+    const { description, amount, date, time } = expenseData;
+
+    if (!description || !description.trim()) {
+      throw new Error("Description is required");
+    }
+
+    if (typeof amount !== "number" || amount < 0) {
+      throw new Error("Amount must be a non-negative number");
+    }
+
+    if (!date) {
+      throw new Error("Date is required");
+    }
+
+    if (!time) {
+      throw new Error("Time is required");
+    }
+
+    // Create expense document
+    const newExpense = {
+      description: description.trim(),
+      amount,
+      date,
+      time,
+    };
+
+    const createdExpense = await expensesService.create(newExpense);
+
+    return {
+      id: createdExpense.id,
+      ...newExpense,
+    };
+  } catch (error) {
+    console.error("Error creating expense:", error);
+    throw error;
+  }
+}
+
+// Edit existing expense
+async function editExpense(expenseData) {
+  try {
+    const { id, description, amount, date, time } = expenseData;
+
+    if (!id) {
+      throw new Error("Expense ID is required");
+    }
+
+    // Check if expense exists
+    const existingExpense = await expensesService.get(id);
+    if (!existingExpense) {
+      throw new Error("Expense not found");
+    }
+
+    // Validate fields if provided
+    if (description !== undefined && !description.trim()) {
+      throw new Error("Description cannot be empty");
+    }
+
+    if (
+      amount !== undefined &&
+      (typeof amount !== "number" || amount < 0)
+    ) {
+      throw new Error("Amount must be a non-negative number");
+    }
+
+    // Update expense
+    const updateData = {};
+    if (description !== undefined)
+      updateData.description = description.trim();
+    if (amount !== undefined) updateData.amount = amount;
+    if (date !== undefined) updateData.date = date;
+    if (time !== undefined) updateData.time = time;
+
+    await expensesService.update(id, updateData);
+
+    // Return updated expense
+    const updatedExpense = await expensesService.get(id);
+    return {
+      id: updatedExpense.id,
+      description: updatedExpense.description || "",
+      amount: updatedExpense.amount || 0,
+      date: updatedExpense.date || "",
+      time: updatedExpense.time || "",
+    };
+  } catch (error) {
+    console.error("Error editing expense:", error);
+    throw error;
+  }
+}
+
+// Delete expense
+async function deleteExpense(expenseId) {
+  try {
+    if (!expenseId) {
+      throw new Error("Expense ID is required");
+    }
+
+    // Check if expense exists
+    const existingExpense = await expensesService.get(expenseId);
+    if (!existingExpense) {
+      throw new Error("Expense not found");
+    }
+
+    await expensesService.delete(expenseId);
+
+    return { success: true, message: "Expense deleted successfully" };
+  } catch (error) {
+    console.error("Error deleting expense:", error);
+    throw error;
+  }
+}
+
+// ==================== INVOICES HELPER FUNCTIONS ====================
+
 // Get Invoices for mobile app
 async function getInvoices() {
   try {
@@ -1291,6 +1789,10 @@ export async function GET(request) {
       "stock-history",
       "get-invoices",
       "get-invoice",
+      "get-purchases",
+      "get-purchase",
+      "get-expenses",
+      "get-expense",
     ];
     if (!action || !validActions.includes(action)) {
       return Response.json(
@@ -1378,17 +1880,27 @@ export async function GET(request) {
 
     // Handle get-invoices action (doesn't need date range)
     if (action === "get-invoices") {
-      const invoicesData = await getInvoices();
+      try {
+        const invoicesData = await getInvoices();
 
-      return Response.json(
-        {
-          success: true,
-          action: "get-invoices",
-          generated_at: new Date().toISOString(),
-          data: invoicesData,
-        },
-        { headers: corsHeaders }
-      );
+        return Response.json(
+          {
+            success: true,
+            action: "get-invoices",
+            generated_at: new Date().toISOString(),
+            data: invoicesData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve invoices",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
     }
 
     // Handle get-invoice action (get single invoice by ID)
@@ -1404,17 +1916,154 @@ export async function GET(request) {
         );
       }
 
-      const invoiceData = await getInvoiceById(invoiceId);
+      try {
+        const invoiceData = await getInvoiceById(invoiceId);
 
-      return Response.json(
-        {
-          success: true,
-          action: "get-invoice",
-          generated_at: new Date().toISOString(),
-          data: invoiceData,
-        },
-        { headers: corsHeaders }
-      );
+        return Response.json(
+          {
+            success: true,
+            action: "get-invoice",
+            generated_at: new Date().toISOString(),
+            data: invoiceData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve invoice",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get all purchases
+    if (action === "get-purchases") {
+      try {
+        const purchasesData = await getPurchases();
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-purchases",
+            generated_at: new Date().toISOString(),
+            data: purchasesData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve purchases",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get single purchase by ID
+    if (action === "get-purchase") {
+      try {
+        const purchaseId = searchParams.get("id");
+        if (!purchaseId) {
+          return Response.json(
+            {
+              success: false,
+              error: "Purchase ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const purchaseData = await getPurchaseById(purchaseId);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-purchase",
+            generated_at: new Date().toISOString(),
+            data: purchaseData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve purchase",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get all expenses
+    if (action === "get-expenses") {
+      try {
+        const filters = {
+          start_date: searchParams.get("start_date"),
+          end_date: searchParams.get("end_date"),
+        };
+
+        const expensesData = await getExpenses(filters);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-expenses",
+            generated_at: new Date().toISOString(),
+            data: expensesData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve expenses",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get single expense by ID
+    if (action === "get-expense") {
+      try {
+        const expenseId = searchParams.get("id");
+        if (!expenseId) {
+          return Response.json(
+            {
+              success: false,
+              error: "Expense ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const expenseData = await getExpenseById(expenseId);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-expense",
+            generated_at: new Date().toISOString(),
+            data: expenseData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve expense",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
     }
 
     // Load data for sales reports
@@ -1672,6 +2321,257 @@ export async function POST(request) {
       }
     }
 
+    // Create purchase
+    if (action === "create-purchase") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const newPurchase = await createPurchase(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "create-purchase",
+            data: {
+              purchase: newPurchase,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error creating purchase:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to create purchase",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Edit purchase
+    if (action === "edit-purchase") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const editedPurchase = await editPurchase(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "edit-purchase",
+            data: {
+              purchase: editedPurchase,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error editing purchase:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to edit purchase",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Delete purchase
+    if (action === "delete-purchase") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { id } = requestBody;
+        const result = await deletePurchase(id);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-purchase",
+            message: result.message,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error deleting purchase:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to delete purchase",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Complete purchase
+    if (action === "complete-purchase") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { id } = requestBody;
+        const completedPurchase = await completePurchase(id);
+
+        return Response.json(
+          {
+            success: true,
+            action: "complete-purchase",
+            data: {
+              purchase: completedPurchase,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error completing purchase:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to complete purchase",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Create expense
+    if (action === "create-expense") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const newExpense = await createExpense(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "create-expense",
+            data: {
+              expense: newExpense,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error creating expense:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to create expense",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Edit expense
+    if (action === "edit-expense") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const editedExpense = await editExpense(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "edit-expense",
+            data: {
+              expense: editedExpense,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error editing expense:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to edit expense",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Delete expense
+    if (action === "delete-expense") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { id } = requestBody;
+        const result = await deleteExpense(id);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-expense",
+            message: result.message,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error deleting expense:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to delete expense",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
     // Invalid action for POST
     return Response.json(
       {
@@ -1682,12 +2582,193 @@ export async function POST(request) {
           "edit-product-cost",
           "create-invoice",
           "edit-invoice",
+          "create-purchase",
+          "edit-purchase",
+          "delete-purchase",
+          "complete-purchase",
+          "create-expense",
+          "edit-expense",
+          "delete-expense",
         ],
       },
       { status: 400, headers: corsHeaders }
     );
   } catch (error) {
     console.error("POST error:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Internal server error",
+      },
+      {
+        status: 500,
+        headers: corsHeaders,
+      }
+    );
+  }
+}
+
+/**
+ * DELETE /api/mobile
+ * Handle DELETE requests for invoices, purchases, and expenses
+ */
+export async function DELETE(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get("action");
+
+    if (!action) {
+      return Response.json(
+        {
+          success: false,
+          error: "Action parameter is required",
+          valid_actions: ["delete-invoice", "delete-purchase", "delete-expense"],
+        },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Authenticate request
+    const auth = authenticateRequest(request);
+    if (auth.error) {
+      return Response.json(
+        { success: false, error: auth.error },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    // Delete invoice
+    if (action === "delete-invoice") {
+      try {
+        const invoiceId = searchParams.get("id");
+        if (!invoiceId) {
+          return Response.json(
+            {
+              success: false,
+              error: "Invoice ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        // Check if invoice exists
+        const existingInvoice = await invoicesService.get(invoiceId);
+        if (!existingInvoice) {
+          return Response.json(
+            {
+              success: false,
+              error: "Invoice not found",
+            },
+            { status: 404, headers: corsHeaders }
+          );
+        }
+
+        // Delete invoice
+        await invoicesService.delete(invoiceId);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-invoice",
+            message: "Invoice deleted successfully",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error deleting invoice:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to delete invoice",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Delete purchase
+    if (action === "delete-purchase") {
+      try {
+        const purchaseId = searchParams.get("id");
+        if (!purchaseId) {
+          return Response.json(
+            {
+              success: false,
+              error: "Purchase ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const result = await deletePurchase(purchaseId);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-purchase",
+            message: result.message,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error deleting purchase:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to delete purchase",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Delete expense
+    if (action === "delete-expense") {
+      try {
+        const expenseId = searchParams.get("id");
+        if (!expenseId) {
+          return Response.json(
+            {
+              success: false,
+              error: "Expense ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const result = await deleteExpense(expenseId);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-expense",
+            message: result.message,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error deleting expense:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to delete expense",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Invalid action for DELETE
+    return Response.json(
+      {
+        success: false,
+        error: "Invalid action for DELETE method",
+        valid_delete_actions: ["delete-invoice", "delete-purchase", "delete-expense"],
+      },
+      { status: 400, headers: corsHeaders }
+    );
+  } catch (error) {
+    console.error("DELETE error:", error);
     return Response.json(
       {
         success: false,
