@@ -28,9 +28,13 @@ Complete API reference for Purchasing and Expense management in POS Candy Kush m
    - [Delete Expense](#delete-expense)
 4. [Invoices API (Enhanced)](#invoices-api-enhanced)
    - [Delete Invoice](#delete-invoice)
-5. [Error Handling](#error-handling)
-6. [Android Integration Guide](#android-integration-guide)
-7. [Testing](#testing)
+5. [Items/Products API](#itemsproducts-api)
+   - [Get All Items](#get-all-items)
+6. [Categories API](#categories-api)
+   - [Get All Categories](#get-all-categories)
+7. [Error Handling](#error-handling)
+8. [Android Integration Guide](#android-integration-guide)
+9. [Testing](#testing)
 
 ---
 
@@ -43,6 +47,7 @@ All Finance API endpoints (except login) require JWT authentication.
 **Endpoint:** `POST /api/mobile?action=login`
 
 **Request Body:**
+
 ```json
 {
   "email": "admin@candykush.com",
@@ -51,6 +56,7 @@ All Finance API endpoints (except login) require JWT authentication.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -83,11 +89,13 @@ Retrieve a list of all purchase orders.
 **Endpoint:** `GET /api/mobile?action=get-purchases`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -122,10 +130,12 @@ Authorization: Bearer {token}
 ```
 
 **Purchase Status:**
+
 - `pending` - Purchase order not yet completed
 - `completed` - Purchase order has been received/completed
 
 **Reminder Types:**
+
 - `no_reminder` - No notification scheduled
 - `days_before` - Remind X days before due date (e.g., "3" days before)
 - `specific_date` - Remind on specific date (e.g., "2025-12-25")
@@ -139,14 +149,17 @@ Retrieve a single purchase order by its ID.
 **Endpoint:** `GET /api/mobile?action=get-purchase&id={purchaseId}`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Parameters:**
+
 - `id` (required): Purchase ID
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -177,6 +190,7 @@ Authorization: Bearer {token}
 ```
 
 **Error Response (Purchase Not Found):**
+
 ```json
 {
   "success": false,
@@ -193,12 +207,14 @@ Create a new purchase order.
 **Endpoint:** `POST /api/mobile?action=create-purchase`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "supplier_name": "ABC Suppliers Inc.",
@@ -228,6 +244,7 @@ Content-Type: application/json
 ```
 
 **Required Fields:**
+
 - `supplier_name` (string): Name of the supplier
 - `purchase_date` (string): Date of purchase order (YYYY-MM-DD)
 - `due_date` (string): Due date for delivery (YYYY-MM-DD)
@@ -240,6 +257,7 @@ Content-Type: application/json
 - `total` (number): Total purchase amount
 
 **Optional Fields:**
+
 - `reminder_type` (string): Type of reminder ("no_reminder", "days_before", "specific_date")
 - `reminder_value` (string): Depends on reminder_type:
   - For "days_before": Number of days (e.g., "3")
@@ -247,6 +265,7 @@ Content-Type: application/json
 - `reminder_time` (string): Time for reminder in HH:mm format (e.g., "09:00")
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -277,6 +296,7 @@ Content-Type: application/json
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -293,12 +313,14 @@ Update an existing purchase order.
 **Endpoint:** `POST /api/mobile?action=edit-purchase`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "id": "purchase_123",
@@ -317,9 +339,11 @@ Content-Type: application/json
 ```
 
 **Required Fields:**
+
 - `id` (string): Purchase ID to update
 
 **Optional Fields:** (any field can be updated)
+
 - `supplier_name` (string)
 - `purchase_date` (string)
 - `due_date` (string)
@@ -331,6 +355,7 @@ Content-Type: application/json
 - `reminder_time` (string)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -369,12 +394,14 @@ Delete a purchase order (POST method).
 **Endpoint:** `POST /api/mobile?action=delete-purchase`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "id": "purchase_123"
@@ -382,6 +409,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -395,11 +423,13 @@ Content-Type: application/json
 **Endpoint:** `DELETE /api/mobile?action=delete-purchase&id={purchaseId}`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -417,12 +447,14 @@ Mark a purchase order as completed (received).
 **Endpoint:** `POST /api/mobile?action=complete-purchase`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "id": "purchase_123"
@@ -430,6 +462,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -470,20 +503,24 @@ Retrieve a list of all expenses with optional date filtering.
 **Endpoint:** `GET /api/mobile?action=get-expenses`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Optional Query Parameters:**
+
 - `start_date` (string): Filter expenses from this date (YYYY-MM-DD)
 - `end_date` (string): Filter expenses up to this date (YYYY-MM-DD)
 
 **Example:**
+
 ```
 GET /api/mobile?action=get-expenses&start_date=2025-12-01&end_date=2025-12-31
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -523,14 +560,17 @@ Retrieve a single expense by its ID.
 **Endpoint:** `GET /api/mobile?action=get-expense&id={expenseId}`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Parameters:**
+
 - `id` (required): Expense ID
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -548,6 +588,7 @@ Authorization: Bearer {token}
 ```
 
 **Error Response (Expense Not Found):**
+
 ```json
 {
   "success": false,
@@ -564,12 +605,14 @@ Create a new expense record.
 **Endpoint:** `POST /api/mobile?action=create-expense`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "description": "Office supplies - printer paper and ink",
@@ -580,12 +623,14 @@ Content-Type: application/json
 ```
 
 **Required Fields:**
+
 - `description` (string): Description of the expense
 - `amount` (number): Expense amount (must be non-negative)
 - `date` (string): Date of expense (YYYY-MM-DD)
 - `time` (string): Time of expense (HH:mm format)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -603,6 +648,7 @@ Content-Type: application/json
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -619,12 +665,14 @@ Update an existing expense.
 **Endpoint:** `POST /api/mobile?action=edit-expense`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "id": "expense_123",
@@ -634,15 +682,18 @@ Content-Type: application/json
 ```
 
 **Required Fields:**
+
 - `id` (string): Expense ID to update
 
 **Optional Fields:** (any field can be updated)
+
 - `description` (string)
 - `amount` (number)
 - `date` (string)
 - `time` (string)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -668,12 +719,14 @@ Delete an expense record (POST method).
 **Endpoint:** `POST /api/mobile?action=delete-expense`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "id": "expense_123"
@@ -681,6 +734,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -694,11 +748,13 @@ Content-Type: application/json
 **Endpoint:** `DELETE /api/mobile?action=delete-expense&id={expenseId}`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -718,14 +774,17 @@ Delete an invoice (new DELETE method support).
 **Endpoint:** `DELETE /api/mobile?action=delete-invoice&id={invoiceId}`
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Parameters:**
+
 - `id` (required): Invoice ID
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -735,6 +794,7 @@ Authorization: Bearer {token}
 ```
 
 **Error Response (Invoice Not Found):**
+
 ```json
 {
   "success": false,
@@ -743,6 +803,7 @@ Authorization: Bearer {token}
 ```
 
 **Error Response (Missing ID):**
+
 ```json
 {
   "success": false,
@@ -776,6 +837,7 @@ All error responses follow this format:
 ### Common Errors
 
 **Missing Authentication:**
+
 ```json
 {
   "success": false,
@@ -784,6 +846,7 @@ All error responses follow this format:
 ```
 
 **Validation Error:**
+
 ```json
 {
   "success": false,
@@ -792,6 +855,7 @@ All error responses follow this format:
 ```
 
 **Resource Not Found:**
+
 ```json
 {
   "success": false,
@@ -800,6 +864,7 @@ All error responses follow this format:
 ```
 
 **Invalid Action:**
+
 ```json
 {
   "success": false,
@@ -1153,6 +1218,7 @@ class PurchasingActivity : AppCompatActivity() {
 ### Manual Testing with cURL
 
 **Login:**
+
 ```bash
 curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=login" \
   -H "Content-Type: application/json" \
@@ -1160,12 +1226,14 @@ curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=login" \
 ```
 
 **Get Purchases:**
+
 ```bash
 curl -X GET "https://pos-candy-kush.vercel.app/api/mobile?action=get-purchases" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
 **Create Purchase:**
+
 ```bash
 curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=create-purchase" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE" \
@@ -1191,6 +1259,7 @@ curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=create-purchas
 ```
 
 **Create Expense:**
+
 ```bash
 curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=create-expense" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE" \
@@ -1204,6 +1273,7 @@ curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=create-expense
 ```
 
 **Delete Purchase:**
+
 ```bash
 curl -X DELETE "https://pos-candy-kush.vercel.app/api/mobile?action=delete-purchase&id=PURCHASE_ID" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
@@ -1218,6 +1288,7 @@ npm test -- __tests__/api/finance-api.test.js
 ```
 
 This will test all Finance API endpoints including:
+
 - Authentication
 - All Purchases CRUD operations
 - All Expenses CRUD operations
@@ -1227,11 +1298,259 @@ This will test all Finance API endpoints including:
 
 ---
 
+## Items/Products API
+
+### Get All Items
+
+Retrieve a list of all products/items with category information. This endpoint returns the latest data from Firebase and includes full category details for each item.
+
+**Endpoint:** `GET /api/mobile?action=get-items`
+
+**Authentication:** JWT token required
+
+**Headers:**
+
+```
+Authorization: Bearer {token}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "get-items",
+  "generated_at": "2025-12-20T15:30:00.000Z",
+  "data": {
+    "items": [
+      {
+        "id": "abc123",
+        "product_id": "PROD001",
+        "name": "OG Kush",
+        "description": "Premium indoor strain",
+        "sku": "SKU-001",
+        "category_id": "flowers",
+        "category_name": "Flowers",
+        "category_image": "/categories/flowers.jpg",
+        "price": 25.0,
+        "cost": 15.0,
+        "stock": 100,
+        "track_stock": true,
+        "low_stock_threshold": 10,
+        "is_active": true,
+        "available_for_sale": true,
+        "variants": [
+          {
+            "variant_id": "var001",
+            "variant_name": "1g",
+            "sku": "SKU-001-1G",
+            "stock": 50,
+            "price": 25.0,
+            "cost": 15.0
+          },
+          {
+            "variant_id": "var002",
+            "variant_name": "3.5g",
+            "sku": "SKU-001-3.5G",
+            "stock": 50,
+            "price": 80.0,
+            "cost": 50.0
+          }
+        ],
+        "created_at": "2025-01-01T10:00:00.000Z",
+        "updated_at": "2025-12-20T15:00:00.000Z"
+      }
+    ],
+    "total_count": 45,
+    "generated_at": "2025-12-20T15:30:00.000Z"
+  }
+}
+```
+
+**Item Fields:**
+
+| Field                 | Type    | Description                                     |
+| --------------------- | ------- | ----------------------------------------------- |
+| `id`                  | string  | Firebase document ID                            |
+| `product_id`          | string  | Product ID (internal reference)                 |
+| `name`                | string  | Product name                                    |
+| `description`         | string  | Product description                             |
+| `sku`                 | string  | Stock Keeping Unit                              |
+| `category_id`         | string  | Category ID (for filtering/grouping)            |
+| `category_name`       | string  | Category display name                           |
+| `category_image`      | string  | Category image URL                              |
+| `price`               | number  | Selling price                                   |
+| `cost`                | number  | Cost price                                      |
+| `stock`               | number  | Total stock quantity (sum of all variants)      |
+| `track_stock`         | boolean | Whether stock tracking is enabled               |
+| `low_stock_threshold` | number  | Alert threshold for low stock                   |
+| `is_active`           | boolean | Whether product is active                       |
+| `available_for_sale`  | boolean | Whether product can be sold                     |
+| `variants`            | array   | List of product variants with stock and pricing |
+| `created_at`          | string  | ISO 8601 timestamp                              |
+| `updated_at`          | string  | ISO 8601 timestamp                              |
+
+**Use Cases:**
+
+- Display product catalog in mobile app
+- Filter products by category
+- Show stock levels for purchase planning
+- Categorize items in purchase orders
+- Update product costs
+
+**Example Request (Android):**
+
+```kotlin
+suspend fun getItems(): Response<ItemsResponse> {
+    return apiService.get(
+        url = "${baseUrl}/api/mobile?action=get-items",
+        headers = mapOf("Authorization" to "Bearer $token")
+    )
+}
+
+// Usage
+lifecycleScope.launch {
+    val response = apiManager.getItems()
+    if (response.success) {
+        val items = response.data.items
+        // Group by category
+        val itemsByCategory = items.groupBy { it.category_name }
+        displayItems(itemsByCategory)
+    }
+}
+```
+
+---
+
+## Categories API
+
+### Get All Categories
+
+Retrieve a list of all product categories. Use this endpoint to populate category dropdowns and filter items by category.
+
+**Endpoint:** `GET /api/mobile?action=get-categories`
+
+**Authentication:** JWT token required
+
+**Headers:**
+
+```
+Authorization: Bearer {token}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "get-categories",
+  "generated_at": "2025-12-20T15:30:00.000Z",
+  "data": {
+    "categories": [
+      {
+        "id": "cat001",
+        "category_id": "flowers",
+        "name": "Flowers",
+        "description": "Premium cannabis flowers",
+        "image": "/categories/flowers.jpg",
+        "color": "#4CAF50",
+        "icon": "local_florist",
+        "is_active": true,
+        "sort_order": 1,
+        "created_at": "2025-01-01T10:00:00.000Z",
+        "updated_at": "2025-12-20T15:00:00.000Z"
+      },
+      {
+        "id": "cat002",
+        "category_id": "edibles",
+        "name": "Edibles",
+        "description": "Cannabis-infused edibles",
+        "image": "/categories/edibles.jpg",
+        "color": "#FF9800",
+        "icon": "cake",
+        "is_active": true,
+        "sort_order": 2,
+        "created_at": "2025-01-01T10:00:00.000Z",
+        "updated_at": "2025-12-20T15:00:00.000Z"
+      }
+    ],
+    "total_count": 8,
+    "generated_at": "2025-12-20T15:30:00.000Z"
+  }
+}
+```
+
+**Category Fields:**
+
+| Field         | Type    | Description                      |
+| ------------- | ------- | -------------------------------- |
+| `id`          | string  | Firebase document ID             |
+| `category_id` | string  | Category ID (for filtering)      |
+| `name`        | string  | Category display name            |
+| `description` | string  | Category description             |
+| `image`       | string  | Category image URL               |
+| `color`       | string  | Hex color code for UI theming    |
+| `icon`        | string  | Material icon name               |
+| `is_active`   | boolean | Whether category is active       |
+| `sort_order`  | number  | Display order (sorted ascending) |
+| `created_at`  | string  | ISO 8601 timestamp               |
+| `updated_at`  | string  | ISO 8601 timestamp               |
+
+**Use Cases:**
+
+- Populate category dropdown in purchase form
+- Filter items by category
+- Display category-based navigation
+- Show category icons and colors in UI
+
+**Example Request (Android):**
+
+```kotlin
+suspend fun getCategories(): Response<CategoriesResponse> {
+    return apiService.get(
+        url = "${baseUrl}/api/mobile?action=get-categories",
+        headers = mapOf("Authorization" to "Bearer $token")
+    )
+}
+
+// Usage
+lifecycleScope.launch {
+    val response = apiManager.getCategories()
+    if (response.success) {
+        val categories = response.data.categories
+        // Populate spinner/dropdown
+        categoryAdapter.setData(categories)
+    }
+}
+```
+
+**Filtering Items by Category:**
+
+```kotlin
+// 1. Get all categories
+val categoriesResponse = apiManager.getCategories()
+val categories = categoriesResponse.data.categories
+
+// 2. Get all items
+val itemsResponse = apiManager.getItems()
+val items = itemsResponse.data.items
+
+// 3. Filter items by selected category
+val selectedCategoryId = "flowers"
+val filteredItems = items.filter { it.category_id == selectedCategoryId }
+
+// 4. Display filtered items
+displayItems(filteredItems)
+```
+
+---
+
 ## Summary
 
 The Finance API provides complete CRUD operations for:
 
 **Purchases (6 endpoints):**
+
 - GET all purchases
 - GET single purchase
 - POST create purchase
@@ -1240,16 +1559,34 @@ The Finance API provides complete CRUD operations for:
 - POST complete purchase
 
 **Expenses (5 endpoints):**
+
 - GET all expenses (with date filtering)
 - GET single expense
 - POST create expense
 - POST edit expense
 - POST/DELETE delete expense
 
+**Items/Products (1 endpoint):**
+
+- GET all items (with full category information and latest stock levels)
+
+**Categories (1 endpoint):**
+
+- GET all categories (for filtering and categorizing items)
+
 **Invoices (Enhanced):**
+
 - DELETE invoice
 
 All endpoints require JWT authentication (except login) and follow consistent request/response patterns with proper error handling.
+
+**Key Features:**
+
+- ✅ Real-time data from Firebase
+- ✅ Category information on all items
+- ✅ Stock tracking and variants support
+- ✅ Filter items by category
+- ✅ Latest product updates reflected immediately
 
 **Support:** For issues or questions, contact the development team.
 

@@ -10,6 +10,8 @@
  * - GET /api/mobile?action=sales-by-employee - Sales breakdown by employee
  * - GET /api/mobile?action=stock - Current inventory stock levels
  * - GET /api/mobile?action=stock-history - Complete stock movement history
+ * - GET /api/mobile?action=get-items - Get all products/items with category info
+ * - GET /api/mobile?action=get-categories - Get all categories
  *
  * Authentication: All endpoints except login require JWT token in Authorization header
  * Filter Parameters (for all sales endpoints):
@@ -799,6 +801,134 @@ async function getStockHistory(limit = 1000) {
   }
 }
 
+// ==================== ITEMS/PRODUCTS HELPER FUNCTIONS ====================
+
+// Get all items/products with categories
+async function getItems() {
+  try {
+    const products = await productsService.getAll();
+
+    // Transform products to include category information
+    const items = products.map((product) => {
+      const variants = product.variants || [];
+      const primaryVariant = variants[0] || {};
+
+      // Calculate total stock
+      let totalStock = 0;
+      if (variants.length > 0) {
+        totalStock = variants.reduce((sum, v) => {
+          return sum + (v.in_stock || v.inStock || v.stock || v.quantity || 0);
+        }, 0);
+      } else {
+        totalStock =
+          product.in_stock ||
+          product.inStock ||
+          product.stock ||
+          product.quantity ||
+          0;
+      }
+
+      return {
+        id: product.id,
+        product_id: product.productId || product.id,
+        name: product.name,
+        description: product.description || "",
+        sku: product.sku || product.SKU || "",
+
+        // Category information
+        category_id: product.categoryId || "",
+        category_name:
+          product.categoryName || product.category || "Uncategorized",
+        category_image: product.categoryImage || "",
+
+        // Pricing
+        price: product.price || primaryVariant.price || 0,
+        cost: product.cost || primaryVariant.cost || 0,
+
+        // Stock
+        stock: totalStock,
+        track_stock: product.track_stock || product.trackStock || true,
+        low_stock_threshold:
+          product.low_stock_threshold || product.lowStockThreshold || 10,
+
+        // Status
+        is_active: product.isActive !== undefined ? product.isActive : true,
+        available_for_sale:
+          product.availableForSale !== undefined
+            ? product.availableForSale
+            : true,
+
+        // Variants
+        variants: variants.map((v) => ({
+          variant_id: v.variant_id || v.id,
+          variant_name: v.default_variant
+            ? product.name
+            : v.option_value || v.name || "Default",
+          sku: v.sku || "",
+          stock: v.in_stock || v.inStock || v.stock || v.quantity || 0,
+          price: v.price || product.price || 0,
+          cost: v.cost || product.cost || 0,
+        })),
+
+        // Timestamps
+        created_at: product.createdAt?.toDate?.()
+          ? product.createdAt.toDate().toISOString()
+          : product.createdAt,
+        updated_at: product.updatedAt?.toDate?.()
+          ? product.updatedAt.toDate().toISOString()
+          : product.updatedAt,
+      };
+    });
+
+    return {
+      items,
+      total_count: items.length,
+      generated_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching items:", error);
+    throw error;
+  }
+}
+
+// Get all categories
+async function getCategories() {
+  try {
+    const categories = await categoriesService.getAll();
+
+    // Transform categories to consistent format
+    const categoryList = categories.map((category) => ({
+      id: category.id,
+      category_id: category.categoryId || category.id,
+      name: category.name,
+      description: category.description || "",
+      image: category.image || "",
+      color: category.color || "",
+      icon: category.icon || "",
+      is_active: category.isActive !== undefined ? category.isActive : true,
+      sort_order: category.sortOrder || 0,
+      created_at: category.createdAt?.toDate?.()
+        ? category.createdAt.toDate().toISOString()
+        : category.createdAt,
+      updated_at: category.updatedAt?.toDate?.()
+        ? category.updatedAt.toDate().toISOString()
+        : category.updatedAt,
+    }));
+
+    // Sort by sort_order
+    categoryList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    return {
+      categories: categoryList,
+      total_count: categoryList.length,
+      generated_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    throw error;
+  }
+}
+
 // ==================== PURCHASES HELPER FUNCTIONS ====================
 
 // Get all purchases
@@ -974,10 +1104,7 @@ async function editPurchase(purchaseData) {
       throw new Error("Supplier name cannot be empty");
     }
 
-    if (
-      items !== undefined &&
-      (!Array.isArray(items) || items.length === 0)
-    ) {
+    if (items !== undefined && (!Array.isArray(items) || items.length === 0)) {
       throw new Error("At least one item is required");
     }
 
@@ -1003,7 +1130,8 @@ async function editPurchase(purchaseData) {
     if (total !== undefined) updateData.total = total;
     if (status !== undefined) updateData.status = status;
     if (reminder_type !== undefined) updateData.reminder_type = reminder_type;
-    if (reminder_value !== undefined) updateData.reminder_value = reminder_value;
+    if (reminder_value !== undefined)
+      updateData.reminder_value = reminder_value;
     if (reminder_time !== undefined) updateData.reminder_time = reminder_time;
 
     await purchasesService.update(id, updateData);
@@ -1239,17 +1367,13 @@ async function editExpense(expenseData) {
       throw new Error("Description cannot be empty");
     }
 
-    if (
-      amount !== undefined &&
-      (typeof amount !== "number" || amount < 0)
-    ) {
+    if (amount !== undefined && (typeof amount !== "number" || amount < 0)) {
       throw new Error("Amount must be a non-negative number");
     }
 
     // Update expense
     const updateData = {};
-    if (description !== undefined)
-      updateData.description = description.trim();
+    if (description !== undefined) updateData.description = description.trim();
     if (amount !== undefined) updateData.amount = amount;
     if (date !== undefined) updateData.date = date;
     if (time !== undefined) updateData.time = time;
@@ -1793,6 +1917,8 @@ export async function GET(request) {
       "get-purchase",
       "get-expenses",
       "get-expense",
+      "get-items",
+      "get-categories",
     ];
     if (!action || !validActions.includes(action)) {
       return Response.json(
@@ -1876,6 +2002,56 @@ export async function GET(request) {
         },
         { headers: corsHeaders }
       );
+    }
+
+    // Handle get-items action (get all products/items with categories)
+    if (action === "get-items") {
+      try {
+        const itemsData = await getItems();
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-items",
+            generated_at: new Date().toISOString(),
+            data: itemsData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve items",
+          },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Handle get-categories action (get all categories)
+    if (action === "get-categories") {
+      try {
+        const categoriesData = await getCategories();
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-categories",
+            generated_at: new Date().toISOString(),
+            data: categoriesData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve categories",
+          },
+          { status: 500, headers: corsHeaders }
+        );
+      }
     }
 
     // Handle get-invoices action (doesn't need date range)
@@ -2622,7 +2798,11 @@ export async function DELETE(request) {
         {
           success: false,
           error: "Action parameter is required",
-          valid_actions: ["delete-invoice", "delete-purchase", "delete-expense"],
+          valid_actions: [
+            "delete-invoice",
+            "delete-purchase",
+            "delete-expense",
+          ],
         },
         { status: 400, headers: corsHeaders }
       );
@@ -2763,7 +2943,11 @@ export async function DELETE(request) {
       {
         success: false,
         error: "Invalid action for DELETE method",
-        valid_delete_actions: ["delete-invoice", "delete-purchase", "delete-expense"],
+        valid_delete_actions: [
+          "delete-invoice",
+          "delete-purchase",
+          "delete-expense",
+        ],
       },
       { status: 400, headers: corsHeaders }
     );

@@ -9,6 +9,7 @@ npm run dev
 ```
 
 Wait for the server to start. You should see:
+
 ```
 ✓ Ready in 1619ms
 Local: http://localhost:3000
@@ -148,6 +149,7 @@ Invoke-WebRequest -Uri "http://localhost:3000/api/mobile?action=delete-purchase&
 Replace `http://localhost:3000` with `https://pos-candy-kush.vercel.app` in all commands above.
 
 Example:
+
 ```bash
 # PowerShell
 $response = Invoke-WebRequest -Uri "https://pos-candy-kush.vercel.app/api/mobile?action=login" `
@@ -170,6 +172,7 @@ npm test -- __tests__/api/finance-api.test.js
 ```
 
 This will run all 30+ test cases covering:
+
 - Authentication
 - Purchases CRUD
 - Expenses CRUD
@@ -182,15 +185,18 @@ This will run all 30+ test cases covering:
 ## Using Postman
 
 ### 1. Create a New Collection
+
 - Name: Finance API
 
 ### 2. Add Environment Variables
+
 - `base_url`: http://localhost:3000 (or https://pos-candy-kush.vercel.app)
 - `token`: (will be set after login)
 
 ### 3. Import Requests
 
 **Login:**
+
 ```
 POST {{base_url}}/api/mobile?action=login
 Body (JSON):
@@ -201,6 +207,7 @@ Body (JSON):
 ```
 
 **Get Purchases:**
+
 ```
 GET {{base_url}}/api/mobile?action=get-purchases
 Headers:
@@ -208,6 +215,7 @@ Authorization: Bearer {{token}}
 ```
 
 **Create Purchase:**
+
 ```
 POST {{base_url}}/api/mobile?action=create-purchase
 Headers:
@@ -256,15 +264,19 @@ After starting the server, verify:
 ## Common Issues
 
 ### Issue: "Unable to connect to the remote server"
+
 **Solution:** Make sure the dev server is running (`npm run dev`)
 
 ### Issue: "Unauthorized" error
+
 **Solution:** Check that your JWT token is valid and not expired. Re-login if needed.
 
 ### Issue: "Purchase not found"
+
 **Solution:** Make sure you're using a valid purchase ID from the get-purchases response.
 
 ### Issue: CORS error
+
 **Solution:** The API already has CORS configured. If you still see errors, check that you're using the correct headers.
 
 ---
@@ -272,6 +284,7 @@ After starting the server, verify:
 ## Expected Response Format
 
 ### Success Response:
+
 ```json
 {
   "success": true,
@@ -287,6 +300,7 @@ After starting the server, verify:
 ```
 
 ### Error Response:
+
 ```json
 {
   "success": false,

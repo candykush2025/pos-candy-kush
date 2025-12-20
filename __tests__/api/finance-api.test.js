@@ -137,7 +137,10 @@ describe("Finance API - Purchases", () => {
     expect(response.body).toHaveProperty("success", true);
     expect(response.body).toHaveProperty("action", "get-purchase");
     expect(response.body.data).toHaveProperty("id", testPurchaseId);
-    expect(response.body.data).toHaveProperty("supplier_name", "Test Supplier Co.");
+    expect(response.body.data).toHaveProperty(
+      "supplier_name",
+      "Test Supplier Co."
+    );
     expect(response.body.data).toHaveProperty("status", "pending");
     expect(response.body.data.items).toHaveLength(2);
   });
@@ -177,7 +180,9 @@ describe("Finance API - Purchases", () => {
     expect(response.body).toHaveProperty("success", true);
     expect(response.body).toHaveProperty("action", "edit-purchase");
     expect(response.body.data.purchase).toHaveProperty("id", testPurchaseId);
-    expect(response.body.data.purchase.supplier_name).toBe("Updated Supplier Name");
+    expect(response.body.data.purchase.supplier_name).toBe(
+      "Updated Supplier Name"
+    );
     expect(response.body.data.purchase.total).toBe(1200);
   });
 
