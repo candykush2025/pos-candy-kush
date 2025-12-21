@@ -2422,8 +2422,9 @@ export async function GET(request) {
 // POST handler - Login and edit operations
 export async function POST(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get("action");
     const requestBody = await request.json();
-    const { action } = requestBody;
 
     // Handle login action
     if (action === "login") {
@@ -2774,13 +2775,20 @@ export async function POST(request) {
         );
       } catch (error) {
         console.error("Error completing purchase:", error);
-        return Response.json(
-          {
-            success: false,
-            error: error.message || "Failed to complete purchase",
-          },
-          { status: 400, headers: corsHeaders }
-        );
+
+        // In development return the error message and stack to assist debugging.
+        // In production do not leak internal error details.
+        const isProd = process.env.NODE_ENV === "production";
+        const payload = {
+          success: false,
+          error: isProd ? error.message || "Failed to complete purchase" : error.message || "Failed to complete purchase",
+        };
+
+        if (!isProd) {
+          payload.stack = error.stack;
+        }
+
+        return Response.json(payload, { status: 500, headers: corsHeaders });
       }
     }
 

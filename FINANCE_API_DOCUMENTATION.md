@@ -27,6 +27,7 @@ Complete API reference for Purchasing and Expense management in POS Candy Kush m
    - [Edit Expense](#edit-expense)
    - [Delete Expense](#delete-expense)
 4. [Invoices API (Enhanced)](#invoices-api-enhanced)
+   - [Get Invoice by ID](#get-invoice-by-id)
    - [Delete Invoice](#delete-invoice)
 5. [Items/Products API](#itemsproducts-api)
    - [Get All Items](#get-all-items)
@@ -767,6 +768,125 @@ Authorization: Bearer {token}
 
 ## Invoices API (Enhanced)
 
+### Get Invoice by ID
+
+Retrieve a single invoice by its ID with full details including customer information, items, and payment status.
+
+**Endpoint:** `GET /api/mobile?action=get-invoice&id={invoiceId}`
+
+**Headers:**
+
+```
+Authorization: Bearer {token}
+```
+
+**Parameters:**
+
+- `id` (required): Invoice ID
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "get-invoice",
+  "generated_at": "2025-12-20T10:30:00.000Z",
+  "data": {
+    "id": "invoice_123",
+    "invoice_number": "INV-2025-00123",
+    "customer_id": "cust_456",
+    "customer_name": "John Doe",
+    "customer_email": "john.doe@email.com",
+    "customer_phone": "+1234567890",
+    "invoice_date": "2025-12-20",
+    "due_date": "2025-12-27",
+    "status": "paid",
+    "payment_method": "cash",
+    "subtotal": 95.0,
+    "tax_amount": 9.5,
+    "discount_amount": 5.0,
+    "total": 99.5,
+    "paid_amount": 99.5,
+    "balance_due": 0.0,
+    "notes": "Thank you for your business",
+    "items": [
+      {
+        "id": "item_001",
+        "product_id": "prod_001",
+        "product_name": "OG Kush 1g",
+        "sku": "SKU-001-1G",
+        "quantity": 2,
+        "unit_price": 25.0,
+        "discount": 0.0,
+        "tax_rate": 10.0,
+        "tax_amount": 5.0,
+        "total": 50.0,
+        "category_name": "Flowers"
+      },
+      {
+        "id": "item_002",
+        "product_id": "prod_002",
+        "product_name": "Blue Dream 3.5g",
+        "sku": "SKU-002-3.5G",
+        "quantity": 1,
+        "unit_price": 45.0,
+        "discount": 5.0,
+        "tax_rate": 10.0,
+        "tax_amount": 4.5,
+        "total": 44.5,
+        "category_name": "Flowers"
+      }
+    ],
+    "payments": [
+      {
+        "id": "payment_789",
+        "amount": 99.5,
+        "payment_method": "cash",
+        "payment_date": "2025-12-20T14:30:00.000Z",
+        "reference_number": "CASH-001",
+        "notes": "Full payment received"
+      }
+    ],
+    "created_at": "2025-12-20T10:15:00.000Z",
+    "updated_at": "2025-12-20T14:30:00.000Z"
+  }
+}
+```
+
+**Invoice Status:**
+
+- `draft` - Invoice created but not finalized
+- `sent` - Invoice sent to customer
+- `paid` - Invoice fully paid
+- `overdue` - Invoice past due date
+- `cancelled` - Invoice cancelled
+
+**Payment Methods:**
+
+- `cash` - Cash payment
+- `card` - Credit/debit card
+- `bank_transfer` - Bank transfer
+- `check` - Check payment
+- `other` - Other payment method
+
+**Error Response (Invoice Not Found):**
+
+```json
+{
+  "success": false,
+  "error": "Invoice not found"
+}
+```
+
+**Error Response (Missing ID):**
+
+```json
+{
+  "success": false,
+  "error": "Invoice ID is required"
+}
+```
+
 ### Delete Invoice
 
 Delete an invoice (new DELETE method support).
@@ -937,6 +1057,54 @@ data class Expense(
     val createdAt: String = ""
 )
 
+// Invoice.kt
+data class Invoice(
+    val id: String = "",
+    val invoice_number: String = "",
+    val customer_id: String = "",
+    val customer_name: String = "",
+    val customer_email: String = "",
+    val customer_phone: String = "",
+    val invoice_date: String = "",
+    val due_date: String = "",
+    val status: String = "draft", // "draft", "sent", "paid", "overdue", "cancelled"
+    val payment_method: String = "",
+    val subtotal: Double = 0.0,
+    val tax_amount: Double = 0.0,
+    val discount_amount: Double = 0.0,
+    val total: Double = 0.0,
+    val paid_amount: Double = 0.0,
+    val balance_due: Double = 0.0,
+    val notes: String = "",
+    val items: List<InvoiceItem> = emptyList(),
+    val payments: List<Payment> = emptyList(),
+    val created_at: String = "",
+    val updated_at: String = ""
+)
+
+data class InvoiceItem(
+    val id: String = "",
+    val product_id: String = "",
+    val product_name: String = "",
+    val sku: String = "",
+    val quantity: Int = 0,
+    val unit_price: Double = 0.0,
+    val discount: Double = 0.0,
+    val tax_rate: Double = 0.0,
+    val tax_amount: Double = 0.0,
+    val total: Double = 0.0,
+    val category_name: String = ""
+)
+
+data class Payment(
+    val id: String = "",
+    val amount: Double = 0.0,
+    val payment_method: String = "",
+    val payment_date: String = "",
+    val reference_number: String = "",
+    val notes: String = ""
+)
+
 // API Response wrappers
 data class PurchasesResponse(
     val success: Boolean,
@@ -960,6 +1128,37 @@ data class ExpensesData(
     val expenses: List<Expense>,
     val total: Double,
     val count: Int
+)
+
+data class InvoiceResponse(
+    val success: Boolean,
+    val action: String?,
+    val data: InvoiceData?,
+    val error: String?
+)
+
+data class InvoiceData(
+    val id: String,
+    val invoice_number: String,
+    val customer_id: String,
+    val customer_name: String,
+    val customer_email: String,
+    val customer_phone: String,
+    val invoice_date: String,
+    val due_date: String,
+    val status: String,
+    val payment_method: String,
+    val subtotal: Double,
+    val tax_amount: Double,
+    val discount_amount: Double,
+    val total: Double,
+    val paid_amount: Double,
+    val balance_due: Double,
+    val notes: String,
+    val items: List<InvoiceItem>,
+    val payments: List<Payment>,
+    val created_at: String,
+    val updated_at: String
 )
 ```
 
@@ -1148,6 +1347,55 @@ class ExpenseApiService {
         }
     }
 }
+
+// InvoiceApiService.kt
+class InvoiceApiService {
+    private val client = OkHttpClient()
+    private val gson = Gson()
+    private val baseUrl = "https://pos-candy-kush.vercel.app/api/mobile"
+
+    suspend fun getInvoice(token: String, invoiceId: String): InvoiceResponse? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl?action=get-invoice&id=$invoiceId")
+                    .addHeader("Authorization", "Bearer $token")
+                    .get()
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                if (response.isSuccessful && body != null) {
+                    gson.fromJson(body, InvoiceResponse::class.java)
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e("InvoiceApiService", "Error fetching invoice", e)
+                null
+            }
+        }
+    }
+
+    suspend fun deleteInvoice(token: String, invoiceId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl?action=delete-invoice&id=$invoiceId")
+                    .addHeader("Authorization", "Bearer $token")
+                    .delete()
+                    .build()
+
+                val response = client.newCall(request).execute()
+                response.isSuccessful
+            } catch (e: Exception) {
+                Log.e("InvoiceApiService", "Error deleting invoice", e)
+                false
+            }
+        }
+    }
+}
 ```
 
 ### Usage Example
@@ -1205,6 +1453,22 @@ class PurchasingActivity : AppCompatActivity() {
                 loadPurchases() // Refresh list
             } else {
                 showError(response?.error ?: "Failed to create purchase")
+            }
+        }
+    }
+
+    private fun loadInvoiceDetails(invoiceId: String) {
+        lifecycleScope.launch {
+            val token = prefs.getString("jwt_token", "") ?: ""
+            val invoiceApiService = InvoiceApiService()
+            val response = invoiceApiService.getInvoice(token, invoiceId)
+
+            if (response?.success == true) {
+                val invoice = response.data
+                // Update UI with invoice details
+                displayInvoiceDetails(invoice)
+            } else {
+                showError(response?.error ?: "Failed to load invoice details")
             }
         }
     }
@@ -1272,6 +1536,13 @@ curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=create-expense
   }'
 ```
 
+**Get Invoice by ID:**
+
+```bash
+curl -X GET "https://pos-candy-kush.vercel.app/api/mobile?action=get-invoice&id=INVOICE_ID" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
 **Delete Purchase:**
 
 ```bash
@@ -1292,7 +1563,7 @@ This will test all Finance API endpoints including:
 - Authentication
 - All Purchases CRUD operations
 - All Expenses CRUD operations
-- Invoice deletion
+- Invoice retrieval and deletion
 - Error handling
 - Validation
 
@@ -1576,6 +1847,7 @@ The Finance API provides complete CRUD operations for:
 
 **Invoices (Enhanced):**
 
+- GET single invoice (with full details)
 - DELETE invoice
 
 All endpoints require JWT authentication (except login) and follow consistent request/response patterns with proper error handling.
