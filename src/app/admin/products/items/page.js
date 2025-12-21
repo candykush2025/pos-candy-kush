@@ -1485,7 +1485,7 @@ export default function ItemListPage() {
           </DialogHeader>
 
           {selectedProduct && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {/* Image & Basic Info */}
               <div className="flex gap-6">
                 <div className="w-48 h-48 bg-neutral-100 dark:bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
@@ -1919,58 +1919,20 @@ export default function ItemListPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl lg:text-3xl font-bold">Product Management</h1>
-          <p className="text-neutral-500 mt-1 lg:mt-2 text-sm lg:text-base hidden sm:block">
+          <h1 className="text-4xl lg:text-3xl font-bold">Product Management</h1>
+          <p className="text-lg mt-2 lg:mt-2 hidden sm:block">
             Manage your product inventory and information
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-4 flex-shrink-0">
           <Button
             variant="outline"
             onClick={handleClearAndRefetch}
-            className="flex-shrink-0"
+            className="flex-shrink-0 h-14 text-lg px-6"
           >
-            <RefreshCw className="h-4 w-4 lg:mr-2" />
+            <RefreshCw className="h-6 w-6 lg:mr-2" />
             <span className="hidden lg:inline">Refresh from Firebase</span>
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleFetchFromKiosk}
-            disabled={isFetchingFromKiosk}
-            className="flex-shrink-0"
-          >
-            <Download
-              className={`h-4 w-4 lg:mr-2 ${
-                isFetchingFromKiosk ? "animate-bounce" : ""
-              }`}
-            />
-            <span className="hidden lg:inline">
-              {isFetchingFromKiosk ? "Importing..." : "Import from Kiosk"}
-            </span>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleFetchAllCategoriesFromKiosk}
-            disabled={isFetchingCategories}
-            className="flex-shrink-0"
-          >
-            <Download
-              className={`h-4 w-4 lg:mr-2 ${
-                isFetchingCategories ? "animate-bounce" : ""
-              }`}
-            />
-            <span className="hidden lg:inline">
-              {isFetchingCategories
-                ? "Fetching..."
-                : "Fetch Categories (Kiosk)"}
-            </span>
-          </Button>
-          <Link href="/admin/products/new">
-            <Button className="flex-shrink-0">
-              <Plus className="h-4 w-4 lg:mr-2" />
-              <span className="hidden lg:inline">Add Product</span>
-            </Button>
-          </Link>
         </div>
       </div>
 
@@ -1980,12 +1942,12 @@ export default function ItemListPage() {
           <div className="space-y-4">
             {/* Search Bar */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
+              <Search className="absolute left-6 top-1/2 transform -translate-y-1/2 h-8 w-8 text-neutral-400" />
               <Input
                 placeholder="Search products..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-16 h-16 text-xl"
               />
             </div>
 
@@ -2063,23 +2025,23 @@ export default function ItemListPage() {
             </div>
 
             {/* Mobile Filters - Stacked */}
-            <div className="lg:hidden space-y-3">
+            <div className="lg:hidden space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-neutral-500" />
-                  <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                <div className="flex items-center gap-3">
+                  <Filter className="h-6 w-6 text-neutral-500" />
+                  <span className="text-lg font-medium text-neutral-700 dark:text-neutral-300">
                     Filters
                   </span>
                 </div>
-                <span className="text-sm text-neutral-500">
+                <span className="text-lg text-neutral-500">
                   {filteredProducts.length} items
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 {/* Category Filter */}
                 <select
-                  className="px-3 py-2.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white font-medium"
+                  className="px-5 py-4 text-lg border rounded-lg bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white font-medium"
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                 >
@@ -2094,7 +2056,7 @@ export default function ItemListPage() {
 
                 {/* Availability Filter */}
                 <select
-                  className="px-3 py-2.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white font-medium"
+                  className="px-5 py-4 text-lg border rounded-lg bg-white dark:bg-neutral-800 dark:border-neutral-700 dark:text-white font-medium"
                   value={selectedAvailability}
                   onChange={(e) => setSelectedAvailability(e.target.value)}
                 >
@@ -2111,14 +2073,14 @@ export default function ItemListPage() {
                 searchQuery) && (
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="lg"
                   onClick={() => {
                     setSelectedCategory("all");
                     setSelectedAvailability("all");
                     setSelectedTrackStock("all");
                     setSearchQuery("");
                   }}
-                  className="w-full"
+                  className="w-full h-12 text-lg"
                 >
                   Clear All Filters
                 </Button>
@@ -2385,7 +2347,7 @@ export default function ItemListPage() {
           </div>
 
           {/* Mobile View - Compact Expandable Cards */}
-          <div className="lg:hidden space-y-3">
+          <div className="lg:hidden space-y-4">
             {filteredProducts.map((product, index) => {
               const isExpanded = expandedProductId === product.id;
               return (
@@ -2396,11 +2358,11 @@ export default function ItemListPage() {
                     setExpandedProductId(isExpanded ? null : product.id)
                   }
                 >
-                  <CardContent className="p-4">
+                  <CardContent className="p-6">
                     {/* Collapsed View - Essential Info Only */}
-                    <div className="flex gap-3">
+                    <div className="flex gap-6">
                       {/* Thumbnail */}
-                      <div className="w-20 h-20 bg-neutral-50 dark:bg-neutral-800 flex-shrink-0 rounded-lg flex items-center justify-center overflow-hidden">
+                      <div className="w-32 h-32 bg-neutral-50 dark:bg-neutral-800 flex-shrink-0 rounded-lg flex items-center justify-center overflow-hidden">
                         {product.imageUrl ? (
                           <img
                             src={product.imageUrl}
@@ -2408,33 +2370,33 @@ export default function ItemListPage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <ImageIcon className="h-8 w-8 text-neutral-400" />
+                          <ImageIcon className="h-12 w-12 text-neutral-400" />
                         )}
                       </div>
 
                       {/* Main Info */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-base leading-tight mb-1 line-clamp-2">
+                        <h3 className="font-bold text-xl leading-tight mb-2 line-clamp-2">
                           {product.name}
                         </h3>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xl font-bold text-green-600">
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className="text-3xl font-bold text-green-600">
                             {formatCurrency(product.price)}
                           </span>
                           <Badge
                             variant={
                               product.availableForSale ? "default" : "secondary"
                             }
-                            className="text-xs"
+                            className="text-base px-3 py-1"
                           >
                             {product.availableForSale ? (
-                              <CheckCircle className="h-3 w-3" />
+                              <CheckCircle className="h-5 w-5" />
                             ) : (
-                              <XCircle className="h-3 w-3" />
+                              <XCircle className="h-5 w-5" />
                             )}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-neutral-500">
+                        <div className="flex items-center gap-3 text-base text-neutral-500">
                           <span>Stock: {product.stock}</span>
                           <span>•</span>
                           <span className="truncate">
@@ -2450,61 +2412,64 @@ export default function ItemListPage() {
                     {/* Expanded View - Full Details */}
                     {isExpanded && (
                       <div
-                        className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700 space-y-4"
+                        className="mt-6 pt-6 border-t border-neutral-200 dark:border-neutral-700 space-y-6"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {/* Description */}
                         {product.description && (
                           <div>
-                            <h4 className="text-xs font-semibold text-neutral-500 mb-1">
+                            <h4 className="text-base font-semibold text-neutral-500 mb-2">
                               Description
                             </h4>
-                            <p className="text-sm text-neutral-700 dark:text-neutral-300">
+                            <p className="text-lg text-neutral-700 dark:text-neutral-300">
                               {product.description}
                             </p>
                           </div>
                         )}
 
                         {/* Details Grid */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3">
-                            <div className="text-xs text-neutral-500 mb-1">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-4">
+                            <div className="text-base text-neutral-500 mb-2">
                               SKU
                             </div>
-                            <div className="font-semibold text-sm">
+                            <div className="font-semibold text-lg">
                               {product.sku || "N/A"}
                             </div>
                           </div>
-                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3">
-                            <div className="text-xs text-neutral-500 mb-1">
+                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-4">
+                            <div className="text-base text-neutral-500 mb-2">
                               Barcode
                             </div>
-                            <div className="font-semibold text-sm">
+                            <div className="font-semibold text-lg">
                               {product.barcode || "N/A"}
                             </div>
                           </div>
-                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3">
-                            <div className="text-xs text-neutral-500 mb-1">
+                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-4">
+                            <div className="text-base text-neutral-500 mb-2">
                               Cost
                             </div>
-                            <div className="font-semibold text-sm text-amber-600">
+                            <div className="font-semibold text-lg text-amber-600">
                               {formatCurrency(product.cost)}
                             </div>
                           </div>
-                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3">
-                            <div className="text-xs text-neutral-500 mb-1">
+                          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-4">
+                            <div className="text-base text-neutral-500 mb-2">
                               Variants
                             </div>
-                            <div className="font-semibold text-sm">
+                            <div className="font-semibold text-lg">
                               {product.variants?.length || 1}
                             </div>
                           </div>
                         </div>
 
                         {/* All Badges */}
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-3">
                           {product.categoryId && (
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge
+                              variant="secondary"
+                              className="text-base px-3 py-1"
+                            >
                               {getCategoryName(
                                 product.categoryId,
                                 product.categoryName
@@ -2515,61 +2480,73 @@ export default function ItemListPage() {
                             product.memberPrice !== "" && (
                               <Badge
                                 variant="outline"
-                                className="text-xs text-amber-600"
+                                className="text-base px-3 py-1 text-amber-600"
                               >
                                 {formatCurrency(product.memberPrice)}
                               </Badge>
                             )}
                           {product.isComposite && (
-                            <Badge variant="outline" className="text-xs">
-                              <Layers className="h-3 w-3 mr-1" />
+                            <Badge
+                              variant="outline"
+                              className="text-base px-3 py-1"
+                            >
+                              <Layers className="h-5 w-5 mr-2" />
                               Composite
                             </Badge>
                           )}
                           {product.form && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge
+                              variant="outline"
+                              className="text-base px-3 py-1"
+                            >
                               {product.form}
                             </Badge>
                           )}
                           {product.trackStock && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge
+                              variant="outline"
+                              className="text-base px-3 py-1"
+                            >
                               Track Stock
                             </Badge>
                           )}
                           {product.soldByWeight && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge
+                              variant="outline"
+                              className="text-base px-3 py-1"
+                            >
                               Sold by Weight
                             </Badge>
                           )}
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-3 gap-3">
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="w-full"
+                            size="default"
+                            className="w-full h-12 text-base"
                             onClick={() => setSelectedProduct(product)}
                           >
-                            <Package className="h-4 w-4 mr-1" />
+                            <Package className="h-5 w-5 mr-2" />
                             Details
                           </Button>
                           <Button
                             variant="default"
-                            size="sm"
-                            className="w-full"
+                            size="default"
+                            className="w-full h-12 text-base"
                             onClick={() => handleEdit(product)}
                           >
-                            <Edit className="h-4 w-4 mr-1" />
+                            <Edit className="h-5 w-5 mr-2" />
                             Edit
                           </Button>
                           <Button
                             variant="destructive"
-                            size="sm"
-                            className="w-full"
+                            size="default"
+                            className="w-full h-12 text-base"
                             onClick={() => handleDelete(product)}
                           >
-                            <Trash2 className="h-4 w-4 mr-1" />
+                            <Trash2 className="h-5 w-5 mr-2" />
                             Delete
                           </Button>
                         </div>

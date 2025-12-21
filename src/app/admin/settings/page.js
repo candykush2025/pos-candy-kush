@@ -115,7 +115,7 @@ export default function AdminSettings() {
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
+        <h1 className="text-3xl font-bold">Settings</h1>
         <p className="text-sm md:text-base text-neutral-500 dark:text-neutral-400 mt-1 md:mt-2">
           System configuration and information
         </p>
@@ -124,11 +124,11 @@ export default function AdminSettings() {
       {/* Quick Links - Mobile Only */}
       <Card className="lg:hidden">
         <CardHeader>
-          <CardTitle className="flex items-center text-lg">
+          <CardTitle className="flex items-center text-xl">
             <SettingsIcon className="mr-2 h-5 w-5" />
             Quick Access
           </CardTitle>
-          <CardDescription className="text-sm">
+          <CardDescription className="text-base">
             Navigate to other admin pages
           </CardDescription>
         </CardHeader>
@@ -139,15 +139,17 @@ export default function AdminSettings() {
               <button
                 key={link.href}
                 onClick={() => router.push(link.href)}
-                className="flex flex-col items-start p-4 rounded-lg border-2 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all hover:shadow-md active:scale-95"
+                className="flex flex-col items-start p-6 rounded-lg border-2 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all hover:shadow-md active:scale-95"
               >
                 <div
                   className={`w-10 h-10 rounded-lg ${link.bgColor} flex items-center justify-center mb-3`}
                 >
                   <Icon className={`h-5 w-5 ${link.color}`} />
                 </div>
-                <span className="text-sm font-semibold mb-1">{link.title}</span>
-                <span className="text-xs text-neutral-500 dark:text-neutral-400 text-left">
+                <span className="text-base font-semibold mb-1">
+                  {link.title}
+                </span>
+                <span className="text-sm text-neutral-500 dark:text-neutral-400 text-left">
                   {link.description}
                 </span>
                 <ChevronRight className="h-4 w-4 text-neutral-400 ml-auto mt-1" />
@@ -160,11 +162,11 @@ export default function AdminSettings() {
       {/* Dark Mode Toggle */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center text-lg md:text-xl">
+          <CardTitle className="flex items-center text-xl">
             <Moon className="mr-2 h-6 w-6 md:h-5 md:w-5" />
             Appearance
           </CardTitle>
-          <CardDescription className="text-sm">
+          <CardDescription className="text-base">
             Choose how the admin panel looks to you
           </CardDescription>
         </CardHeader>
@@ -173,15 +175,15 @@ export default function AdminSettings() {
             {/* System */}
             <button
               onClick={() => setMode("system")}
-              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
+              className={`flex flex-col items-center p-6 rounded-lg border-2 transition-all ${
                 mode === "system"
                   ? "border-primary bg-primary/5"
                   : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600"
               }`}
             >
               <Monitor className="h-8 w-8 mb-2" />
-              <span className="text-sm font-medium">System</span>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-center">
+              <span className="text-base font-medium">System</span>
+              <span className="text-sm text-neutral-500 dark:text-neutral-400 mt-1 text-center">
                 Use system theme
               </span>
             </button>
@@ -189,15 +191,15 @@ export default function AdminSettings() {
             {/* Light */}
             <button
               onClick={() => setMode("light")}
-              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
+              className={`flex flex-col items-center p-6 rounded-lg border-2 transition-all ${
                 mode === "light"
                   ? "border-primary bg-primary/5"
                   : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600"
               }`}
             >
               <Sun className="h-8 w-8 mb-2" />
-              <span className="text-sm font-medium">Light</span>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+              <span className="text-base font-medium">Light</span>
+              <span className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
                 Always light
               </span>
             </button>
@@ -205,23 +207,23 @@ export default function AdminSettings() {
             {/* Dark */}
             <button
               onClick={() => setMode("dark")}
-              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
+              className={`flex flex-col items-center p-6 rounded-lg border-2 transition-all ${
                 mode === "dark"
                   ? "border-primary bg-primary/5"
                   : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600"
               }`}
             >
               <Moon className="h-8 w-8 mb-2" />
-              <span className="text-sm font-medium">Dark</span>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+              <span className="text-base font-medium">Dark</span>
+              <span className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
                 Always dark
               </span>
             </button>
           </div>
 
           {mode === "system" && (
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <p className="text-sm text-blue-900 dark:text-blue-200 flex items-center gap-2">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-base text-blue-900 dark:text-blue-200 flex items-center gap-2">
                 <Monitor className="h-4 w-4" />
                 Theme will automatically switch based on your system settings
               </p>
@@ -230,24 +232,23 @@ export default function AdminSettings() {
         </CardContent>
       </Card>
 
-      {/* Color Theme Customization */}
+      {/* Color Theme Customization - Commented out
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center text-lg md:text-xl">
+          <CardTitle className="flex items-center text-xl">
             <Palette className="mr-2 h-6 w-6 md:h-5 md:w-5" />
             POS Color Theme
           </CardTitle>
-          <CardDescription className="text-sm">
+          <CardDescription className="text-base">
             Customize the POS interface colors (Admin only)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 md:space-y-6">
-          {/* Primary Color */}
           <div className="space-y-3">
-            <label className="text-sm md:text-base font-medium">
+            <label className="text-base md:text-base font-medium">
               Primary Color
             </label>
-            <p className="text-xs md:text-sm text-neutral-500">
+            <p className="text-base md:text-sm text-neutral-500">
               Main color used for buttons, highlights, and accents
             </p>
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
@@ -262,7 +263,7 @@ export default function AdminSettings() {
                 value={primaryColor}
                 onChange={(e) => setPrimaryColor(e.target.value)}
                 placeholder="#16a34a"
-                className="flex-1 h-12 text-base"
+                className="flex-1 h-14 text-base"
                 maxLength={7}
               />
               <div
@@ -272,12 +273,11 @@ export default function AdminSettings() {
             </div>
           </div>
 
-          {/* Secondary Color */}
           <div className="space-y-3">
-            <label className="text-sm md:text-base font-medium">
+            <label className="text-base md:text-base font-medium">
               Secondary Color
             </label>
-            <p className="text-xs md:text-sm text-neutral-500">
+            <p className="text-base md:text-sm text-neutral-500">
               Accent color for badges, links, and secondary elements
             </p>
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
@@ -292,7 +292,7 @@ export default function AdminSettings() {
                 value={secondaryColor}
                 onChange={(e) => setSecondaryColor(e.target.value)}
                 placeholder="#0ea5e9"
-                className="flex-1 h-12 text-base"
+                className="flex-1 h-14 text-base"
                 maxLength={7}
               />
               <div
@@ -302,9 +302,8 @@ export default function AdminSettings() {
             </div>
           </div>
 
-          {/* Preset Colors */}
           <div className="space-y-3">
-            <label className="text-sm md:text-base font-medium">
+            <label className="text-base md:text-base font-medium">
               Quick Presets
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -322,7 +321,7 @@ export default function AdminSettings() {
                     setPrimaryColor(preset.primary);
                     setSecondaryColor(preset.secondary);
                   }}
-                  className="flex flex-col items-center p-3 md:p-4 rounded-lg border-2 hover:border-neutral-400 transition-colors active:scale-95"
+                  className="flex flex-col items-center p-4 md:p-6 rounded-lg border-2 hover:border-neutral-400 transition-colors active:scale-95"
                   title={preset.name}
                 >
                   <div className="flex gap-1 md:gap-2 mb-2">
@@ -335,7 +334,7 @@ export default function AdminSettings() {
                       style={{ backgroundColor: preset.secondary }}
                     />
                   </div>
-                  <span className="text-xs md:text-sm font-medium">
+                  <span className="text-sm md:text-sm font-medium">
                     {preset.name}
                   </span>
                 </button>
@@ -343,10 +342,11 @@ export default function AdminSettings() {
             </div>
           </div>
 
-          {/* Preview */}
           <div className="space-y-3">
-            <label className="text-sm md:text-base font-medium">Preview</label>
-            <div className="p-4 md:p-6 border rounded-lg space-y-3 bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
+            <label className="text-base md:text-base font-medium">
+              Preview
+            </label>
+            <div className="p-6 md:p-8 border rounded-lg space-y-4 bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
               <Button
                 style={{
                   backgroundColor: primaryColor,
@@ -369,7 +369,6 @@ export default function AdminSettings() {
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
               variant="outline"
@@ -377,7 +376,7 @@ export default function AdminSettings() {
                 await resetTheme();
                 toast.success("Theme reset to default colors");
               }}
-              className="flex-1 h-12 md:h-10 text-base"
+              className="flex-1 h-14 md:h-12 text-base"
             >
               Reset to Default
             </Button>
@@ -396,7 +395,7 @@ export default function AdminSettings() {
                 }
               }}
               disabled={isSaving}
-              className="flex-1"
+              className="flex-1 h-14 md:h-12"
             >
               <Save className="h-4 w-4 mr-2" />
               {isSaving ? "Saving..." : "Save Theme Colors"}
@@ -404,7 +403,7 @@ export default function AdminSettings() {
           </div>
 
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 rounded-lg">
-            <p className="text-sm text-blue-700 dark:text-blue-300">
+            <p className="text-base text-blue-700 dark:text-blue-300">
               <strong>Note:</strong> Click "Save Theme Colors" to apply changes
               to all users. Colors are stored in Firebase and will be loaded
               automatically for all cashiers and managers.
@@ -412,6 +411,7 @@ export default function AdminSettings() {
           </div>
         </CardContent>
       </Card>
+      */}
 
       {/* Firebase Configuration */}
       <Card>
@@ -424,21 +424,21 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Project ID</span>
+            <span className="text-base text-neutral-600">Project ID</span>
             <Badge variant="secondary">
               {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}
             </Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Authentication</span>
+            <span className="text-base text-neutral-600">Authentication</span>
             <Badge className="bg-green-100 text-green-800">Connected</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Firestore</span>
+            <span className="text-base text-neutral-600">Firestore</span>
             <Badge className="bg-green-100 text-green-800">Connected</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Storage</span>
+            <span className="text-base text-neutral-600">Storage</span>
             <Badge className="bg-green-100 text-green-800">Connected</Badge>
           </div>
         </CardContent>
@@ -455,16 +455,16 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">App Version</span>
+            <span className="text-base text-neutral-600">App Version</span>
             <Badge variant="secondary">v1.0.0</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Environment</span>
+            <span className="text-base text-neutral-600">Environment</span>
             <Badge variant="secondary">Production</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Last Deployment</span>
-            <span className="text-sm">{new Date().toLocaleDateString()}</span>
+            <span className="text-base text-neutral-600">Last Deployment</span>
+            <span className="text-base">{new Date().toLocaleDateString()}</span>
           </div>
         </CardContent>
       </Card>
@@ -480,19 +480,19 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Offline Mode</span>
+            <span className="text-base text-neutral-600">Offline Mode</span>
             <Badge className="bg-green-100 text-green-800">Enabled</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Real-time Sync</span>
+            <span className="text-base text-neutral-600">Real-time Sync</span>
             <Badge className="bg-green-100 text-green-800">Enabled</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Barcode Scanner</span>
+            <span className="text-base text-neutral-600">Barcode Scanner</span>
             <Badge className="bg-yellow-100 text-yellow-800">Coming Soon</Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-600">Receipt Printing</span>
+            <span className="text-base text-neutral-600">Receipt Printing</span>
             <Badge className="bg-yellow-100 text-yellow-800">Coming Soon</Badge>
           </div>
         </CardContent>

@@ -337,7 +337,7 @@ export default function MobileDashboardPage() {
           receipt.total || receipt.totalAmount || receipt.total_money || 0;
         const hour = receiptDate.getHours();
         const day = receiptDate.getDate();
-        
+
         hourlySales[hour].revenue += total;
         hourlySales[hour].orders++;
         daysWithData.add(`${day}-${hour}`);
@@ -364,10 +364,13 @@ export default function MobileDashboardPage() {
   // Get peak hours title
   const getPeakHoursTitle = () => {
     if (peakHoursMode === "monthly") {
-      return `Average sales by hour - ${peakHoursDate.toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      })}`;
+      return `Average sales by hour - ${peakHoursDate.toLocaleDateString(
+        "en-US",
+        {
+          month: "long",
+          year: "numeric",
+        }
+      )}`;
     } else {
       return `Sales by hour - ${peakHoursDate.toLocaleDateString("en-US", {
         weekday: "short",
@@ -1216,7 +1219,9 @@ export default function MobileDashboardPage() {
             {/* Date Selection */}
             <div className="relative">
               <button
-                onClick={() => setShowPeakHoursDatePicker(!showPeakHoursDatePicker)}
+                onClick={() =>
+                  setShowPeakHoursDatePicker(!showPeakHoursDatePicker)
+                }
                 className="w-full flex items-center justify-between px-4 py-3 bg-neutral-100 dark:bg-neutral-700 rounded-lg text-lg font-semibold text-neutral-900 dark:text-neutral-100 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
               >
                 <div className="flex items-center gap-2">
@@ -1246,7 +1251,9 @@ export default function MobileDashboardPage() {
                       selected={peakHoursDate}
                       onChange={handlePeakHoursDateChange}
                       inline
-                      dateFormat={peakHoursMode === "monthly" ? "MM/yyyy" : "MM/dd/yyyy"}
+                      dateFormat={
+                        peakHoursMode === "monthly" ? "MM/yyyy" : "MM/dd/yyyy"
+                      }
                       showMonthYearPicker={peakHoursMode === "monthly"}
                       maxDate={new Date()}
                       className="w-full"
@@ -1449,6 +1456,78 @@ export default function MobileDashboardPage() {
         </CardContent>
       </Card>
 
+      {/* Recent Transactions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-3xl font-bold">
+            Recent Transactions
+          </CardTitle>
+          <CardDescription className="text-xl">Latest sales</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentTransactions.length === 0 ? (
+            <p className="text-neutral-500 text-center py-10 text-2xl">
+              No transactions
+            </p>
+          ) : (
+            <>
+              <div className="space-y-6">
+                {recentTransactions.slice(0, 5).map((tx) => {
+                  const txDate =
+                    tx.createdAt?.toDate?.() || new Date(tx.createdAt);
+                  const total =
+                    tx.total || tx.totalAmount || tx.total_money || 0;
+                  const orderId = getOrderId(tx);
+                  const memberName = getMemberName(
+                    tx.customerId || tx.customer_id,
+                    tx.customerName || tx.customer_name
+                  );
+                  return (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between pb-5 border-b last:border-0"
+                    >
+                      <div>
+                        <p className="font-bold text-2xl text-neutral-900 dark:text-white">
+                          {orderId}
+                        </p>
+                        {memberName && (
+                          <p className="text-lg text-green-600 dark:text-green-400">
+                            {memberName}
+                          </p>
+                        )}
+                        <p className="text-xl text-neutral-500">
+                          {txDate.toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <p className="font-bold text-2xl text-green-600 dark:text-green-400">
+                        {formatCurrency(total)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Show More Button */}
+              <div className="mt-6 text-center">
+                <Button
+                  onClick={() => router.push("/admin/transactions")}
+                  variant="outline"
+                  className="h-14 px-8 text-xl font-bold"
+                >
+                  View All Transactions
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Payment Methods */}
       <Card>
         <CardHeader>
@@ -1466,7 +1545,9 @@ export default function MobileDashboardPage() {
             <>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 20, right: 80, bottom: 20, left: 80 }}>
+                  <PieChart
+                    margin={{ top: 20, right: 80, bottom: 20, left: 80 }}
+                  >
                     <Pie
                       data={paymentMethodsData}
                       cx="50%"
@@ -1536,112 +1617,52 @@ export default function MobileDashboardPage() {
               <p className="text-neutral-500 text-2xl">No customer data</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {topCustomers.map((customer, index) => (
-                <div
-                  key={customer.id || index}
-                  className="flex items-center justify-between pb-5 border-b last:border-0"
-                >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`w-14 h-14 rounded-full flex items-center justify-center text-white text-2xl font-bold ${
-                        index === 0
-                          ? "bg-yellow-500"
-                          : index === 1
-                          ? "bg-gray-400"
-                          : index === 2
-                          ? "bg-amber-600"
-                          : "bg-gray-300"
-                      }`}
-                    >
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-bold text-2xl text-neutral-900 dark:text-white">
-                        {getCustomerName(customer.id, customer.name)}
-                      </p>
-                      <p className="text-xl text-neutral-500">
-                        {customer.orders} orders
-                      </p>
-                    </div>
-                  </div>
-                  <p className="font-bold text-2xl text-green-600 dark:text-green-400">
-                    {formatCurrency(customer.total)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Recent Transactions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold">
-            Recent Transactions
-          </CardTitle>
-          <CardDescription className="text-xl">Latest sales</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentTransactions.length === 0 ? (
-            <p className="text-neutral-500 text-center py-10 text-2xl">
-              No transactions
-            </p>
-          ) : (
             <>
               <div className="space-y-6">
-                {recentTransactions.slice(0, 5).map((tx) => {
-                  const txDate =
-                    tx.createdAt?.toDate?.() || new Date(tx.createdAt);
-                  const total =
-                    tx.total || tx.totalAmount || tx.total_money || 0;
-                  const orderId = getOrderId(tx);
-                  const memberName = getMemberName(
-                    tx.customerId || tx.customer_id,
-                    tx.customerName || tx.customer_name
-                  );
-                  return (
-                    <div
-                      key={tx.id}
-                      className="flex items-center justify-between pb-5 border-b last:border-0"
-                    >
+                {topCustomers.map((customer, index) => (
+                  <div
+                    key={customer.id || index}
+                    onClick={() =>
+                      router.push(`/admin/customers/${customer.id}`)
+                    }
+                    className="flex items-center justify-between pb-5 border-b last:border-0 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 p-3 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`w-14 h-14 rounded-full flex items-center justify-center text-white text-2xl font-bold ${
+                          index === 0
+                            ? "bg-yellow-500"
+                            : index === 1
+                            ? "bg-gray-400"
+                            : index === 2
+                            ? "bg-amber-600"
+                            : "bg-gray-300"
+                        }`}
+                      >
+                        {index + 1}
+                      </div>
                       <div>
                         <p className="font-bold text-2xl text-neutral-900 dark:text-white">
-                          {orderId}
+                          {getCustomerName(customer.id, customer.name)}
                         </p>
-                        {memberName && (
-                          <p className="text-lg text-green-600 dark:text-green-400">
-                            {memberName}
-                          </p>
-                        )}
                         <p className="text-xl text-neutral-500">
-                          {txDate.toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {customer.orders} orders
                         </p>
                       </div>
-                      <p className="font-bold text-2xl text-green-600 dark:text-green-400">
-                        {formatCurrency(total)}
-                      </p>
                     </div>
-                  );
-                })}
+                    <p className="font-bold text-2xl text-green-600 dark:text-green-400">
+                      {formatCurrency(customer.total)}
+                    </p>
+                  </div>
+                ))}
               </div>
-
-              {/* Show More Button */}
-              <div className="mt-6 text-center">
-                <Button
-                  onClick={() => router.push("/admin/transactions")}
-                  variant="outline"
-                  className="h-14 px-8 text-xl font-bold"
-                >
-                  View All Transactions
-                </Button>
-              </div>
+              <Button
+                onClick={() => router.push("/admin/customers/all")}
+                variant="outline"
+                className="w-full mt-6 h-14 text-xl font-semibold"
+              >
+                View All Customers
+              </Button>
             </>
           )}
         </CardContent>
