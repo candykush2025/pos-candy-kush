@@ -1961,7 +1961,7 @@ export default function AdminDashboard() {
                 <div className="flex flex-col md:flex-row items-center gap-4">
                   <div className="h-48 md:h-56 w-full md:w-1/2 min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
+                      <PieChart margin={{ top: 10, right: 60, bottom: 10, left: 60 }}>
                         <Pie
                           data={paymentMethodsData}
                           cx="50%"
@@ -1970,7 +1970,7 @@ export default function AdminDashboard() {
                           label={({ name, percent }) =>
                             `${name}: ${(percent * 100).toFixed(0)}%`
                           }
-                          outerRadius={60}
+                          outerRadius={50}
                           fill="#8884d8"
                           dataKey="value"
                         >

@@ -1211,7 +1211,7 @@ export default function MobileDashboardPage() {
             <>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
+                  <PieChart margin={{ top: 20, right: 80, bottom: 20, left: 80 }}>
                     <Pie
                       data={paymentMethodsData}
                       cx="50%"
@@ -1220,7 +1220,7 @@ export default function MobileDashboardPage() {
                       label={({ name, percent }) =>
                         `${name}: ${(percent * 100).toFixed(0)}%`
                       }
-                      outerRadius={100}
+                      outerRadius={80}
                       dataKey="value"
                     >
                       {paymentMethodsData.map((entry, index) => (

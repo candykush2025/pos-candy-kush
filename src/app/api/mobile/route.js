@@ -2781,7 +2781,9 @@ export async function POST(request) {
         const isProd = process.env.NODE_ENV === "production";
         const payload = {
           success: false,
-          error: isProd ? error.message || "Failed to complete purchase" : error.message || "Failed to complete purchase",
+          error: isProd
+            ? error.message || "Failed to complete purchase"
+            : error.message || "Failed to complete purchase",
         };
 
         if (!isProd) {
