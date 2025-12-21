@@ -99,6 +99,11 @@ export default function MobileDashboardPage() {
   const [allReceipts, setAllReceipts] = useState([]);
   const [selectedDay, setSelectedDay] = useState(null); // For peak hours day selection
 
+  // Peak Hours Configuration
+  const [peakHoursMode, setPeakHoursMode] = useState("daily"); // 'daily' or 'monthly'
+  const [peakHoursDate, setPeakHoursDate] = useState(new Date()); // Selected date for peak hours
+  const [showPeakHoursDatePicker, setShowPeakHoursDatePicker] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -272,6 +277,131 @@ export default function MobileDashboardPage() {
       orders: data.orders,
     }));
   };
+
+  // Calculate hourly sales for a specific date (for peak hours mode)
+  const calculateHourlySalesForDate = (targetDate) => {
+    const hourlySales = Array(24)
+      .fill(null)
+      .map(() => ({ revenue: 0, orders: 0 }));
+
+    allReceipts.forEach((receipt) => {
+      const receiptDate =
+        receipt.createdAt?.toDate?.() || new Date(receipt.createdAt);
+      if (!receiptDate || isNaN(receiptDate.getTime())) return;
+
+      // Check if receipt is from the target day
+      if (
+        receiptDate.getFullYear() === targetDate.getFullYear() &&
+        receiptDate.getMonth() === targetDate.getMonth() &&
+        receiptDate.getDate() === targetDate.getDate()
+      ) {
+        const total =
+          receipt.total || receipt.totalAmount || receipt.total_money || 0;
+        const hour = receiptDate.getHours();
+        hourlySales[hour].revenue += total;
+        hourlySales[hour].orders++;
+      }
+    });
+
+    return hourlySales.map((data, hour) => ({
+      label: `${hour}:00`,
+      revenue: data.revenue,
+      orders: data.orders,
+    }));
+  };
+
+  // Calculate monthly average hourly sales
+  const calculateMonthlyAverageHourlySales = (targetDate) => {
+    const hourlySales = Array(24)
+      .fill(null)
+      .map(() => ({ revenue: 0, orders: 0, days: 0 }));
+
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+
+    // Get all days in the month
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysWithData = new Set();
+
+    allReceipts.forEach((receipt) => {
+      const receiptDate =
+        receipt.createdAt?.toDate?.() || new Date(receipt.createdAt);
+      if (!receiptDate || isNaN(receiptDate.getTime())) return;
+
+      // Check if receipt is from the target month
+      if (
+        receiptDate.getFullYear() === year &&
+        receiptDate.getMonth() === month
+      ) {
+        const total =
+          receipt.total || receipt.totalAmount || receipt.total_money || 0;
+        const hour = receiptDate.getHours();
+        const day = receiptDate.getDate();
+        
+        hourlySales[hour].revenue += total;
+        hourlySales[hour].orders++;
+        daysWithData.add(`${day}-${hour}`);
+      }
+    });
+
+    // Calculate average by dividing by number of days in month
+    return hourlySales.map((data, hour) => ({
+      label: `${hour}:00`,
+      revenue: daysInMonth > 0 ? data.revenue / daysInMonth : 0,
+      orders: daysInMonth > 0 ? data.orders / daysInMonth : 0,
+    }));
+  };
+
+  // Get peak hours data based on current mode and date
+  const getPeakHoursData = () => {
+    if (peakHoursMode === "monthly") {
+      return calculateMonthlyAverageHourlySales(peakHoursDate);
+    } else {
+      return calculateHourlySalesForDate(peakHoursDate);
+    }
+  };
+
+  // Get peak hours title
+  const getPeakHoursTitle = () => {
+    if (peakHoursMode === "monthly") {
+      return `Average sales by hour - ${peakHoursDate.toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      })}`;
+    } else {
+      return `Sales by hour - ${peakHoursDate.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}`;
+    }
+  };
+
+  // Handle peak hours mode change
+  const handlePeakHoursModeChange = (mode) => {
+    setPeakHoursMode(mode);
+    if (mode === "monthly") {
+      // Reset to first day of month for monthly view
+      const newDate = new Date(peakHoursDate);
+      newDate.setDate(1);
+      setPeakHoursDate(newDate);
+    }
+  };
+
+  // Handle peak hours date change
+  const handlePeakHoursDateChange = (date) => {
+    setPeakHoursDate(date);
+    setShowPeakHoursDatePicker(false);
+  };
+
+  // Update hourly sales data when peak hours settings change
+  useEffect(() => {
+    if (allReceipts.length > 0) {
+      const newHourlyData = getPeakHoursData();
+      setHourlySalesData(newHourlyData);
+    }
+  }, [peakHoursMode, peakHoursDate, allReceipts]);
 
   // Handle click on daily sales bar
   const handleDayClick = (data) => {
@@ -1053,10 +1183,135 @@ export default function MobileDashboardPage() {
             Peak Hours
           </CardTitle>
           <CardDescription className="text-xl">
-            {getSelectedDayDateString()}
+            {getPeakHoursTitle()}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Peak Hours Controls */}
+          <div className="mb-6 space-y-4">
+            {/* Mode Selection */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => handlePeakHoursModeChange("daily")}
+                className={`flex-1 px-4 py-3 text-lg font-semibold rounded-lg transition-colors ${
+                  peakHoursMode === "daily"
+                    ? "bg-green-600 text-white"
+                    : "bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600"
+                }`}
+              >
+                Daily
+              </button>
+              <button
+                onClick={() => handlePeakHoursModeChange("monthly")}
+                className={`flex-1 px-4 py-3 text-lg font-semibold rounded-lg transition-colors ${
+                  peakHoursMode === "monthly"
+                    ? "bg-green-600 text-white"
+                    : "bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600"
+                }`}
+              >
+                Monthly Avg
+              </button>
+            </div>
+
+            {/* Date Selection */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPeakHoursDatePicker(!showPeakHoursDatePicker)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-neutral-100 dark:bg-neutral-700 rounded-lg text-lg font-semibold text-neutral-900 dark:text-neutral-100 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  <span>
+                    {peakHoursMode === "monthly"
+                      ? peakHoursDate.toLocaleDateString("en-US", {
+                          month: "long",
+                          year: "numeric",
+                        })
+                      : peakHoursDate.toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                  </span>
+                </div>
+                <ChevronDown className="h-5 w-5" />
+              </button>
+
+              {/* Date Picker Dropdown */}
+              {showPeakHoursDatePicker && (
+                <div className="absolute z-50 mt-2 w-full bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 p-4">
+                  <div className="react-datepicker-wrapper">
+                    <DatePicker
+                      selected={peakHoursDate}
+                      onChange={handlePeakHoursDateChange}
+                      inline
+                      dateFormat={peakHoursMode === "monthly" ? "MM/yyyy" : "MM/dd/yyyy"}
+                      showMonthYearPicker={peakHoursMode === "monthly"}
+                      maxDate={new Date()}
+                      className="w-full"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => setShowPeakHoursDatePicker(false)}
+                    className="w-full mt-4 h-12 text-lg font-bold bg-green-600 hover:bg-green-700"
+                  >
+                    Apply
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Date Buttons */}
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  setPeakHoursDate(today);
+                  setPeakHoursMode("daily");
+                }}
+                className="px-3 py-2 text-sm font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => {
+                  const yesterday = new Date();
+                  yesterday.setDate(yesterday.getDate() - 1);
+                  setPeakHoursDate(yesterday);
+                  setPeakHoursMode("daily");
+                }}
+                className="px-3 py-2 text-sm font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+              >
+                Yesterday
+              </button>
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  today.setDate(1);
+                  setPeakHoursDate(today);
+                  setPeakHoursMode("monthly");
+                }}
+                className="px-3 py-2 text-sm font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+              >
+                This Month
+              </button>
+              <button
+                onClick={() => {
+                  const lastMonth = new Date();
+                  lastMonth.setMonth(lastMonth.getMonth() - 1);
+                  lastMonth.setDate(1);
+                  setPeakHoursDate(lastMonth);
+                  setPeakHoursMode("monthly");
+                }}
+                className="px-3 py-2 text-sm font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+              >
+                Last Month
+              </button>
+            </div>
+          </div>
+
+          {/* Chart */}
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={hourlySalesData}>
