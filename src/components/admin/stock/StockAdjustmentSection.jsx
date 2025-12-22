@@ -258,7 +258,8 @@ export default function StockAdjustmentSection() {
                     </label>
                     <Input
                       type="number"
-                      min="1"
+                      min="0.01"
+                      step="0.01"
                       value={formData.quantity}
                       onChange={(e) =>
                         setFormData({ ...formData, quantity: e.target.value })

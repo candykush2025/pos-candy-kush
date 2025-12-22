@@ -292,7 +292,8 @@ export default function PurchaseOrdersSection() {
                           </div>
                           <Input
                             type="number"
-                            min="1"
+                            min="0.01"
+                            step="0.01"
                             value={item.quantity}
                             onChange={(e) =>
                               updateProductQuantity(

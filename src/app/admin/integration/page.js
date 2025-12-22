@@ -400,6 +400,15 @@ export default function IntegrationPage() {
 
   // Sync Categories
   const handleSyncCategories = async (isAutoSync = false) => {
+    // ✅ PREVENT CONCURRENT SYNCS
+    if (syncing.categories) {
+      console.warn("⚠️ Category sync already in progress, skipping...");
+      if (!isAutoSync) {
+        toast.warning("Category sync already in progress. Please wait...");
+      }
+      return;
+    }
+
     setSyncing({ ...syncing, categories: true });
     setSyncProgress({
       ...syncProgress,
@@ -549,6 +558,15 @@ export default function IntegrationPage() {
 
   // Sync Items (Products)
   const handleSyncItems = async (isAutoSync = false) => {
+    // ✅ PREVENT CONCURRENT SYNCS - FIX FOR PRODUCT DUPLICATION
+    if (syncing.items) {
+      console.warn("⚠️ Product sync already in progress, skipping...");
+      if (!isAutoSync) {
+        toast.warning("Product sync already in progress. Please wait...");
+      }
+      return;
+    }
+
     setSyncing({ ...syncing, items: true });
     setSyncProgress({
       ...syncProgress,
@@ -747,6 +765,15 @@ export default function IntegrationPage() {
 
   // Sync Customers
   const handleSyncCustomers = async (isAutoSync = false) => {
+    // ✅ PREVENT CONCURRENT SYNCS
+    if (syncing.customers) {
+      console.warn("⚠️ Customer sync already in progress, skipping...");
+      if (!isAutoSync) {
+        toast.warning("Customer sync already in progress. Please wait...");
+      }
+      return;
+    }
+
     setSyncing({ ...syncing, customers: true });
     setSyncProgress({
       ...syncProgress,

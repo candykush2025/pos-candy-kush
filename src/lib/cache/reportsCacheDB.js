@@ -197,6 +197,27 @@ class ReportsCacheDB extends Dexie {
   }
 
   /**
+   * Clear products cache
+   */
+  async clearProductsCache() {
+    try {
+      await this.transaction(
+        "rw",
+        [this.products, this.cacheMetadata],
+        async () => {
+          await this.products.clear();
+          await this.cacheMetadata.where("key").equals("products").delete();
+        }
+      );
+      console.log("✅ Products cache cleared");
+      return true;
+    } catch (error) {
+      console.error("Error clearing products cache:", error);
+      return false;
+    }
+  }
+
+  /**
    * Invalidate all caches
    */
   async invalidateAll() {
