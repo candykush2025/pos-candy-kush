@@ -944,6 +944,13 @@ export default function SalesSection({ cashier }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Refresh customers when customer modal opens
+  useEffect(() => {
+    if (showCustomerSelectModal) {
+      loadCustomers();
+    }
+  }, [showCustomerSelectModal]);
+
   const checkUnsyncedOrders = async () => {
     try {
       const queue = await dbService.getSyncQueue();
@@ -1288,7 +1295,7 @@ export default function SalesSection({ cashier }) {
   };
 
   // Process scanned barcode to find matching customer
-  const processScannedBarcode = (scannedCode) => {
+  const processScannedBarcode = async (scannedCode) => {
     if (!scannedCode) {
       console.log("[Barcode Scanner] Empty code, ignoring");
       return;
@@ -1314,6 +1321,16 @@ export default function SalesSection({ cashier }) {
     }
 
     // Then check if it's a customer/member code
+    // Always refresh customers before checking to ensure we have latest data
+    console.log(
+      "[Barcode Scanner] Refreshing customer data before scanning..."
+    );
+    try {
+      await loadCustomers();
+    } catch (error) {
+      console.warn("[Barcode Scanner] Failed to refresh customers:", error);
+    }
+
     if (customers.length === 0) {
       console.log("[Barcode Scanner] No customers loaded yet");
       toast.warning("Customers not loaded. Please wait and try again.");
