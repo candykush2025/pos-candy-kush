@@ -4442,7 +4442,7 @@ export default function SalesSection({ cashier }) {
 
         {/* Payment Modal */}
         <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px] max-h-[100vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Complete Payment</DialogTitle>
               <DialogDescription>
@@ -4450,7 +4450,7 @@ export default function SalesSection({ cashier }) {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-6 py-4">
+            <div className="space-y-6 py-4 overflow-y-auto flex-1">
               {/* Total Amount */}
               <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
                 <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
