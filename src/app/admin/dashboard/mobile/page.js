@@ -361,8 +361,14 @@ export default function MobileDashboardPage() {
     }
   };
 
-  // Get peak hours title
+  // Get peak hours title (handles both selected day and normal modes)
   const getPeakHoursTitle = () => {
+    // If a day is selected from daily sales chart, show that day's data
+    if (selectedDay) {
+      return getSelectedDayDateString();
+    }
+
+    // Otherwise use the normal peak hours logic
     if (peakHoursMode === "monthly") {
       return `Average sales by hour - ${peakHoursDate.toLocaleDateString(
         "en-US",
@@ -381,9 +387,25 @@ export default function MobileDashboardPage() {
     }
   };
 
+  // Get selected day date string for Peak Hours title
+  const getSelectedDayDateString = () => {
+    if (!selectedDay) return null;
+    const { startDate } = getDateRange();
+    const targetDate = new Date(startDate);
+    targetDate.setDate(startDate.getDate() + selectedDay - 1);
+    return `Sales by hour - ${targetDate.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })}`;
+  };
+
   // Handle peak hours mode change
   const handlePeakHoursModeChange = (mode) => {
     setPeakHoursMode(mode);
+    // Clear selected day when switching modes
+    setSelectedDay(null);
     if (mode === "monthly") {
       // Reset to first day of month for monthly view
       const newDate = new Date(peakHoursDate);
@@ -395,6 +417,7 @@ export default function MobileDashboardPage() {
   // Handle peak hours date change
   const handlePeakHoursDateChange = (date) => {
     setPeakHoursDate(date);
+    setSelectedDay(null); // Clear selected day when manually changing date
     setShowPeakHoursDatePicker(false);
   };
 
@@ -414,19 +437,6 @@ export default function MobileDashboardPage() {
       const hourlyData = calculateHourlySalesForDay(dayNumber);
       setHourlySalesData(hourlyData);
     }
-  };
-
-  // Get selected day date string for Peak Hours title
-  const getSelectedDayDateString = () => {
-    if (!selectedDay) return "Today's sales by hour";
-    const { startDate } = getDateRange();
-    const targetDate = new Date(startDate);
-    targetDate.setDate(startDate.getDate() + selectedDay - 1);
-    return targetDate.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
   };
 
   // Format day number to full date for tooltip
@@ -563,6 +573,19 @@ export default function MobileDashboardPage() {
           productCategoryMap[p.loyverseId] = p.categoryId || p.category_id;
       });
 
+      // Build product cost map for gross profit calculation
+      const productCostMap = {};
+      products.forEach((product) => {
+        if (product.id) {
+          productCostMap[product.id] =
+            product.cost || product.purchaseCost || 0;
+        }
+        if (product.loyverseId) {
+          productCostMap[product.loyverseId] =
+            product.cost || product.purchaseCost || 0;
+        }
+      });
+
       const { startDate, endDate } = getDateRange();
       const now = new Date();
       const todayStart = new Date(
@@ -615,14 +638,25 @@ export default function MobileDashboardPage() {
 
         const total =
           receipt.total || receipt.totalAmount || receipt.total_money || 0;
-        const cost = receipt.totalCost || 0;
+
+        // Calculate cost from line items
+        const items =
+          receipt.lineItems || receipt.line_items || receipt.items || [];
+        let receiptCost = 0;
+        if (items && Array.isArray(items)) {
+          items.forEach((item) => {
+            const itemId = item.item_id || item.itemId || item.id;
+            const cost = productCostMap[itemId] || 0;
+            receiptCost += cost * (item.quantity || 1);
+          });
+        }
 
         // Current period
         if (receiptDate >= startDate && receiptDate <= endDate) {
           periodRevenue += total;
           periodOrders++;
-          totalCost += cost;
-          grossProfit += total - cost;
+          totalCost += receiptCost;
+          grossProfit += total - receiptCost;
 
           // Daily sales
           const dayKey = receiptDate.getDate();

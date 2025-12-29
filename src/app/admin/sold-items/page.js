@@ -271,7 +271,9 @@ export default function SoldItemsPage() {
   });
 
   // Calculate totals
-  const totalItems = filteredProducts.reduce((sum, p) => sum + p.quantity, 0);
+  const totalItems = filteredProducts
+    .reduce((sum, p) => sum + p.quantity, 0)
+    .toFixed(2);
   const totalRevenue = filteredProducts.reduce((sum, p) => sum + p.revenue, 0);
 
   const getDateLabel = () => {

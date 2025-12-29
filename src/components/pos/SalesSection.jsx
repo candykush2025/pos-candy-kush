@@ -605,107 +605,138 @@ export default function SalesSection({ cashier }) {
   }, [selectedCategory]);
 
   // Process scanned barcode to find matching customer or product
-  const processScannedBarcode = useCallback(async (scannedCode) => {
-    if (!scannedCode) {
-      console.log("[Barcode Scanner] Empty code, ignoring");
-      return;
-    }
-
-    console.log("[Barcode Scanner] Processing code:", scannedCode);
-    console.log("[Barcode Scanner] Available products:", products.length);
-    console.log("[Barcode Scanner] Available customers:", customers.length);
-
-    // First, check if it's a product barcode
-    const matchingProduct = products.find(
-      (product) =>
-        product.barcode === scannedCode || product.sku === scannedCode
-    );
-
-    if (matchingProduct) {
-      // Add product to cart
-      addItem(matchingProduct);
-      toast.success(`Added "${matchingProduct.name}" to cart`);
-      console.log("[Barcode Scanner] Product matched:", matchingProduct.name);
-      // Calculate cashback after adding item
-      setTimeout(() => calculateCashbackNow(), 100);
-      return;
-    }
-
-    // Then check if it's a customer/member code
-    console.log(
-      "[Barcode Scanner] Not a product, checking customers..."
-    );
-
-    // Look for customer where memberId, customerId, id, phone or email matches the scanned code
-    // PRIORITY: memberId is checked FIRST for QR code scanning
-    const matchingCustomer = customers.find((customer) => {
-      const code = scannedCode.toLowerCase();
-      const codeOriginal = scannedCode; // Keep original for phone number
-      
-      // Check memberId first (most common for QR codes)
-      if (customer.memberId?.toLowerCase() === code) {
-        console.log("[Barcode Scanner] Customer matched by memberId:", customer.name, "memberId:", customer.memberId);
-        return true;
+  const processScannedBarcode = useCallback(
+    async (scannedCode) => {
+      if (!scannedCode) {
+        console.log("[Barcode Scanner] Empty code, ignoring");
+        return;
       }
-      
-      // Then check other fields
-      if (customer.customerId?.toLowerCase() === code) {
-        console.log("[Barcode Scanner] Customer matched by customerId:", customer.name);
-        return true;
-      }
-      
-      if (customer.id?.toLowerCase() === code) {
-        console.log("[Barcode Scanner] Customer matched by id:", customer.name);
-        return true;
-      }
-      
-      if (customer.phone === codeOriginal) {
-        console.log("[Barcode Scanner] Customer matched by phone:", customer.name);
-        return true;
-      }
-      
-      if (customer.email?.toLowerCase() === code) {
-        console.log("[Barcode Scanner] Customer matched by email:", customer.name);
-        return true;
-      }
-      
-      return false;
-    });
 
-    if (matchingCustomer) {
-      // Check if customer membership is expired
-      if (matchingCustomer.expiryDate) {
-        const expiryDate = new Date(matchingCustomer.expiryDate);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+      console.log("[Barcode Scanner] Processing code:", scannedCode);
+      console.log("[Barcode Scanner] Available products:", products.length);
+      console.log("[Barcode Scanner] Available customers:", customers.length);
 
-        if (expiryDate < today) {
-          toast.error(
-            `Cannot select ${
-              matchingCustomer.name
-            } - membership expired on ${expiryDate.toLocaleDateString()}`
-          );
+      // First, check if it's a product barcode
+      const matchingProduct = products.find(
+        (product) =>
+          product.barcode === scannedCode || product.sku === scannedCode
+      );
+
+      if (matchingProduct) {
+        // Add product to cart
+        addItem(matchingProduct);
+        toast.success(`Added "${matchingProduct.name}" to cart`);
+        console.log("[Barcode Scanner] Product matched:", matchingProduct.name);
+        // Calculate cashback after adding item
+        setTimeout(() => calculateCashbackNow(), 100);
+        return;
+      }
+
+      // Then check if it's a customer/member code
+      console.log("[Barcode Scanner] Not a product, checking customers...");
+
+      // Look for customer where memberId, customerId, id, phone or email matches the scanned code
+      // PRIORITY: memberId is checked FIRST for QR code scanning
+      const matchingCustomer = customers.find((customer) => {
+        const code = scannedCode.toLowerCase();
+        const codeOriginal = scannedCode; // Keep original for phone number
+
+        // Check memberId first (most common for QR codes)
+        if (customer.memberId?.toLowerCase() === code) {
           console.log(
-            "[Barcode Scanner] Customer membership expired:",
-            matchingCustomer
+            "[Barcode Scanner] Customer matched by memberId:",
+            customer.name,
+            "memberId:",
+            customer.memberId
           );
-          return;
+          return true;
         }
-      }
 
-      // Set the customer in the cart silently
-      setCartCustomer(matchingCustomer);
-      // NO toast notification - silent customer selection
-      console.log("[Barcode Scanner] Customer matched and selected:", matchingCustomer.name);
-      console.log("[Barcode Scanner] Customer memberId:", matchingCustomer.memberId);
-      // Calculate cashback after selecting customer
-      setTimeout(() => calculateCashbackNow(null, matchingCustomer, null), 100);
-    } else {
-      console.log("[Barcode Scanner] No match found for:", scannedCode);
-      console.log("[Barcode Scanner] Checked against", customers.length, "customers");
-      // NO toast notification for no match - silent failure
-    }
-  }, [products, customers, addItem, setCartCustomer, calculateCashbackNow]);
+        // Then check other fields
+        if (customer.customerId?.toLowerCase() === code) {
+          console.log(
+            "[Barcode Scanner] Customer matched by customerId:",
+            customer.name
+          );
+          return true;
+        }
+
+        if (customer.id?.toLowerCase() === code) {
+          console.log(
+            "[Barcode Scanner] Customer matched by id:",
+            customer.name
+          );
+          return true;
+        }
+
+        if (customer.phone === codeOriginal) {
+          console.log(
+            "[Barcode Scanner] Customer matched by phone:",
+            customer.name
+          );
+          return true;
+        }
+
+        if (customer.email?.toLowerCase() === code) {
+          console.log(
+            "[Barcode Scanner] Customer matched by email:",
+            customer.name
+          );
+          return true;
+        }
+
+        return false;
+      });
+
+      if (matchingCustomer) {
+        // Check if customer membership is expired
+        if (matchingCustomer.expiryDate) {
+          const expiryDate = new Date(matchingCustomer.expiryDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          if (expiryDate < today) {
+            toast.error(
+              `Cannot select ${
+                matchingCustomer.name
+              } - membership expired on ${expiryDate.toLocaleDateString()}`
+            );
+            console.log(
+              "[Barcode Scanner] Customer membership expired:",
+              matchingCustomer
+            );
+            return;
+          }
+        }
+
+        // Set the customer in the cart silently
+        setCartCustomer(matchingCustomer);
+        // NO toast notification - silent customer selection
+        console.log(
+          "[Barcode Scanner] Customer matched and selected:",
+          matchingCustomer.name
+        );
+        console.log(
+          "[Barcode Scanner] Customer memberId:",
+          matchingCustomer.memberId
+        );
+        // Calculate cashback after selecting customer
+        setTimeout(
+          () => calculateCashbackNow(null, matchingCustomer, null),
+          100
+        );
+      } else {
+        console.log("[Barcode Scanner] No match found for:", scannedCode);
+        console.log(
+          "[Barcode Scanner] Checked against",
+          customers.length,
+          "customers"
+        );
+        // NO toast notification for no match - silent failure
+      }
+    },
+    [products, customers, addItem, setCartCustomer, calculateCashbackNow]
+  );
 
   // Barcode scanner listener
   useEffect(() => {
@@ -742,8 +773,14 @@ export default function SalesSection({ cashier }) {
         const scannedCode = localBuffer.trim();
         if (scannedCode && scannedCode.length >= 3) {
           console.log("[Barcode Scanner] Scanned code:", scannedCode);
-          console.log("[Barcode Scanner] Current products count:", products.length);
-          console.log("[Barcode Scanner] Current customers count:", customers.length);
+          console.log(
+            "[Barcode Scanner] Current products count:",
+            products.length
+          );
+          console.log(
+            "[Barcode Scanner] Current customers count:",
+            customers.length
+          );
           processScannedBarcode(scannedCode);
         }
         localBuffer = "";
@@ -781,7 +818,12 @@ export default function SalesSection({ cashier }) {
 
     // Always listen for barcode scans
     document.addEventListener("keydown", handleKeyDown);
-    console.log("[Barcode Scanner] Listener attached, products:", products.length, "customers:", customers.length);
+    console.log(
+      "[Barcode Scanner] Listener attached, products:",
+      products.length,
+      "customers:",
+      customers.length
+    );
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
