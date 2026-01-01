@@ -10,7 +10,7 @@
  * - GET /api/mobile?action=sales-by-employee - Sales breakdown by employee
  * - GET /api/mobile?action=stock - Current inventory stock levels
  * - GET /api/mobile?action=stock-history - Complete stock movement history
- * - GET /api/mobile?action=get-items - Get all products/items with category info
+ * - GET /api/mobile?action=get-items - Get ALL products/items with category info (including out-of-stock items)
  * - GET /api/mobile?action=get-categories - Get all categories
  *
  * Authentication: All endpoints except login require JWT token in Authorization header
@@ -655,7 +655,37 @@ async function getSalesByEmployee(receipts, users, dateRange) {
 // Get Current Stock Levels
 async function getStock(products) {
   // Build stock data from products with inventory info
-  const stockItems = products.map((product) => {
+  // First, resolve costs from stock history for products with cost = 0
+  const productsWithResolvedCosts = await Promise.all(
+    products.map(async (product) => {
+      let resolvedCost = product.cost || 0;
+
+      // If cost is 0, try to get it from stock history
+      if (resolvedCost === 0) {
+        try {
+          const history = await stockHistoryService.getProductHistory(product.id);
+          // Find the most recent cost entry in stock history
+          const costEntry = history
+            .filter(entry => entry.notes && entry.notes.includes('cost:'))
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+
+          if (costEntry) {
+            const costMatch = costEntry.notes.match(/cost:\s*\$?(\d+(?:\.\d{2})?)/i);
+            if (costMatch) {
+              resolvedCost = parseFloat(costMatch[1]);
+            }
+          }
+        } catch (error) {
+          // If stock history lookup fails, keep cost as 0
+          console.log(`Could not resolve cost for product ${product.id}:`, error.message);
+        }
+      }
+
+      return { ...product, resolvedCost };
+    })
+  );
+
+  const stockItems = productsWithResolvedCosts.map((product) => {
     // Get variants for stock info
     const variants = product.variants || [];
     const primaryVariant = variants[0] || {};
@@ -696,10 +726,10 @@ async function getStock(products) {
       is_low_stock: isLowStock,
       is_out_of_stock: isOutOfStock,
       price: product.price || primaryVariant.price || 0,
-      cost: product.cost || primaryVariant.cost || 0,
+      cost: product.resolvedCost || primaryVariant.cost || 0,
       stock_value:
         Math.round(
-          totalStock * (product.cost || primaryVariant.cost || 0) * 100
+          totalStock * (product.resolvedCost || primaryVariant.cost || 0) * 100
         ) / 100,
       variants: variants.map((v) => ({
         variant_id: v.variant_id || v.id,
@@ -709,7 +739,7 @@ async function getStock(products) {
         sku: v.sku || "",
         stock: v.in_stock || v.inStock || v.stock || v.quantity || 0,
         price: v.price || product.price || 0,
-        cost: v.cost || product.cost || 0,
+        cost: v.cost || product.resolvedCost || 0,
       })),
     };
   });
@@ -806,10 +836,12 @@ async function getStockHistory(limit = 1000) {
 // Get all items/products with categories
 async function getItems() {
   try {
+    // IMPORTANT: Return ALL products including out-of-stock items
+    // DO NOT filter out products with zero stock - mobile app needs to see everything
     const products = await productsService.getAll();
 
     // Transform products to include category information
-    const items = products.map((product) => {
+    const items = await Promise.all(products.map(async (product) => {
       const variants = product.variants || [];
       const primaryVariant = variants[0] || {};
 
@@ -828,6 +860,33 @@ async function getItems() {
           0;
       }
 
+      // Get product cost - if 0, check stock movement history for last price
+      let productCost = product.cost || primaryVariant.cost || 0;
+
+      if (productCost === 0 || productCost === null) {
+        try {
+          // Get recent stock movements to find last cost
+          const stockHistory = await stockHistoryService.getProductHistory(product.id, 10);
+
+          // Look for the most recent movement with cost information in notes
+          for (const movement of stockHistory) {
+            if (movement.notes && movement.notes.includes('Cost:')) {
+              const costMatch = movement.notes.match(/Cost:\s*฿?(\d+(?:\.\d+)?)/);
+              if (costMatch && costMatch[1]) {
+                const parsedCost = parseFloat(costMatch[1]);
+                if (parsedCost > 0) {
+                  productCost = parsedCost;
+                  break; // Use the most recent cost found
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // If stock history lookup fails, keep cost as 0
+          console.warn(`Could not get cost from stock history for product ${product.id}:`, error);
+        }
+      }
+
       return {
         id: product.id,
         product_id: product.productId || product.id,
@@ -841,9 +900,9 @@ async function getItems() {
           product.categoryName || product.category || "Uncategorized",
         category_image: product.categoryImage || "",
 
-        // Pricing
+        // Pricing - use the resolved cost
         price: product.price || primaryVariant.price || 0,
-        cost: product.cost || primaryVariant.cost || 0,
+        cost: productCost,
 
         // Stock
         stock: totalStock,
@@ -867,7 +926,7 @@ async function getItems() {
           sku: v.sku || "",
           stock: v.in_stock || v.inStock || v.stock || v.quantity || 0,
           price: v.price || product.price || 0,
-          cost: v.cost || product.cost || 0,
+          cost: v.cost || productCost || 0, // Use resolved product cost for variants too
         })),
 
         // Timestamps
@@ -878,7 +937,7 @@ async function getItems() {
           ? product.updatedAt.toDate().toISOString()
           : product.updatedAt,
       };
-    });
+    }));
 
     return {
       items,
@@ -2059,6 +2118,8 @@ export async function GET(request) {
     }
 
     // Handle stock action (doesn't need date range)
+    // IMPORTANT: Return ALL products including out-of-stock items
+    // DO NOT filter products - mobile app needs complete inventory data
     if (action === "stock") {
       const products = await productsService.getAll();
       const stockData = await getStock(products || []);
@@ -2075,6 +2136,8 @@ export async function GET(request) {
     }
 
     // Handle stock-history action (doesn't need date range)
+    // IMPORTANT: Return ALL stock movement history for all products
+    // DO NOT filter history - mobile app needs complete historical data
     if (action === "stock-history") {
       const stockHistoryData = await getStockHistory();
 
