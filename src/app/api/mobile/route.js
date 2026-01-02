@@ -653,7 +653,22 @@ async function getSalesByEmployee(receipts, users, dateRange) {
 }
 
 // Get Current Stock Levels
-async function getStock(products) {
+async function getStock(products, categories = null) {
+  // Load categories if not provided
+  if (!categories) {
+    categories = await categoriesService.getAll();
+  }
+
+  // Create category lookup map
+  const categoryMap = new Map();
+  categoryMap.set("uncategorized", { name: "Uncategorized", image: "" });
+  categories.forEach((cat) => {
+    categoryMap.set(cat.id, {
+      name: cat.name || "Unknown Category",
+      image: cat.image || ""
+    });
+  });
+
   // Build stock data from products with inventory info
   // First, resolve costs from stock history for products with cost = 0
   const productsWithResolvedCosts = await Promise.all(
@@ -719,15 +734,33 @@ async function getStock(products) {
     const isLowStock = totalStock <= lowStockThreshold && totalStock > 0;
     const isOutOfStock = totalStock <= 0;
 
+    // Resolve category using the same logic as getItems
+    let categoryId = product.categoryId || product.category_id || product.category;
+    if (!categoryId || categoryId === "") {
+      categoryId = "uncategorized";
+    }
+    
+    let categoryInfo = categoryMap.get(categoryId);
+    if (!categoryInfo && categoryId !== "uncategorized") {
+      for (const [id, info] of categoryMap.entries()) {
+        if (info.name === categoryId) {
+          categoryInfo = info;
+          categoryId = id;
+          break;
+        }
+      }
+    }
+    
+    if (!categoryInfo) {
+      categoryInfo = categoryMap.get("uncategorized");
+      categoryId = "uncategorized";
+    }
+
     return {
       product_id: product.id,
       product_name: product.name || "Unknown Product",
       sku: product.sku || product.SKU || "",
-      category:
-        product.categoryName ||
-        product.category ||
-        product.category_name ||
-        "Uncategorized",
+      category: categoryInfo.name,
       current_stock: totalStock,
       low_stock_threshold: lowStockThreshold,
       is_low_stock: isLowStock,
@@ -860,6 +893,14 @@ async function getItems() {
       });
     });
 
+    // Debug: Log first few categories for verification
+    console.log("📂 Categories loaded:", categories.length);
+    console.log("📂 First 5 categories:", 
+      Array.from(categoryMap.entries()).slice(0, 5).map(([id, info]) => 
+        `${id}: ${info.name}`
+      )
+    );
+
     // Transform products to include category information
     const items = await Promise.all(
       products.map(async (product) => {
@@ -919,8 +960,44 @@ async function getItems() {
         }
 
         // Get category information from lookup map
-        const categoryId = product.categoryId || product.category_id || product.category || "uncategorized";
-        const categoryInfo = categoryMap.get(categoryId) || categoryMap.get("uncategorized");
+        // Check all possible category field names and handle both IDs and names
+        let categoryId = product.categoryId || product.category_id || product.category;
+        
+        // Debug first 5 products
+        if (products.indexOf(product) < 5) {
+          console.log(`🔍 Product "${product.name}":`, {
+            categoryId: product.categoryId,
+            category_id: product.category_id,
+            category: product.category,
+            resolved: categoryId
+          });
+        }
+        
+        // If categoryId is empty string or null, set to uncategorized
+        if (!categoryId || categoryId === "") {
+          categoryId = "uncategorized";
+        }
+        
+        // Look up category info - if not found, might be a name instead of ID
+        let categoryInfo = categoryMap.get(categoryId);
+        
+        // If not found by ID, try to find by name in the categories
+        if (!categoryInfo && categoryId !== "uncategorized") {
+          // Search for category by name
+          for (const [id, info] of categoryMap.entries()) {
+            if (info.name === categoryId) {
+              categoryInfo = info;
+              categoryId = id; // Update to use the actual ID
+              break;
+            }
+          }
+        }
+        
+        // Fall back to uncategorized if still not found
+        if (!categoryInfo) {
+          categoryInfo = categoryMap.get("uncategorized");
+          categoryId = "uncategorized";
+        }
 
         return {
           id: product.id,
@@ -2156,8 +2233,11 @@ export async function GET(request) {
     // IMPORTANT: Return ALL products including out-of-stock items
     // DO NOT filter products - mobile app needs complete inventory data
     if (action === "stock") {
-      const products = await productsService.getAll();
-      const stockData = await getStock(products || []);
+      const [products, categories] = await Promise.all([
+        productsService.getAll(),
+        categoriesService.getAll()
+      ]);
+      const stockData = await getStock(products || [], categories);
 
       return Response.json(
         {
