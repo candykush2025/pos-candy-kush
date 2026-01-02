@@ -665,7 +665,7 @@ async function getStock(products, categories = null) {
   categories.forEach((cat) => {
     categoryMap.set(cat.id, {
       name: cat.name || "Unknown Category",
-      image: cat.image || ""
+      image: cat.image || "",
     });
   });
 
@@ -735,11 +735,12 @@ async function getStock(products, categories = null) {
     const isOutOfStock = totalStock <= 0;
 
     // Resolve category using the same logic as getItems
-    let categoryId = product.categoryId || product.category_id || product.category;
+    let categoryId =
+      product.categoryId || product.category_id || product.category;
     if (!categoryId || categoryId === "") {
       categoryId = "uncategorized";
     }
-    
+
     let categoryInfo = categoryMap.get(categoryId);
     if (!categoryInfo && categoryId !== "uncategorized") {
       for (const [id, info] of categoryMap.entries()) {
@@ -750,7 +751,7 @@ async function getStock(products, categories = null) {
         }
       }
     }
-    
+
     if (!categoryInfo) {
       categoryInfo = categoryMap.get("uncategorized");
       categoryId = "uncategorized";
@@ -880,7 +881,7 @@ async function getItems() {
     // DO NOT filter out products with zero stock - mobile app needs to see everything
     const [products, categories] = await Promise.all([
       productsService.getAll(),
-      categoriesService.getAll()
+      categoriesService.getAll(),
     ]);
 
     // Create category lookup map
@@ -889,16 +890,17 @@ async function getItems() {
     categories.forEach((cat) => {
       categoryMap.set(cat.id, {
         name: cat.name || "Unknown Category",
-        image: cat.image || ""
+        image: cat.image || "",
       });
     });
 
     // Debug: Log first few categories for verification
     console.log("📂 Categories loaded:", categories.length);
-    console.log("📂 First 5 categories:", 
-      Array.from(categoryMap.entries()).slice(0, 5).map(([id, info]) => 
-        `${id}: ${info.name}`
-      )
+    console.log(
+      "📂 First 5 categories:",
+      Array.from(categoryMap.entries())
+        .slice(0, 5)
+        .map(([id, info]) => `${id}: ${info.name}`)
     );
 
     // Transform products to include category information
@@ -961,26 +963,27 @@ async function getItems() {
 
         // Get category information from lookup map
         // Check all possible category field names and handle both IDs and names
-        let categoryId = product.categoryId || product.category_id || product.category;
-        
+        let categoryId =
+          product.categoryId || product.category_id || product.category;
+
         // Debug first 5 products
         if (products.indexOf(product) < 5) {
           console.log(`🔍 Product "${product.name}":`, {
             categoryId: product.categoryId,
             category_id: product.category_id,
             category: product.category,
-            resolved: categoryId
+            resolved: categoryId,
           });
         }
-        
+
         // If categoryId is empty string or null, set to uncategorized
         if (!categoryId || categoryId === "") {
           categoryId = "uncategorized";
         }
-        
+
         // Look up category info - if not found, might be a name instead of ID
         let categoryInfo = categoryMap.get(categoryId);
-        
+
         // If not found by ID, try to find by name in the categories
         if (!categoryInfo && categoryId !== "uncategorized") {
           // Search for category by name
@@ -992,7 +995,7 @@ async function getItems() {
             }
           }
         }
-        
+
         // Fall back to uncategorized if still not found
         if (!categoryInfo) {
           categoryInfo = categoryMap.get("uncategorized");
@@ -2235,7 +2238,7 @@ export async function GET(request) {
     if (action === "stock") {
       const [products, categories] = await Promise.all([
         productsService.getAll(),
-        categoriesService.getAll()
+        categoriesService.getAll(),
       ]);
       const stockData = await getStock(products || [], categories);
 
