@@ -663,21 +663,28 @@ async function getStock(products) {
       // If cost is 0, try to get it from stock history
       if (resolvedCost === 0) {
         try {
-          const history = await stockHistoryService.getProductHistory(product.id);
+          const history = await stockHistoryService.getProductHistory(
+            product.id
+          );
           // Find the most recent cost entry in stock history
           const costEntry = history
-            .filter(entry => entry.notes && entry.notes.includes('cost:'))
+            .filter((entry) => entry.notes && entry.notes.includes("cost:"))
             .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
 
           if (costEntry) {
-            const costMatch = costEntry.notes.match(/cost:\s*\$?(\d+(?:\.\d{2})?)/i);
+            const costMatch = costEntry.notes.match(
+              /cost:\s*\$?(\d+(?:\.\d{2})?)/i
+            );
             if (costMatch) {
               resolvedCost = parseFloat(costMatch[1]);
             }
           }
         } catch (error) {
           // If stock history lookup fails, keep cost as 0
-          console.log(`Could not resolve cost for product ${product.id}:`, error.message);
+          console.log(
+            `Could not resolve cost for product ${product.id}:`,
+            error.message
+          );
         }
       }
 
@@ -838,106 +845,134 @@ async function getItems() {
   try {
     // IMPORTANT: Return ALL products including out-of-stock items
     // DO NOT filter out products with zero stock - mobile app needs to see everything
-    const products = await productsService.getAll();
+    const [products, categories] = await Promise.all([
+      productsService.getAll(),
+      categoriesService.getAll()
+    ]);
+
+    // Create category lookup map
+    const categoryMap = new Map();
+    categoryMap.set("uncategorized", { name: "Uncategorized", image: "" });
+    categories.forEach((cat) => {
+      categoryMap.set(cat.id, {
+        name: cat.name || "Unknown Category",
+        image: cat.image || ""
+      });
+    });
 
     // Transform products to include category information
-    const items = await Promise.all(products.map(async (product) => {
-      const variants = product.variants || [];
-      const primaryVariant = variants[0] || {};
+    const items = await Promise.all(
+      products.map(async (product) => {
+        const variants = product.variants || [];
+        const primaryVariant = variants[0] || {};
 
-      // Calculate total stock
-      let totalStock = 0;
-      if (variants.length > 0) {
-        totalStock = variants.reduce((sum, v) => {
-          return sum + (v.in_stock || v.inStock || v.stock || v.quantity || 0);
-        }, 0);
-      } else {
-        totalStock =
-          product.in_stock ||
-          product.inStock ||
-          product.stock ||
-          product.quantity ||
-          0;
-      }
+        // Calculate total stock
+        let totalStock = 0;
+        if (variants.length > 0) {
+          totalStock = variants.reduce((sum, v) => {
+            return (
+              sum + (v.in_stock || v.inStock || v.stock || v.quantity || 0)
+            );
+          }, 0);
+        } else {
+          totalStock =
+            product.in_stock ||
+            product.inStock ||
+            product.stock ||
+            product.quantity ||
+            0;
+        }
 
-      // Get product cost - if 0, check stock movement history for last price
-      let productCost = product.cost || primaryVariant.cost || 0;
+        // Get product cost - if 0, check stock movement history for last price
+        let productCost = product.cost || primaryVariant.cost || 0;
 
-      if (productCost === 0 || productCost === null) {
-        try {
-          // Get recent stock movements to find last cost
-          const stockHistory = await stockHistoryService.getProductHistory(product.id, 10);
+        if (productCost === 0 || productCost === null) {
+          try {
+            // Get recent stock movements to find last cost
+            const stockHistory = await stockHistoryService.getProductHistory(
+              product.id,
+              10
+            );
 
-          // Look for the most recent movement with cost information in notes
-          for (const movement of stockHistory) {
-            if (movement.notes && movement.notes.includes('Cost:')) {
-              const costMatch = movement.notes.match(/Cost:\s*฿?(\d+(?:\.\d+)?)/);
-              if (costMatch && costMatch[1]) {
-                const parsedCost = parseFloat(costMatch[1]);
-                if (parsedCost > 0) {
-                  productCost = parsedCost;
-                  break; // Use the most recent cost found
+            // Look for the most recent movement with cost information in notes
+            for (const movement of stockHistory) {
+              if (movement.notes && movement.notes.includes("Cost:")) {
+                const costMatch = movement.notes.match(
+                  /Cost:\s*฿?(\d+(?:\.\d+)?)/
+                );
+                if (costMatch && costMatch[1]) {
+                  const parsedCost = parseFloat(costMatch[1]);
+                  if (parsedCost > 0) {
+                    productCost = parsedCost;
+                    break; // Use the most recent cost found
+                  }
                 }
               }
             }
+          } catch (error) {
+            // If stock history lookup fails, keep cost as 0
+            console.warn(
+              `Could not get cost from stock history for product ${product.id}:`,
+              error
+            );
           }
-        } catch (error) {
-          // If stock history lookup fails, keep cost as 0
-          console.warn(`Could not get cost from stock history for product ${product.id}:`, error);
         }
-      }
 
-      return {
-        id: product.id,
-        product_id: product.productId || product.id,
-        name: product.name,
-        description: product.description || "",
-        sku: product.sku || product.SKU || "",
+        // Get category information from lookup map
+        const categoryId = product.categoryId || product.category_id || product.category || "uncategorized";
+        const categoryInfo = categoryMap.get(categoryId) || categoryMap.get("uncategorized");
 
-        // Category information
-        category_id: product.categoryId || "",
-        category_name:
-          product.categoryName || product.category || "Uncategorized",
-        category_image: product.categoryImage || "",
+        return {
+          id: product.id,
+          product_id: product.productId || product.id,
+          name: product.name,
+          description: product.description || "",
+          sku: product.sku || product.SKU || "",
 
-        // Pricing - use the resolved cost
-        price: product.price || primaryVariant.price || 0,
-        cost: productCost,
+          // Category information - resolved from categories collection
+          category_id: categoryId,
+          category_name: categoryInfo.name,
+          category_image: categoryInfo.image,
 
-        // Stock
-        stock: totalStock,
-        track_stock: product.track_stock || product.trackStock || true,
-        low_stock_threshold:
-          product.low_stock_threshold || product.lowStockThreshold || 10,
+          // Pricing - use the resolved cost
+          price: product.price || primaryVariant.price || 0,
+          cost: productCost,
 
-        // Status
-        is_active: product.isActive !== undefined ? product.isActive : true,
-        available_for_sale:
-          product.availableForSale !== undefined
-            ? product.availableForSale
-            : true,
+          // Stock
+          stock: totalStock,
+          track_stock: product.track_stock || product.trackStock || true,
+          low_stock_threshold:
+            product.low_stock_threshold || product.lowStockThreshold || 10,
 
-        // Variants
-        variants: variants.map((v) => ({
-          variant_id: v.variant_id || v.id,
-          variant_name: v.default_variant
-            ? product.name
-            : v.option_value || v.name || "Default",
-          sku: v.sku || "",
-          stock: v.in_stock || v.inStock || v.stock || v.quantity || 0,
-          price: v.price || product.price || 0,
-          cost: v.cost || productCost || 0, // Use resolved product cost for variants too
-        })),
+          // Status
+          is_active: product.isActive !== undefined ? product.isActive : true,
+          available_for_sale:
+            product.availableForSale !== undefined
+              ? product.availableForSale
+              : true,
 
-        // Timestamps
-        created_at: product.createdAt?.toDate?.()
-          ? product.createdAt.toDate().toISOString()
-          : product.createdAt,
-        updated_at: product.updatedAt?.toDate?.()
-          ? product.updatedAt.toDate().toISOString()
-          : product.updatedAt,
-      };
-    }));
+          // Variants
+          variants: variants.map((v) => ({
+            variant_id: v.variant_id || v.id,
+            variant_name: v.default_variant
+              ? product.name
+              : v.option_value || v.name || "Default",
+            sku: v.sku || "",
+            stock: v.in_stock || v.inStock || v.stock || v.quantity || 0,
+            price: v.price || product.price || 0,
+            cost: v.cost || productCost || 0, // Use resolved product cost for variants too
+          })),
+
+          // Timestamps
+          created_at: product.createdAt?.toDate?.()
+            ? product.createdAt.toDate().toISOString()
+            : product.createdAt,
+          updated_at: product.updatedAt?.toDate?.()
+            ? product.updatedAt.toDate().toISOString()
+            : product.updatedAt,
+        };
+      })
+    );
 
     return {
       items,
