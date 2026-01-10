@@ -586,6 +586,20 @@ export default function POSLayout({ children }) {
               </button>
               <button
                 onClick={() => {
+                  setActiveTab("expenses");
+                  setSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === "expenses"
+                    ? "bg-primary/10 text-primary"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                <DollarSign className="h-5 w-5" />
+                Expenses
+              </button>
+              <button
+                onClick={() => {
                   setActiveTab("settings");
                   setSidebarOpen(false);
                 }}

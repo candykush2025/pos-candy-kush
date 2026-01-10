@@ -28,6 +28,7 @@ import {
   invoicesService,
   purchasesService,
   expensesService,
+  expenseCategoriesService,
   getDocuments,
 } from "@/lib/firebase/firestore";
 import { stockHistoryService } from "@/lib/firebase/stockHistoryService";
@@ -1402,6 +1403,45 @@ async function completePurchase(purchaseId) {
 
 // ==================== EXPENSES HELPER FUNCTIONS ====================
 
+// Format expense response with all fields
+function formatExpenseResponse(expense) {
+  return {
+    id: expense.id,
+    description: expense.description || "",
+    amount: expense.amount || 0,
+    date: expense.date || "",
+    time: expense.time || "",
+    category: expense.category || "Uncategorized",
+    currency: expense.currency || "USD",
+    notes: expense.notes || null,
+    source: expense.source || "POS",
+    
+    // Creator info
+    createdBy: expense.createdBy || expense.employeeId || null,
+    createdByName: expense.createdByName || expense.employeeName || "Unknown",
+    createdByRole: expense.createdByRole || "employee",
+    
+    // Employee info (backward compatibility)
+    employeeId: expense.employeeId || null,
+    employeeName: expense.employeeName || "Unknown",
+    
+    // Approval workflow
+    status: expense.status || "pending",
+    approvedBy: expense.approvedBy || null,
+    approvedByName: expense.approvedByName || null,
+    approvedAt: expense.approvedAt || null,
+    approvalNotes: expense.approvalNotes || null,
+    
+    // Timestamps
+    createdAt: expense.createdAt?.toDate?.()
+      ? expense.createdAt.toDate().toISOString()
+      : new Date().toISOString(),
+    updatedAt: expense.updatedAt?.toDate?.()
+      ? expense.updatedAt.toDate().toISOString()
+      : null,
+  };
+}
+
 // Get all expenses
 async function getExpenses(filters = {}) {
   try {
@@ -1424,28 +1464,89 @@ async function getExpenses(filters = {}) {
       });
     }
 
-    // Format expenses for mobile app
-    const formattedExpenses = filteredExpenses.map((expense) => ({
-      id: expense.id,
-      description: expense.description || "",
-      amount: expense.amount || 0,
-      date: expense.date || "",
-      time: expense.time || "",
-      createdAt: expense.createdAt?.toDate?.()
-        ? expense.createdAt.toDate().toISOString()
-        : new Date().toISOString(),
-    }));
+    // Filter by status if provided
+    if (filters.status) {
+      filteredExpenses = filteredExpenses.filter(
+        (expense) => expense.status === filters.status
+      );
+    }
 
-    // Calculate total
-    const totalExpense = formattedExpenses.reduce(
-      (sum, expense) => sum + expense.amount,
-      0
-    );
+    // Filter by category if provided
+    if (filters.category) {
+      filteredExpenses = filteredExpenses.filter(
+        (expense) => expense.category === filters.category
+      );
+    }
+
+    // Filter by employee/user if provided
+    if (filters.employeeId || filters.userId) {
+      const userId = filters.employeeId || filters.userId;
+      filteredExpenses = filteredExpenses.filter(
+        (expense) => 
+          expense.employeeId === userId || 
+          expense.createdBy === userId
+      );
+    }
+
+    // NEW: Filter by source (POS or BackOffice)
+    if (filters.source) {
+      filteredExpenses = filteredExpenses.filter(
+        (expense) => expense.source === filters.source
+      );
+    }
+
+    // NEW: Filter by currency
+    if (filters.currency) {
+      filteredExpenses = filteredExpenses.filter(
+        (expense) => (expense.currency || "USD") === filters.currency
+      );
+    }
+
+    // NEW: Text search on description
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filteredExpenses = filteredExpenses.filter((expense) =>
+        (expense.description || "").toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Format expenses using the helper function
+    const formattedExpenses = filteredExpenses.map(formatExpenseResponse);
+
+    // Calculate totals by currency
+    const totalsByCurrency = {};
+    const pendingByCurrency = {};
+    
+    formattedExpenses.forEach((expense) => {
+      const curr = expense.currency;
+      if (expense.status === "approved") {
+        totalsByCurrency[curr] = (totalsByCurrency[curr] || 0) + expense.amount;
+      }
+      if (expense.status === "pending") {
+        pendingByCurrency[curr] = (pendingByCurrency[curr] || 0) + expense.amount;
+      }
+    });
+
+    // Calculate total (only approved expenses) - backward compatibility
+    const totalExpense = formattedExpenses
+      .filter((expense) => expense.status === "approved" && expense.currency === "USD")
+      .reduce((sum, expense) => sum + expense.amount, 0);
+
+    // Calculate pending total - backward compatibility
+    const pendingTotal = formattedExpenses
+      .filter((expense) => expense.status === "pending" && expense.currency === "USD")
+      .reduce((sum, expense) => sum + expense.amount, 0);
 
     return {
       expenses: formattedExpenses,
-      total: totalExpense,
+      total: totalExpense, // USD only for backward compatibility
+      pendingTotal, // USD only for backward compatibility
+      totalsByCurrency, // NEW: Totals grouped by currency
+      pendingByCurrency, // NEW: Pending totals grouped by currency
       count: formattedExpenses.length,
+      pendingCount: formattedExpenses.filter((e) => e.status === "pending").length,
+      approvedCount: formattedExpenses.filter((e) => e.status === "approved").length,
+      deniedCount: formattedExpenses.filter((e) => e.status === "denied").length,
     };
   } catch (error) {
     console.error("Error fetching expenses:", error);
@@ -1462,17 +1563,8 @@ async function getExpenseById(expenseId) {
       throw new Error("Expense not found");
     }
 
-    // Format expense
-    return {
-      id: expense.id,
-      description: expense.description || "",
-      amount: expense.amount || 0,
-      date: expense.date || "",
-      time: expense.time || "",
-      createdAt: expense.createdAt?.toDate?.()
-        ? expense.createdAt.toDate().toISOString()
-        : new Date().toISOString(),
-    };
+    // Format expense using helper
+    return formatExpenseResponse(expense);
   } catch (error) {
     console.error("Error fetching expense by ID:", error);
     throw error;
@@ -1483,7 +1575,21 @@ async function getExpenseById(expenseId) {
 async function createExpense(expenseData) {
   try {
     // Validate required fields
-    const { description, amount, date, time } = expenseData;
+    const { 
+      description, 
+      amount, 
+      date, 
+      time, 
+      category, 
+      employeeId, 
+      employeeName,
+      currency,
+      notes,
+      source,
+      createdBy,
+      createdByName,
+      createdByRole
+    } = expenseData;
 
     if (!description || !description.trim()) {
       throw new Error("Description is required");
@@ -1501,12 +1607,32 @@ async function createExpense(expenseData) {
       throw new Error("Time is required");
     }
 
-    // Create expense document
+    // Create expense document with all fields
     const newExpense = {
       description: description.trim(),
       amount,
       date,
       time,
+      category: category || "Uncategorized",
+      currency: currency || "USD", // NEW: Multi-currency support
+      notes: notes || null, // NEW: Internal notes
+      source: source || "POS", // NEW: Source tracking (POS or BackOffice)
+      
+      // Creator tracking
+      createdBy: createdBy || employeeId || null, // NEW: User ID who created
+      createdByName: createdByName || employeeName || "Unknown", // NEW: User name
+      createdByRole: createdByRole || "employee", // NEW: User role
+      
+      // Employee info (for POS expenses)
+      employeeId: employeeId || null,
+      employeeName: employeeName || "Unknown",
+      
+      // Approval workflow - Auto-approve if created by admin
+      status: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? "approved" : "pending",
+      approvedBy: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? createdBy : null,
+      approvedByName: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? createdByName : null,
+      approvedAt: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? new Date().toISOString() : null,
+      approvalNotes: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? "Auto-approved (Admin)" : null,
     };
 
     const createdExpense = await expensesService.create(newExpense);
@@ -1522,9 +1648,9 @@ async function createExpense(expenseData) {
 }
 
 // Edit existing expense
-async function editExpense(expenseData) {
+async function editExpense(expenseData, userRole = "employee") {
   try {
-    const { id, description, amount, date, time } = expenseData;
+    const { id, description, amount, date, time, category, currency, notes } = expenseData;
 
     if (!id) {
       throw new Error("Expense ID is required");
@@ -1534,6 +1660,11 @@ async function editExpense(expenseData) {
     const existingExpense = await expensesService.get(id);
     if (!existingExpense) {
       throw new Error("Expense not found");
+    }
+
+    // Permission check: Only admins can edit approved/denied expenses
+    if (existingExpense.status !== "pending" && userRole !== "admin") {
+      throw new Error("Cannot edit expense that has been approved or denied");
     }
 
     // Validate fields if provided
@@ -1551,18 +1682,15 @@ async function editExpense(expenseData) {
     if (amount !== undefined) updateData.amount = amount;
     if (date !== undefined) updateData.date = date;
     if (time !== undefined) updateData.time = time;
+    if (category !== undefined) updateData.category = category;
+    if (currency !== undefined) updateData.currency = currency; // NEW
+    if (notes !== undefined) updateData.notes = notes; // NEW
 
     await expensesService.update(id, updateData);
 
     // Return updated expense
     const updatedExpense = await expensesService.get(id);
-    return {
-      id: updatedExpense.id,
-      description: updatedExpense.description || "",
-      amount: updatedExpense.amount || 0,
-      date: updatedExpense.date || "",
-      time: updatedExpense.time || "",
-    };
+    return formatExpenseResponse(updatedExpense);
   } catch (error) {
     console.error("Error editing expense:", error);
     throw error;
@@ -1570,7 +1698,7 @@ async function editExpense(expenseData) {
 }
 
 // Delete expense
-async function deleteExpense(expenseId) {
+async function deleteExpense(expenseId, userRole = "employee") {
   try {
     if (!expenseId) {
       throw new Error("Expense ID is required");
@@ -1587,6 +1715,293 @@ async function deleteExpense(expenseId) {
     return { success: true, message: "Expense deleted successfully" };
   } catch (error) {
     console.error("Error deleting expense:", error);
+    throw error;
+  }
+}
+
+// Approve expense
+async function approveExpense(approvalData) {
+  try {
+    const { expenseId, approvedBy, approvedByName, notes } = approvalData;
+
+    if (!expenseId) {
+      throw new Error("Expense ID is required");
+    }
+
+    if (!approvedBy) {
+      throw new Error("Approver ID is required");
+    }
+
+    // Check if expense exists
+    const existingExpense = await expensesService.get(expenseId);
+    if (!existingExpense) {
+      throw new Error("Expense not found");
+    }
+
+    // Check if already approved or denied
+    if (existingExpense.status !== "pending") {
+      throw new Error(`Expense has already been ${existingExpense.status}`);
+    }
+
+    // Update expense with approval
+    const updateData = {
+      status: "approved",
+      approvedBy,
+      approvedByName: approvedByName || "Admin",
+      approvedAt: new Date().toISOString(),
+      approvalNotes: notes || null,
+    };
+
+    await expensesService.update(expenseId, updateData);
+
+    // Return updated expense
+    const updatedExpense = await expensesService.get(expenseId);
+    return updatedExpense;
+  } catch (error) {
+    console.error("Error approving expense:", error);
+    throw error;
+  }
+}
+
+// Deny expense
+async function denyExpense(denialData) {
+  try {
+    const { expenseId, deniedBy, deniedByName, notes } = denialData;
+
+    if (!expenseId) {
+      throw new Error("Expense ID is required");
+    }
+
+    if (!deniedBy) {
+      throw new Error("Denier ID is required");
+    }
+
+    // Check if expense exists
+    const existingExpense = await expensesService.get(expenseId);
+    if (!existingExpense) {
+      throw new Error("Expense not found");
+    }
+
+    // Check if already approved or denied
+    if (existingExpense.status !== "pending") {
+      throw new Error(`Expense has already been ${existingExpense.status}`);
+    }
+
+    // Update expense with denial
+    const updateData = {
+      status: "denied",
+      approvedBy: deniedBy,
+      approvedByName: deniedByName || "Admin",
+      approvedAt: new Date().toISOString(),
+      approvalNotes: notes || null,
+    };
+
+    await expensesService.update(expenseId, updateData);
+
+    // Return updated expense
+    const updatedExpense = await expensesService.get(expenseId);
+    return updatedExpense;
+  } catch (error) {
+    console.error("Error denying expense:", error);
+    throw error;
+  }
+}
+
+// ==================== EXPENSE CATEGORIES HELPER FUNCTIONS ====================
+
+// Get all expense categories
+async function getExpenseCategories() {
+  try {
+    const categories = await expenseCategoriesService.getAll({
+      orderBy: ["name", "asc"],
+    });
+
+    return categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      description: category.description || "",
+      active: category.active !== undefined ? category.active : true,
+      createdAt: category.createdAt?.toDate?.()
+        ? category.createdAt.toDate().toISOString()
+        : category.createdAt,
+      updatedAt: category.updatedAt?.toDate?.()
+        ? category.updatedAt.toDate().toISOString()
+        : category.updatedAt,
+    }));
+  } catch (error) {
+    console.error("Error getting expense categories:", error);
+    throw error;
+  }
+}
+
+// Get expense category by ID
+async function getExpenseCategoryById(categoryId) {
+  try {
+    if (!categoryId) {
+      throw new Error("Category ID is required");
+    }
+
+    const category = await expenseCategoriesService.get(categoryId);
+    if (!category) {
+      throw new Error("Category not found");
+    }
+
+    return {
+      id: category.id,
+      name: category.name,
+      description: category.description || "",
+      active: category.active !== undefined ? category.active : true,
+      createdAt: category.createdAt?.toDate?.()
+        ? category.createdAt.toDate().toISOString()
+        : category.createdAt,
+      updatedAt: category.updatedAt?.toDate?.()
+        ? category.updatedAt.toDate().toISOString()
+        : category.updatedAt,
+    };
+  } catch (error) {
+    console.error("Error getting expense category:", error);
+    throw error;
+  }
+}
+
+// Create expense category
+async function createExpenseCategory(categoryData) {
+  try {
+    const { name, description, active } = categoryData;
+
+    if (!name || name.trim() === "") {
+      throw new Error("Category name is required");
+    }
+
+    // Check for duplicate category names
+    const existingCategories = await expenseCategoriesService.getAll();
+    const duplicate = existingCategories.find(
+      (cat) => cat.name.toLowerCase() === name.trim().toLowerCase()
+    );
+
+    if (duplicate) {
+      throw new Error("A category with this name already exists");
+    }
+
+    const newCategory = {
+      name: name.trim(),
+      description: description?.trim() || "",
+      active: active !== undefined ? active : true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const categoryId = await expenseCategoriesService.create(newCategory);
+
+    return {
+      id: categoryId,
+      ...newCategory,
+      createdAt: newCategory.createdAt.toISOString(),
+      updatedAt: newCategory.updatedAt.toISOString(),
+    };
+  } catch (error) {
+    console.error("Error creating expense category:", error);
+    throw error;
+  }
+}
+
+// Edit expense category
+async function editExpenseCategory(categoryData) {
+  try {
+    const { categoryId, name, description, active } = categoryData;
+
+    if (!categoryId) {
+      throw new Error("Category ID is required");
+    }
+
+    // Check if category exists
+    const existingCategory = await expenseCategoriesService.get(categoryId);
+    if (!existingCategory) {
+      throw new Error("Category not found");
+    }
+
+    // Check for duplicate names (excluding current category)
+    if (name && name.trim() !== existingCategory.name) {
+      const allCategories = await expenseCategoriesService.getAll();
+      const duplicate = allCategories.find(
+        (cat) =>
+          cat.id !== categoryId &&
+          cat.name.toLowerCase() === name.trim().toLowerCase()
+      );
+
+      if (duplicate) {
+        throw new Error("A category with this name already exists");
+      }
+    }
+
+    const updateData = {
+      updatedAt: new Date(),
+    };
+
+    if (name !== undefined && name.trim() !== "") {
+      updateData.name = name.trim();
+    }
+
+    if (description !== undefined) {
+      updateData.description = description.trim();
+    }
+
+    if (active !== undefined) {
+      updateData.active = active;
+    }
+
+    await expenseCategoriesService.update(categoryId, updateData);
+
+    // Return updated category
+    const updatedCategory = await expenseCategoriesService.get(categoryId);
+    return {
+      id: updatedCategory.id,
+      name: updatedCategory.name,
+      description: updatedCategory.description || "",
+      active: updatedCategory.active !== undefined ? updatedCategory.active : true,
+      createdAt: updatedCategory.createdAt?.toDate?.()
+        ? updatedCategory.createdAt.toDate().toISOString()
+        : updatedCategory.createdAt,
+      updatedAt: updatedCategory.updatedAt?.toDate?.()
+        ? updatedCategory.updatedAt.toDate().toISOString()
+        : updatedCategory.updatedAt,
+    };
+  } catch (error) {
+    console.error("Error editing expense category:", error);
+    throw error;
+  }
+}
+
+// Delete expense category
+async function deleteExpenseCategory(categoryId) {
+  try {
+    if (!categoryId) {
+      throw new Error("Category ID is required");
+    }
+
+    // Check if category exists
+    const existingCategory = await expenseCategoriesService.get(categoryId);
+    if (!existingCategory) {
+      throw new Error("Category not found");
+    }
+
+    // Check if category is being used by any expenses
+    const allExpenses = await expensesService.getAll();
+    const expensesUsingCategory = allExpenses.filter(
+      (expense) => expense.category === existingCategory.name
+    );
+
+    if (expensesUsingCategory.length > 0) {
+      throw new Error(
+        `Cannot delete category. It is being used by ${expensesUsingCategory.length} expense(s)`
+      );
+    }
+
+    await expenseCategoriesService.delete(categoryId);
+
+    return { success: true, message: "Category deleted successfully" };
+  } catch (error) {
+    console.error("Error deleting expense category:", error);
     throw error;
   }
 }
@@ -2065,8 +2480,8 @@ export async function OPTIONS() {
   });
 }
 
-// Authentication middleware
-function authenticateRequest(request) {
+// Authentication middleware - requires valid token (any role)
+function authenticateRequest(request, requireAdmin = false) {
   const authHeader = request.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return { error: "Missing or invalid authorization header" };
@@ -2079,7 +2494,8 @@ function authenticateRequest(request) {
     return { error: "Invalid or expired token" };
   }
 
-  if (user.role !== "admin") {
+  // If admin is required, check role
+  if (requireAdmin && user.role !== "admin") {
     return { error: "Admin access required" };
   }
 
@@ -2147,8 +2563,8 @@ export async function GET(request) {
       );
     }
 
-    // Authenticate request for all other actions
-    const auth = authenticateRequest(request);
+    // Authenticate request for all other actions (employees can read data)
+    const auth = authenticateRequest(request, false); // false = allow employees
     if (auth.error) {
       return Response.json(
         { success: false, error: auth.error },
@@ -2176,6 +2592,8 @@ export async function GET(request) {
       "get-purchase",
       "get-expenses",
       "get-expense",
+      "get-expense-categories",
+      "get-expense-category",
       "get-items",
       "get-categories",
     ];
@@ -2448,6 +2866,13 @@ export async function GET(request) {
         const filters = {
           start_date: searchParams.get("start_date"),
           end_date: searchParams.get("end_date"),
+          status: searchParams.get("status"), // pending, approved, denied
+          category: searchParams.get("category"),
+          employeeId: searchParams.get("employeeId"),
+          userId: searchParams.get("userId"), // NEW: Alternative to employeeId
+          source: searchParams.get("source"), // NEW: POS or BackOffice
+          currency: searchParams.get("currency"), // NEW: Filter by currency
+          search: searchParams.get("search"), // NEW: Text search on description
         };
 
         const expensesData = await getExpenses(filters);
@@ -2502,6 +2927,67 @@ export async function GET(request) {
           {
             success: false,
             error: error.message || "Failed to retrieve expense",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get all expense categories
+    if (action === "get-expense-categories") {
+      try {
+        const categories = await getExpenseCategories();
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-expense-categories",
+            generated_at: new Date().toISOString(),
+            data: categories,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve expense categories",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get single expense category by ID
+    if (action === "get-expense-category") {
+      try {
+        const categoryId = searchParams.get("id");
+        if (!categoryId) {
+          return Response.json(
+            {
+              success: false,
+              error: "Category ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const categoryData = await getExpenseCategoryById(categoryId);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-expense-category",
+            generated_at: new Date().toISOString(),
+            data: categoryData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve expense category",
           },
           { status: 200, headers: corsHeaders }
         );
@@ -3082,6 +3568,199 @@ export async function POST(request) {
       }
     }
 
+    // Approve expense
+    if (action === "approve-expense") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { expenseId, approvedBy, approvedByName, notes } = requestBody;
+        const approvedExpense = await approveExpense({
+          expenseId,
+          approvedBy,
+          approvedByName,
+          notes,
+        });
+
+        return Response.json(
+          {
+            success: true,
+            action: "approve-expense",
+            data: {
+              expense: approvedExpense,
+            },
+            message: "Expense approved successfully",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error approving expense:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to approve expense",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Deny expense
+    if (action === "deny-expense") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { expenseId, deniedBy, deniedByName, notes } = requestBody;
+        const deniedExpense = await denyExpense({
+          expenseId,
+          deniedBy,
+          deniedByName,
+          notes,
+        });
+
+        return Response.json(
+          {
+            success: true,
+            action: "deny-expense",
+            data: {
+              expense: deniedExpense,
+            },
+            message: "Expense denied successfully",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error denying expense:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to deny expense",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Create expense category
+    if (action === "create-expense-category") {
+      // Authenticate request (admin only)
+      const auth = authenticateRequest(request, true);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const categoryData = requestBody;
+        const result = await createExpenseCategory(categoryData);
+
+        return Response.json(
+          {
+            success: true,
+            action: "create-expense-category",
+            message: "Expense category created successfully",
+            data: result,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error creating expense category:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to create expense category",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Edit expense category
+    if (action === "edit-expense-category") {
+      // Authenticate request (admin only)
+      const auth = authenticateRequest(request, true);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const categoryData = requestBody;
+        const result = await editExpenseCategory(categoryData);
+
+        return Response.json(
+          {
+            success: true,
+            action: "edit-expense-category",
+            message: "Expense category updated successfully",
+            data: result,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error editing expense category:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to edit expense category",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Delete expense category
+    if (action === "delete-expense-category") {
+      // Authenticate request (admin only)
+      const auth = authenticateRequest(request, true);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { categoryId } = requestBody;
+        const result = await deleteExpenseCategory(categoryId);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-expense-category",
+            message: result.message,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error deleting expense category:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to delete expense category",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
     // Invalid action for POST
     return Response.json(
       {
@@ -3099,6 +3778,11 @@ export async function POST(request) {
           "create-expense",
           "edit-expense",
           "delete-expense",
+          "approve-expense",
+          "deny-expense",
+          "create-expense-category",
+          "edit-expense-category",
+          "delete-expense-category",
         ],
       },
       { status: 400, headers: corsHeaders }

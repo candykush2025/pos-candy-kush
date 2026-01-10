@@ -39,6 +39,7 @@ export const COLLECTIONS = {
   INVOICES: "invoices",
   PURCHASES: "purchases",
   EXPENSES: "expenses",
+  EXPENSE_CATEGORIES: "expense_categories",
 };
 
 /**
@@ -585,6 +586,17 @@ export const expensesService = {
   delete: async (id) => deleteDocument(COLLECTIONS.EXPENSES, id),
 };
 
+/**
+ * Expense Categories Service
+ */
+export const expenseCategoriesService = {
+  create: async (data) => createDocument(COLLECTIONS.EXPENSE_CATEGORIES, data),
+  get: async (id) => getDocument(COLLECTIONS.EXPENSE_CATEGORIES, id),
+  getAll: async () => getDocuments(COLLECTIONS.EXPENSE_CATEGORIES),
+  update: async (id, data) => updateDocument(COLLECTIONS.EXPENSE_CATEGORIES, id, data),
+  delete: async (id) => deleteDocument(COLLECTIONS.EXPENSE_CATEGORIES, id),
+};
+
 export default {
   createDocument,
   getDocument,
@@ -602,4 +614,5 @@ export default {
   customTabs: customTabsService,
   purchases: purchasesService,
   expenses: expensesService,
+  expenseCategories: expenseCategoriesService,
 };

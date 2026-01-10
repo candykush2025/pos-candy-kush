@@ -31,6 +31,7 @@ import ProductsSection from "@/components/pos/ProductsSection";
 import SettingsSection from "@/components/pos/SettingsSection";
 import ShiftsSection from "@/components/pos/ShiftsSection";
 import KioskOrdersPanel from "@/components/pos/KioskOrdersPanel";
+import ExpensesSection from "@/components/pos/ExpensesSection";
 
 // Cashier Login Component
 function CashierLogin({ onLogin }) {
@@ -404,7 +405,7 @@ export default function SalesPage() {
   useEffect(() => {
     const menuParam = searchParams.get("menu");
     if (menuParam) {
-      // Valid menu tabs: sales, tickets, customers, history, shifts, products, settings, kiosk-orders
+      // Valid menu tabs: sales, tickets, customers, history, shifts, products, settings, kiosk-orders, expenses
       const validTabs = [
         "sales",
         "tickets",
@@ -414,6 +415,7 @@ export default function SalesPage() {
         "products",
         "settings",
         "kiosk-orders",
+        "expenses",
       ];
       if (validTabs.includes(menuParam)) {
         setActiveTab(menuParam);
@@ -458,6 +460,10 @@ export default function SalesPage() {
   }, []);
 
   const handleCashierLogin = (user, shift = null) => {
+    // Set auth in store to generate token for API calls
+    const { setAuth } = useAuthStore.getState();
+    setAuth(user, null, null); // This will create a JWT token
+    
     // Check if switching employees
     const currentCashier = localStorage.getItem("pos_cashier");
     if (currentCashier) {
@@ -556,6 +562,7 @@ export default function SalesPage() {
       {activeTab === "kiosk-orders" && (
         <KioskOrdersPanel currentUser={cashier} />
       )}
+      {activeTab === "expenses" && <ExpensesSection cashier={cashier} />}
     </div>
   );
 }
