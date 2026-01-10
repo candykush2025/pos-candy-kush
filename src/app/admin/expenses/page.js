@@ -84,6 +84,20 @@ export default function ExpensesSection() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
+  // Categories management states
+  const [showCategoriesDialog, setShowCategoriesDialog] = useState(false);
+  const [showCategoryFormDialog, setShowCategoryFormDialog] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: "",
+    description: "",
+  });
+  const [showDeleteCategoryDialog, setShowDeleteCategoryDialog] =
+    useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState(null);
+  const [allCategories, setAllCategories] = useState([]); // Full category objects with metadata
+  const [categoryStats, setCategoryStats] = useState({}); // Usage statistics
+
   // Get last used currency from localStorage or use default
   const getInitialCurrency = () => {
     if (typeof window !== "undefined") {
@@ -128,6 +142,10 @@ export default function ExpensesSection() {
 
       if (data.success) {
         setExpenses(data.data.expenses || []);
+        // Recalculate category stats when expenses change
+        if (allCategories.length > 0) {
+          calculateCategoryStats(allCategories);
+        }
       } else {
         toast.error("Failed to load expenses");
       }
@@ -141,6 +159,10 @@ export default function ExpensesSection() {
 
   const fetchCategories = async () => {
     try {
+      console.log(
+        "Fetching categories with token:",
+        token ? "present" : "missing"
+      );
       const response = await fetch(
         "/api/mobile?action=get-expense-categories",
         {
@@ -150,10 +172,16 @@ export default function ExpensesSection() {
           },
         }
       );
+      console.log("Categories response status:", response.status);
+
       const data = await response.json();
 
       if (data.success) {
-        // Filter only active categories
+        console.log("Categories API response:", data);
+        // Store full category objects for management
+        setAllCategories(data.data || []);
+
+        // Filter only active categories for expense forms
         const activeCategories = (data.data || [])
           .filter((cat) => cat.active !== false)
           .map((cat) => cat.name);
@@ -169,16 +197,185 @@ export default function ExpensesSection() {
         ) {
           setFormData((prev) => ({ ...prev, category: activeCategories[0] }));
         }
+
+        // Calculate category usage statistics
+        calculateCategoryStats(data.data || []);
       } else {
         console.error("Failed to load categories:", data.error);
         // Fallback to default category
         setCategories(["General"]);
+        setAllCategories([]);
       }
     } catch (error) {
       console.error("Error fetching categories:", error);
       // Fallback to default category
       setCategories(["General"]);
+      setAllCategories([]);
     }
+  };
+
+  // Calculate usage statistics for categories
+  const calculateCategoryStats = (categories) => {
+    const stats = {};
+    categories.forEach((category) => {
+      const usageCount = expenses.filter(
+        (expense) => expense.category === category.name
+      ).length;
+      stats[category.name] = usageCount;
+    });
+    setCategoryStats(stats);
+  };
+
+  // Handle category creation
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+
+    if (!categoryFormData.name.trim()) {
+      toast.error("Category name is required");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const response = await fetch(
+        "/api/mobile?action=create-expense-category",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: categoryFormData.name.trim(),
+            description: categoryFormData.description?.trim() || "",
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Category created successfully");
+        setShowCategoryFormDialog(false);
+        setCategoryFormData({ name: "", description: "" });
+        fetchCategories(); // Refresh categories
+      } else {
+        toast.error(data.error || "Failed to create category");
+      }
+    } catch (error) {
+      console.error("Error creating category:", error);
+      toast.error("Error creating category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle category update
+  const handleUpdateCategory = async (e) => {
+    e.preventDefault();
+
+    if (!editingCategory || !categoryFormData.name.trim()) {
+      toast.error("Category name is required");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const response = await fetch(
+        "/api/mobile?action=update-expense-category",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: editingCategory.id,
+            name: categoryFormData.name.trim(),
+            description: categoryFormData.description?.trim() || "",
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Category updated successfully");
+        setShowCategoryFormDialog(false);
+        setEditingCategory(null);
+        setCategoryFormData({ name: "", description: "" });
+        fetchCategories(); // Refresh categories
+      } else {
+        toast.error(data.error || "Failed to update category");
+      }
+    } catch (error) {
+      console.error("Error updating category:", error);
+      toast.error("Error updating category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle category deletion
+  const handleDeleteCategory = async () => {
+    if (!categoryToDelete) return;
+
+    try {
+      setProcessingAction(true);
+
+      const response = await fetch(
+        "/api/mobile?action=delete-expense-category",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: categoryToDelete.id,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Category deleted successfully");
+        setShowDeleteCategoryDialog(false);
+        setCategoryToDelete(null);
+        fetchCategories(); // Refresh categories
+      } else {
+        toast.error(data.error || "Failed to delete category");
+      }
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      toast.error("Error deleting category");
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  // Open category form for editing
+  const openCategoryForm = (category = null) => {
+    if (category) {
+      setEditingCategory(category);
+      setCategoryFormData({
+        name: category.name || "",
+        description: category.description || "",
+      });
+    } else {
+      setEditingCategory(null);
+      setCategoryFormData({ name: "", description: "" });
+    }
+    setShowCategoryFormDialog(true);
+  };
+
+  // Open delete confirmation
+  const openDeleteConfirmation = (category) => {
+    setCategoryToDelete(category);
+    setShowDeleteCategoryDialog(true);
   };
 
   const handleSubmit = async (e) => {
@@ -395,6 +592,16 @@ export default function ExpensesSection() {
         "Update functionality coming soon - please delete and recreate for now"
       );
       setShowEditDialog(false);
+      setEditingExpense(null);
+      // Reset form but keep the currency
+      const savedCurrency = formData.currency;
+      setFormData({
+        description: "",
+        amount: "",
+        category: "General",
+        currency: savedCurrency, // Keep the last used currency
+        notes: "",
+      });
     } catch (error) {
       console.error("Error updating expense:", error);
       toast.error("Error updating expense");
@@ -534,6 +741,109 @@ export default function ExpensesSection() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Categories Management Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Expense Categories</CardTitle>
+                <CardDescription>
+                  Manage expense categories used throughout the system
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCategoriesDialog(true)}
+                  size="sm"
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  View All
+                </Button>
+                <Button
+                  onClick={() => openCategoryForm()}
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Category
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {allCategories
+                .filter((cat) => cat.active !== false)
+                .slice(0, 6)
+                .map((category) => (
+                  <div
+                    key={category.id}
+                    className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 dark:text-white truncate">
+                        {category.name}
+                      </div>
+                      {category.description && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {category.description}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {categoryStats[category.name] || 0} expenses
+                      </div>
+                    </div>
+                    <div className="flex gap-1 ml-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openCategoryForm(category)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <span className="sr-only">Edit</span>
+                        ✏️
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDeleteConfirmation(category)}
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                        disabled={(categoryStats[category.name] || 0) > 0}
+                      >
+                        <span className="sr-only">Delete</span>
+                        🗑️
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              {allCategories.filter((cat) => cat.active !== false).length ===
+                0 && (
+                <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">
+                  <p>
+                    No categories found. Create your first category to get
+                    started.
+                  </p>
+                </div>
+              )}
+              {allCategories.filter((cat) => cat.active !== false).length >
+                6 && (
+                <div className="col-span-full text-center">
+                  <Button
+                    variant="link"
+                    onClick={() => setShowCategoriesDialog(true)}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    View all{" "}
+                    {allCategories.filter((cat) => cat.active !== false).length}{" "}
+                    categories
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -1489,6 +1799,416 @@ export default function ExpensesSection() {
                     <>
                       <XCircle className="mr-2 h-4 w-4" />
                       Deny Expense
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Expense Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Expense</DialogTitle>
+            <DialogDescription>
+              Update the expense details. Note: Update functionality is currently limited.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description *</Label>
+              <Input
+                id="edit-description"
+                placeholder="e.g., Office supplies - printer paper"
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-amount">Amount *</Label>
+              <Input
+                id="edit-amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="0.00"
+                value={formData.amount}
+                onChange={(e) =>
+                  setFormData({ ...formData, amount: e.target.value })
+                }
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-currency">Currency</Label>
+              <Select
+                value={formData.currency}
+                onValueChange={(value) => {
+                  setFormData({ ...formData, currency: value });
+                  // Save to localStorage immediately when user changes currency
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("lastUsedCurrency", value);
+                  }
+                }}
+                disabled={submitting}
+              >
+                <SelectTrigger id="edit-currency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((curr) => (
+                    <SelectItem key={curr.code} value={curr.code}>
+                      {curr.code} - {curr.name} ({curr.symbol})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-category">Category</Label>
+              <Select
+                value={formData.category}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, category: value })
+                }
+                disabled={submitting}
+              >
+                <SelectTrigger id="edit-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-notes">Notes (Optional)</Label>
+              <Textarea
+                id="edit-notes"
+                placeholder="Additional details or context..."
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+                disabled={submitting}
+                rows={3}
+              />
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                <AlertCircle className="inline h-4 w-4 mr-1" />
+                Update functionality is currently limited. For now, please delete and recreate expenses to make changes.
+              </p>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowEditDialog(false)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                    Update (Limited)
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Categories Management Dialog */}
+      <Dialog
+        open={showCategoriesDialog}
+        onOpenChange={setShowCategoriesDialog}
+      >
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>All Expense Categories</DialogTitle>
+            <DialogDescription>
+              Complete list of all expense categories in the system
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {allCategories.filter((cat) => cat.active !== false).length}{" "}
+                active categories
+              </p>
+              <Button
+                onClick={() => {
+                  setShowCategoriesDialog(false);
+                  openCategoryForm();
+                }}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Category
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {allCategories
+                .filter((cat) => cat.active !== false)
+                .map((category) => (
+                  <div
+                    key={category.id}
+                    className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {category.name}
+                      </div>
+                      {category.description && (
+                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {category.description}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        {categoryStats[category.name] || 0} expenses • Created{" "}
+                        {format(new Date(category.createdAt), "MMM dd, yyyy")}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 ml-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowCategoriesDialog(false);
+                          openCategoryForm(category);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          setShowCategoriesDialog(false);
+                          openDeleteConfirmation(category);
+                        }}
+                        disabled={(categoryStats[category.name] || 0) > 0}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              {allCategories.filter((cat) => cat.active !== false).length ===
+                0 && (
+                <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">
+                  <p>
+                    No categories found. Create your first category to get
+                    started.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Form Dialog */}
+      <Dialog
+        open={showCategoryFormDialog}
+        onOpenChange={setShowCategoryFormDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory ? "Edit Category" : "Add New Category"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCategory
+                ? "Update the category details"
+                : "Create a new expense category for organizing expenses"}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={
+              editingCategory ? handleUpdateCategory : handleCreateCategory
+            }
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="category-name">Category Name *</Label>
+              <Input
+                id="category-name"
+                placeholder="e.g., Office Supplies, Travel, Equipment"
+                value={categoryFormData.name}
+                onChange={(e) =>
+                  setCategoryFormData({
+                    ...categoryFormData,
+                    name: e.target.value,
+                  })
+                }
+                disabled={submitting}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category-description">
+                Description (Optional)
+              </Label>
+              <Textarea
+                id="category-description"
+                placeholder="Brief description of this category..."
+                value={categoryFormData.description}
+                onChange={(e) =>
+                  setCategoryFormData({
+                    ...categoryFormData,
+                    description: e.target.value,
+                  })
+                }
+                disabled={submitting}
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCategoryFormDialog(false);
+                  setEditingCategory(null);
+                  setCategoryFormData({ name: "", description: "" });
+                }}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {editingCategory ? "Updating..." : "Creating..."}
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    {editingCategory ? "Update Category" : "Create Category"}
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Category Confirmation Dialog */}
+      <Dialog
+        open={showDeleteCategoryDialog}
+        onOpenChange={setShowDeleteCategoryDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Category</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this category? This action cannot
+              be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {categoryToDelete && (
+            <div className="space-y-4">
+              <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
+                <h4 className="font-semibold text-red-900 dark:text-red-100">
+                  {categoryToDelete.name}
+                </h4>
+                {categoryToDelete.description && (
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                    {categoryToDelete.description}
+                  </p>
+                )}
+                <div className="text-sm text-red-700 dark:text-red-300 mt-2">
+                  <strong>{categoryStats[categoryToDelete.name] || 0}</strong>{" "}
+                  expenses currently use this category
+                </div>
+              </div>
+
+              {(categoryStats[categoryToDelete.name] || 0) > 0 ? (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                    <AlertCircle className="inline h-4 w-4 mr-1" />
+                    This category cannot be deleted because it is currently used
+                    by {categoryStats[categoryToDelete.name]} expense(s). Remove
+                    all expenses from this category first.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <AlertCircle className="inline h-4 w-4 mr-1" />
+                    Deleting this category will permanently remove it from the
+                    system.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteCategoryDialog(false);
+                    setCategoryToDelete(null);
+                  }}
+                  disabled={processingAction}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDeleteCategory}
+                  disabled={
+                    processingAction ||
+                    (categoryStats[categoryToDelete.name] || 0) > 0
+                  }
+                  variant="destructive"
+                >
+                  {processingAction ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="mr-2 h-4 w-4" />
+                      Delete Category
                     </>
                   )}
                 </Button>

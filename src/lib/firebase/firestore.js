@@ -570,7 +570,7 @@ export const customTabsService = {
 export const purchasesService = {
   create: async (data) => createDocument(COLLECTIONS.PURCHASES, data),
   get: async (id) => getDocument(COLLECTIONS.PURCHASES, id),
-  getAll: async () => getDocuments(COLLECTIONS.PURCHASES),
+  getAll: async (options) => getDocuments(COLLECTIONS.PURCHASES, options),
   update: async (id, data) => updateDocument(COLLECTIONS.PURCHASES, id, data),
   delete: async (id) => deleteDocument(COLLECTIONS.PURCHASES, id),
 };
@@ -581,7 +581,7 @@ export const purchasesService = {
 export const expensesService = {
   create: async (data) => createDocument(COLLECTIONS.EXPENSES, data),
   get: async (id) => getDocument(COLLECTIONS.EXPENSES, id),
-  getAll: async () => getDocuments(COLLECTIONS.EXPENSES),
+  getAll: async (options) => getDocuments(COLLECTIONS.EXPENSES, options),
   update: async (id, data) => updateDocument(COLLECTIONS.EXPENSES, id, data),
   delete: async (id) => deleteDocument(COLLECTIONS.EXPENSES, id),
 };
@@ -592,8 +592,10 @@ export const expensesService = {
 export const expenseCategoriesService = {
   create: async (data) => createDocument(COLLECTIONS.EXPENSE_CATEGORIES, data),
   get: async (id) => getDocument(COLLECTIONS.EXPENSE_CATEGORIES, id),
-  getAll: async () => getDocuments(COLLECTIONS.EXPENSE_CATEGORIES),
-  update: async (id, data) => updateDocument(COLLECTIONS.EXPENSE_CATEGORIES, id, data),
+  getAll: async (options) =>
+    getDocuments(COLLECTIONS.EXPENSE_CATEGORIES, options),
+  update: async (id, data) =>
+    updateDocument(COLLECTIONS.EXPENSE_CATEGORIES, id, data),
   delete: async (id) => deleteDocument(COLLECTIONS.EXPENSE_CATEGORIES, id),
 };
 

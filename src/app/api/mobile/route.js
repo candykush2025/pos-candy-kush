@@ -12,6 +12,13 @@
  * - GET /api/mobile?action=stock-history - Complete stock movement history
  * - GET /api/mobile?action=get-items - Get ALL products/items with category info (including out-of-stock items)
  * - GET /api/mobile?action=get-categories - Get all categories
+ * - GET /api/mobile?action=get-expenses - Get all expenses with optional filters
+ * - GET /api/mobile?action=get-expense&id={expenseId} - Get single expense by ID
+ * - GET /api/mobile?action=get-expense-categories - Get all expense categories
+ * - GET /api/mobile?action=get-expense-category&id={categoryId} - Get single expense category by ID
+ * - POST /api/mobile?action=create-expense-category - Create a new expense category
+ * - POST /api/mobile?action=update-expense-category - Update an expense category
+ * - POST /api/mobile?action=delete-expense-category - Delete an expense category
  *
  * Authentication: All endpoints except login require JWT token in Authorization header
  * Filter Parameters (for all sales endpoints):
@@ -1415,23 +1422,23 @@ function formatExpenseResponse(expense) {
     currency: expense.currency || "USD",
     notes: expense.notes || null,
     source: expense.source || "POS",
-    
+
     // Creator info
     createdBy: expense.createdBy || expense.employeeId || null,
     createdByName: expense.createdByName || expense.employeeName || "Unknown",
     createdByRole: expense.createdByRole || "employee",
-    
+
     // Employee info (backward compatibility)
     employeeId: expense.employeeId || null,
     employeeName: expense.employeeName || "Unknown",
-    
+
     // Approval workflow
     status: expense.status || "pending",
     approvedBy: expense.approvedBy || null,
     approvedByName: expense.approvedByName || null,
     approvedAt: expense.approvedAt || null,
     approvalNotes: expense.approvalNotes || null,
-    
+
     // Timestamps
     createdAt: expense.createdAt?.toDate?.()
       ? expense.createdAt.toDate().toISOString()
@@ -1482,9 +1489,8 @@ async function getExpenses(filters = {}) {
     if (filters.employeeId || filters.userId) {
       const userId = filters.employeeId || filters.userId;
       filteredExpenses = filteredExpenses.filter(
-        (expense) => 
-          expense.employeeId === userId || 
-          expense.createdBy === userId
+        (expense) =>
+          expense.employeeId === userId || expense.createdBy === userId
       );
     }
 
@@ -1516,25 +1522,30 @@ async function getExpenses(filters = {}) {
     // Calculate totals by currency
     const totalsByCurrency = {};
     const pendingByCurrency = {};
-    
+
     formattedExpenses.forEach((expense) => {
       const curr = expense.currency;
       if (expense.status === "approved") {
         totalsByCurrency[curr] = (totalsByCurrency[curr] || 0) + expense.amount;
       }
       if (expense.status === "pending") {
-        pendingByCurrency[curr] = (pendingByCurrency[curr] || 0) + expense.amount;
+        pendingByCurrency[curr] =
+          (pendingByCurrency[curr] || 0) + expense.amount;
       }
     });
 
     // Calculate total (only approved expenses) - backward compatibility
     const totalExpense = formattedExpenses
-      .filter((expense) => expense.status === "approved" && expense.currency === "USD")
+      .filter(
+        (expense) => expense.status === "approved" && expense.currency === "USD"
+      )
       .reduce((sum, expense) => sum + expense.amount, 0);
 
     // Calculate pending total - backward compatibility
     const pendingTotal = formattedExpenses
-      .filter((expense) => expense.status === "pending" && expense.currency === "USD")
+      .filter(
+        (expense) => expense.status === "pending" && expense.currency === "USD"
+      )
       .reduce((sum, expense) => sum + expense.amount, 0);
 
     return {
@@ -1544,9 +1555,12 @@ async function getExpenses(filters = {}) {
       totalsByCurrency, // NEW: Totals grouped by currency
       pendingByCurrency, // NEW: Pending totals grouped by currency
       count: formattedExpenses.length,
-      pendingCount: formattedExpenses.filter((e) => e.status === "pending").length,
-      approvedCount: formattedExpenses.filter((e) => e.status === "approved").length,
-      deniedCount: formattedExpenses.filter((e) => e.status === "denied").length,
+      pendingCount: formattedExpenses.filter((e) => e.status === "pending")
+        .length,
+      approvedCount: formattedExpenses.filter((e) => e.status === "approved")
+        .length,
+      deniedCount: formattedExpenses.filter((e) => e.status === "denied")
+        .length,
     };
   } catch (error) {
     console.error("Error fetching expenses:", error);
@@ -1575,20 +1589,20 @@ async function getExpenseById(expenseId) {
 async function createExpense(expenseData) {
   try {
     // Validate required fields
-    const { 
-      description, 
-      amount, 
-      date, 
-      time, 
-      category, 
-      employeeId, 
+    const {
+      description,
+      amount,
+      date,
+      time,
+      category,
+      employeeId,
       employeeName,
       currency,
       notes,
       source,
       createdBy,
       createdByName,
-      createdByRole
+      createdByRole,
     } = expenseData;
 
     if (!description || !description.trim()) {
@@ -1617,22 +1631,47 @@ async function createExpense(expenseData) {
       currency: currency || "USD", // NEW: Multi-currency support
       notes: notes || null, // NEW: Internal notes
       source: source || "POS", // NEW: Source tracking (POS or BackOffice)
-      
+
       // Creator tracking
       createdBy: createdBy || employeeId || null, // NEW: User ID who created
       createdByName: createdByName || employeeName || "Unknown", // NEW: User name
       createdByRole: createdByRole || "employee", // NEW: User role
-      
+
       // Employee info (for POS expenses)
       employeeId: employeeId || null,
       employeeName: employeeName || "Unknown",
-      
+
       // Approval workflow - Auto-approve if created by admin
-      status: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? "approved" : "pending",
-      approvedBy: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? createdBy : null,
-      approvedByName: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? createdByName : null,
-      approvedAt: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? new Date().toISOString() : null,
-      approvalNotes: (createdByRole === "admin" || source === "admin" || source === "mobile-admin") ? "Auto-approved (Admin)" : null,
+      status:
+        createdByRole === "admin" ||
+        source === "admin" ||
+        source === "mobile-admin"
+          ? "approved"
+          : "pending",
+      approvedBy:
+        createdByRole === "admin" ||
+        source === "admin" ||
+        source === "mobile-admin"
+          ? createdBy
+          : null,
+      approvedByName:
+        createdByRole === "admin" ||
+        source === "admin" ||
+        source === "mobile-admin"
+          ? createdByName
+          : null,
+      approvedAt:
+        createdByRole === "admin" ||
+        source === "admin" ||
+        source === "mobile-admin"
+          ? new Date().toISOString()
+          : null,
+      approvalNotes:
+        createdByRole === "admin" ||
+        source === "admin" ||
+        source === "mobile-admin"
+          ? "Auto-approved (Admin)"
+          : null,
     };
 
     const createdExpense = await expensesService.create(newExpense);
@@ -1650,7 +1689,8 @@ async function createExpense(expenseData) {
 // Edit existing expense
 async function editExpense(expenseData, userRole = "employee") {
   try {
-    const { id, description, amount, date, time, category, currency, notes } = expenseData;
+    const { id, description, amount, date, time, category, currency, notes } =
+      expenseData;
 
     if (!id) {
       throw new Error("Expense ID is required");
@@ -1958,7 +1998,8 @@ async function editExpenseCategory(categoryData) {
       id: updatedCategory.id,
       name: updatedCategory.name,
       description: updatedCategory.description || "",
-      active: updatedCategory.active !== undefined ? updatedCategory.active : true,
+      active:
+        updatedCategory.active !== undefined ? updatedCategory.active : true,
       createdAt: updatedCategory.createdAt?.toDate?.()
         ? updatedCategory.createdAt.toDate().toISOString()
         : updatedCategory.createdAt,
@@ -2594,6 +2635,9 @@ export async function GET(request) {
       "get-expense",
       "get-expense-categories",
       "get-expense-category",
+      "create-expense-category",
+      "update-expense-category",
+      "delete-expense-category",
       "get-items",
       "get-categories",
     ];
@@ -2988,6 +3032,147 @@ export async function GET(request) {
           {
             success: false,
             error: error.message || "Failed to retrieve expense category",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Create expense category
+    if (action === "create-expense-category") {
+      try {
+        const { name, description } = await request.json();
+
+        if (!name || !name.trim()) {
+          return Response.json(
+            {
+              success: false,
+              error: "Category name is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const categoryData = {
+          name: name.trim(),
+          description: description?.trim() || "",
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const newCategory = await expenseCategoriesService.create(categoryData);
+
+        return Response.json(
+          {
+            success: true,
+            action: "create-expense-category",
+            generated_at: new Date().toISOString(),
+            data: {
+              id: newCategory.id,
+              ...categoryData,
+            },
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to create expense category",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Update expense category
+    if (action === "update-expense-category") {
+      try {
+        const { id, name, description } = await request.json();
+
+        if (!id) {
+          return Response.json(
+            {
+              success: false,
+              error: "Category ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        if (!name || !name.trim()) {
+          return Response.json(
+            {
+              success: false,
+              error: "Category name is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const updateData = {
+          name: name.trim(),
+          description: description?.trim() || "",
+          updatedAt: new Date(),
+        };
+
+        await expenseCategoriesService.update(id, updateData);
+
+        return Response.json(
+          {
+            success: true,
+            action: "update-expense-category",
+            generated_at: new Date().toISOString(),
+            data: {
+              id,
+              ...updateData,
+            },
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to update expense category",
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Delete expense category
+    if (action === "delete-expense-category") {
+      try {
+        const { id } = await request.json();
+
+        if (!id) {
+          return Response.json(
+            {
+              success: false,
+              error: "Category ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        await expenseCategoriesService.delete(id);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-expense-category",
+            generated_at: new Date().toISOString(),
+            data: { id },
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to delete expense category",
           },
           { status: 200, headers: corsHeaders }
         );
