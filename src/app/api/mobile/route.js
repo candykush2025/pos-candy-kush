@@ -1796,7 +1796,7 @@ async function approveExpense(approvalData) {
 
     // Return updated expense
     const updatedExpense = await expensesService.get(expenseId);
-    return updatedExpense;
+    return formatExpenseResponse(updatedExpense);
   } catch (error) {
     console.error("Error approving expense:", error);
     throw error;
@@ -1840,7 +1840,7 @@ async function denyExpense(denialData) {
 
     // Return updated expense
     const updatedExpense = await expensesService.get(expenseId);
-    return updatedExpense;
+    return formatExpenseResponse(updatedExpense);
   } catch (error) {
     console.error("Error denying expense:", error);
     throw error;

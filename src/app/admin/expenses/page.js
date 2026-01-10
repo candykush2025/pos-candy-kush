@@ -851,24 +851,19 @@ export default function ExpensesSection() {
           </div>
         ) : (
           <>
-            {/* Pending Approval Section */}
-            <Card className="border-yellow-200 dark:border-yellow-800">
-              <CardHeader className="bg-yellow-50 dark:bg-yellow-900/20">
-                <CardTitle className="text-yellow-900 dark:text-yellow-100 flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Need Approval ({pendingExpenses.length})
-                </CardTitle>
-                <CardDescription>
-                  Expenses waiting for your review and approval
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {pendingExpenses.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    <CheckCircle2 className="mx-auto h-12 w-12 mb-2 text-green-400" />
-                    <p>No pending expenses - all caught up!</p>
-                  </div>
-                ) : (
+            {/* Pending Approval Section - Only show if there are pending expenses */}
+            {pendingExpenses.length > 0 && (
+              <Card className="border-yellow-200 dark:border-yellow-800">
+                <CardHeader className="bg-yellow-50 dark:bg-yellow-900/20">
+                  <CardTitle className="text-yellow-900 dark:text-yellow-100 flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Need Approval ({pendingExpenses.length})
+                  </CardTitle>
+                  <CardDescription>
+                    Expenses waiting for your review and approval
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
                   <div className="space-y-3">
                     {pendingExpenses.map((expense) => (
                       <div
@@ -949,9 +944,9 @@ export default function ExpensesSection() {
                       </div>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Approved Expenses Table */}
             <Card>
@@ -1814,7 +1809,8 @@ export default function ExpensesSection() {
           <DialogHeader>
             <DialogTitle>Edit Expense</DialogTitle>
             <DialogDescription>
-              Update the expense details. Note: Update functionality is currently limited.
+              Update the expense details. Note: Update functionality is
+              currently limited.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4">
@@ -1912,7 +1908,8 @@ export default function ExpensesSection() {
             <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
               <p className="text-sm text-yellow-700 dark:text-yellow-300">
                 <AlertCircle className="inline h-4 w-4 mr-1" />
-                Update functionality is currently limited. For now, please delete and recreate expenses to make changes.
+                Update functionality is currently limited. For now, please
+                delete and recreate expenses to make changes.
               </p>
             </div>
 
