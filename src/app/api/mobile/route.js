@@ -1456,10 +1456,14 @@ async function getExpenses(filters = {}) {
       orderBy: ["createdAt", "desc"],
     });
 
+    // Filter out deleted expenses by default (unless explicitly requested)
+    let filteredExpenses = filters.includeDeleted
+      ? expenses
+      : expenses.filter((expense) => !expense.isDeleted);
+
     // Filter by date range if provided
-    let filteredExpenses = expenses;
     if (filters.start_date || filters.end_date) {
-      filteredExpenses = expenses.filter((expense) => {
+      filteredExpenses = filteredExpenses.filter((expense) => {
         const expenseDate = new Date(expense.date);
         if (filters.start_date && expenseDate < new Date(filters.start_date)) {
           return false;
@@ -1689,17 +1693,37 @@ async function createExpense(expenseData) {
 // Edit existing expense
 async function editExpense(expenseData, userRole = "employee") {
   try {
-    const { id, description, amount, date, time, category, currency, notes } =
-      expenseData;
+    const {
+      id,
+      description,
+      amount,
+      date,
+      time,
+      category,
+      currency,
+      notes,
+      employeeName,
+      editedBy,
+      editedByName,
+    } = expenseData;
 
     if (!id) {
       throw new Error("Expense ID is required");
+    }
+
+    if (!editedBy) {
+      throw new Error("Editor ID is required for tracking");
     }
 
     // Check if expense exists
     const existingExpense = await expensesService.get(id);
     if (!existingExpense) {
       throw new Error("Expense not found");
+    }
+
+    // Check if expense is deleted
+    if (existingExpense.isDeleted) {
+      throw new Error("Cannot edit a deleted expense");
     }
 
     // Permission check: Only admins can edit approved/denied expenses
@@ -1716,15 +1740,93 @@ async function editExpense(expenseData, userRole = "employee") {
       throw new Error("Amount must be a non-negative number");
     }
 
+    // Track changes for history
+    const changes = {};
+    const oldValues = {};
+    const newValues = {};
+
+    if (
+      description !== undefined &&
+      description.trim() !== existingExpense.description
+    ) {
+      changes.description = true;
+      oldValues.description = existingExpense.description;
+      newValues.description = description.trim();
+    }
+    if (amount !== undefined && amount !== existingExpense.amount) {
+      changes.amount = true;
+      oldValues.amount = existingExpense.amount;
+      newValues.amount = amount;
+    }
+    if (date !== undefined && date !== existingExpense.date) {
+      changes.date = true;
+      oldValues.date = existingExpense.date;
+      newValues.date = date;
+    }
+    if (time !== undefined && time !== existingExpense.time) {
+      changes.time = true;
+      oldValues.time = existingExpense.time;
+      newValues.time = time;
+    }
+    if (category !== undefined && category !== existingExpense.category) {
+      changes.category = true;
+      oldValues.category = existingExpense.category;
+      newValues.category = category;
+    }
+    if (currency !== undefined && currency !== existingExpense.currency) {
+      changes.currency = true;
+      oldValues.currency = existingExpense.currency;
+      newValues.currency = currency;
+    }
+    if (notes !== undefined && notes !== existingExpense.notes) {
+      changes.notes = true;
+      oldValues.notes = existingExpense.notes;
+      newValues.notes = notes;
+    }
+    if (
+      employeeName !== undefined &&
+      employeeName !== existingExpense.employeeName
+    ) {
+      changes.employeeName = true;
+      oldValues.employeeName = existingExpense.employeeName;
+      newValues.employeeName = employeeName;
+    }
+
+    // Only update if there are actual changes
+    if (Object.keys(changes).length === 0) {
+      throw new Error("No changes detected");
+    }
+
+    // Create history entry
+    const historyEntry = {
+      timestamp: new Date().toISOString(),
+      editedBy: editedBy,
+      editedByName: editedByName || "Unknown",
+      changes: Object.keys(changes),
+      oldValues: oldValues,
+      newValues: newValues,
+    };
+
     // Update expense
-    const updateData = {};
+    const updateData = {
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: editedBy,
+      lastEditedByName: editedByName || "Unknown",
+    };
+
     if (description !== undefined) updateData.description = description.trim();
     if (amount !== undefined) updateData.amount = amount;
     if (date !== undefined) updateData.date = date;
     if (time !== undefined) updateData.time = time;
     if (category !== undefined) updateData.category = category;
-    if (currency !== undefined) updateData.currency = currency; // NEW
-    if (notes !== undefined) updateData.notes = notes; // NEW
+    if (currency !== undefined) updateData.currency = currency;
+    if (notes !== undefined) updateData.notes = notes;
+    if (employeeName !== undefined) updateData.employeeName = employeeName;
+
+    // Add history entry to array (create array if doesn't exist)
+    const editHistory = existingExpense.editHistory || [];
+    editHistory.push(historyEntry);
+    updateData.editHistory = editHistory;
 
     await expensesService.update(id, updateData);
 
@@ -1737,11 +1839,15 @@ async function editExpense(expenseData, userRole = "employee") {
   }
 }
 
-// Delete expense
-async function deleteExpense(expenseId, userRole = "employee") {
+// Delete expense (soft delete - flag as deleted, don't remove from database)
+async function deleteExpense(expenseId, deletedBy, deletedByName) {
   try {
     if (!expenseId) {
       throw new Error("Expense ID is required");
+    }
+
+    if (!deletedBy) {
+      throw new Error("Deleter ID is required for tracking");
     }
 
     // Check if expense exists
@@ -1750,9 +1856,26 @@ async function deleteExpense(expenseId, userRole = "employee") {
       throw new Error("Expense not found");
     }
 
-    await expensesService.delete(expenseId);
+    // Check if already deleted
+    if (existingExpense.isDeleted) {
+      throw new Error("Expense is already deleted");
+    }
 
-    return { success: true, message: "Expense deleted successfully" };
+    // Soft delete: flag as deleted instead of removing from database
+    const deleteData = {
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+      deletedBy: deletedBy,
+      deletedByName: deletedByName || "Unknown",
+      // Keep all original data for recovery if needed
+    };
+
+    await expensesService.update(expenseId, deleteData);
+
+    return {
+      success: true,
+      message: "Expense marked as deleted successfully",
+    };
   } catch (error) {
     console.error("Error deleting expense:", error);
     throw error;
@@ -3730,8 +3853,16 @@ export async function POST(request) {
       }
 
       try {
-        const { id } = requestBody;
-        const result = await deleteExpense(id);
+        const { id, deletedBy, deletedByName } = requestBody;
+
+        if (!deletedBy) {
+          return Response.json(
+            { success: false, error: "deletedBy is required" },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const result = await deleteExpense(id, deletedBy, deletedByName);
 
         return Response.json(
           {

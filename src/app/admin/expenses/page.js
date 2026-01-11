@@ -30,6 +30,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -48,21 +49,44 @@ import {
   AlertCircle,
   Search,
   Filter,
+  RefreshCw,
+  Trash2,
+  History,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import {
   CURRENCIES,
   DEFAULT_CURRENCY,
   formatAmountWithCurrency,
 } from "@/lib/constants/currencies";
+import {
+  getAllCurrencyCodes,
+  getCurrencyDetails,
+} from "@/lib/constants/allCurrencies";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { DateRangePicker } from "@/components/reports";
 
 export default function ExpensesSection() {
   const { token, user } = useAuthStore();
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [users, setUsers] = useState([]); // Store all users from Firebase
   const [loading, setLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+
+  // Currency conversion states
+  const [displayCurrency, setDisplayCurrency] = useState("THB");
+  const [exchangeRates, setExchangeRates] = useState(null);
+  const [baseCurrency, setBaseCurrency] = useState("THB");
+  const [currencySearch, setCurrencySearch] = useState("");
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
 
   // Filter states for approved expenses
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,8 +94,10 @@ export default function ExpensesSection() {
   const [filterCurrency, setFilterCurrency] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [filterEmployee, setFilterEmployee] = useState("all");
-  const [filterDateFrom, setFilterDateFrom] = useState("");
-  const [filterDateTo, setFilterDateTo] = useState("");
+  const [dateRange, setDateRange] = useState({
+    from: subDays(new Date(), 30),
+    to: new Date(),
+  });
   const [submitting, setSubmitting] = useState(false);
 
   // Approval/Denial dialog states
@@ -84,6 +110,14 @@ export default function ExpensesSection() {
   // Edit dialog states
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+
+  // History dialog states
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [historyExpense, setHistoryExpense] = useState(null);
+
+  // Delete confirmation dialog states
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [expenseToDelete, setExpenseToDelete] = useState(null);
 
   // Inline category editing states
   const [editingCategoryExpenseId, setEditingCategoryExpenseId] =
@@ -108,7 +142,7 @@ export default function ExpensesSection() {
   const [allCategories, setAllCategories] = useState([]); // Full category objects with metadata
   const [categoryStats, setCategoryStats] = useState({}); // Usage statistics
 
-  // Get last used currency from localStorage or use default
+  // Get last used currency from localStorage or use THB as default
   const getInitialCurrency = () => {
     if (typeof window !== "undefined") {
       const lastUsedCurrency = localStorage.getItem("lastUsedCurrency");
@@ -120,7 +154,7 @@ export default function ExpensesSection() {
         return lastUsedCurrency;
       }
     }
-    return DEFAULT_CURRENCY;
+    return "THB"; // Default to Thai Baht
   };
 
   // Form state
@@ -130,13 +164,87 @@ export default function ExpensesSection() {
     category: "General",
     currency: getInitialCurrency(),
     notes: "",
+    employeeName: "",
   });
 
   // Fetch ALL expenses and categories (admin view)
   useEffect(() => {
     fetchExpenses();
     fetchCategories();
+    fetchUsers();
+    loadExchangeRates();
   }, []);
+
+  // Debug: Log users state changes
+  useEffect(() => {
+    console.log("Users state updated:", users);
+  }, [users]);
+
+  // Load exchange rates from Firebase
+  const loadExchangeRates = async () => {
+    try {
+      const docRef = doc(db, "settings", "exchange_rates");
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setExchangeRates(data.rates);
+        setBaseCurrency(data.baseCurrency || "THB");
+      }
+    } catch (error) {
+      console.error("Error loading exchange rates:", error);
+    }
+  };
+
+  // Convert amount from one currency to another
+  const convertCurrency = (amount, fromCurrency, toCurrency) => {
+    if (!exchangeRates || !amount) return amount;
+
+    // If same currency, no conversion needed
+    if (fromCurrency === toCurrency) return amount;
+
+    // If fromCurrency is the base currency
+    if (fromCurrency === baseCurrency) {
+      const rate = exchangeRates[toCurrency];
+      return rate ? amount * rate : amount;
+    }
+
+    // If toCurrency is the base currency
+    if (toCurrency === baseCurrency) {
+      const rate = exchangeRates[fromCurrency];
+      return rate ? amount / rate : amount;
+    }
+
+    // Convert through base currency: from -> base -> to
+    const fromRate = exchangeRates[fromCurrency];
+    const toRate = exchangeRates[toCurrency];
+
+    if (fromRate && toRate) {
+      const amountInBase = amount / fromRate;
+      return amountInBase * toRate;
+    }
+
+    return amount; // Fallback if rates not available
+  };
+
+  // Format amount in display currency
+  const formatInDisplayCurrency = (amount, originalCurrency) => {
+    const convertedAmount = convertCurrency(
+      amount,
+      originalCurrency,
+      displayCurrency
+    );
+    const currencyDetails = getCurrencyDetails(displayCurrency);
+    return `${currencyDetails.symbol}${convertedAmount.toFixed(2)}`;
+  };
+
+  // Format number with thousand separators
+  const formatNumberWithSeparators = (number) => {
+    return number.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
 
   const fetchExpenses = async () => {
     try {
@@ -221,6 +329,25 @@ export default function ExpensesSection() {
       // Fallback to default category
       setCategories(["General"]);
       setAllCategories([]);
+    }
+  };
+
+  // Fetch users from Firebase
+  const fetchUsers = async () => {
+    try {
+      console.log("Fetching users from Firebase...");
+      const usersCollection = collection(db, "users");
+      const usersSnapshot = await getDocs(usersCollection);
+      const usersList = usersSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      console.log("Loaded users count:", usersList.length);
+      console.log("Users data:", usersList);
+      setUsers(usersList);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      toast.error("Error loading users");
     }
   };
 
@@ -403,6 +530,11 @@ export default function ExpensesSection() {
       return;
     }
 
+    if (!formData.employeeName) {
+      toast.error("Please select an employee");
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -416,7 +548,7 @@ export default function ExpensesSection() {
         time: format(now, "HH:mm"),
         category: formData.category,
         employeeId: null, // Admin expenses don't have employeeId
-        employeeName: "Unknown",
+        employeeName: formData.employeeName,
         source: "BackOffice", // Admin creates from BackOffice
         notes: formData.notes?.trim() || "",
         createdBy: user?.uid || user?.id,
@@ -562,6 +694,7 @@ export default function ExpensesSection() {
       category: expense.category || "General",
       currency: expense.currency || DEFAULT_CURRENCY,
       notes: expense.notes || "",
+      employeeName: expense.employeeName || "Unknown",
     });
     setShowEditDialog(true);
   };
@@ -584,34 +717,55 @@ export default function ExpensesSection() {
       return;
     }
 
+    if (!formData.employeeName) {
+      toast.error("Please select an employee");
+      return;
+    }
+
     try {
       setSubmitting(true);
 
-      // For now, we'll use a workaround: deny the old one and create a new one
-      // TODO: Implement proper update-expense API endpoint
       const updateData = {
+        id: editingExpense.id,
         description: formData.description.trim(),
         amount: amount,
         currency: formData.currency || DEFAULT_CURRENCY,
         category: formData.category,
         notes: formData.notes?.trim() || "",
+        employeeName: formData.employeeName,
+        editedBy: user?.uid || user?.id,
+        editedByName: user?.displayName || user?.name || user?.email || "Admin",
       };
 
-      // Update via Firestore directly through a new endpoint or manual update
-      toast.info(
-        "Update functionality coming soon - please delete and recreate for now"
-      );
-      setShowEditDialog(false);
-      setEditingExpense(null);
-      // Reset form but keep the currency
-      const savedCurrency = formData.currency;
-      setFormData({
-        description: "",
-        amount: "",
-        category: "General",
-        currency: savedCurrency, // Keep the last used currency
-        notes: "",
+      const response = await fetch("/api/mobile?action=edit-expense", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updateData),
       });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Expense updated successfully");
+        setShowEditDialog(false);
+        setEditingExpense(null);
+        // Reset form but keep the currency
+        const savedCurrency = formData.currency;
+        setFormData({
+          description: "",
+          amount: "",
+          category: "General",
+          currency: savedCurrency,
+          notes: "",
+          employeeName: "",
+        });
+        fetchExpenses();
+      } else {
+        toast.error(data.error || "Failed to update expense");
+      }
     } catch (error) {
       console.error("Error updating expense:", error);
       toast.error("Error updating expense");
@@ -642,6 +796,9 @@ export default function ExpensesSection() {
         body: JSON.stringify({
           id: expenseId,
           category: editingCategoryValue.trim(),
+          editedBy: user?.uid || user?.id,
+          editedByName:
+            user?.displayName || user?.name || user?.email || "Admin",
         }),
       });
 
@@ -672,6 +829,57 @@ export default function ExpensesSection() {
   const handleCancelCategoryEdit = () => {
     setEditingCategoryExpenseId(null);
     setEditingCategoryValue("");
+  };
+
+  // Handle expense deletion (soft delete)
+  const handleDeleteExpense = async () => {
+    if (!expenseToDelete) return;
+
+    try {
+      setProcessingAction(true);
+
+      const response = await fetch("/api/mobile?action=delete-expense", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: expenseToDelete.id,
+          deletedBy: user?.uid || user?.id,
+          deletedByName:
+            user?.displayName || user?.name || user?.email || "Admin",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Expense deleted successfully");
+        setShowDeleteDialog(false);
+        setExpenseToDelete(null);
+        fetchExpenses(); // Refresh the list
+      } else {
+        toast.error(data.error || "Failed to delete expense");
+      }
+    } catch (error) {
+      console.error("Error deleting expense:", error);
+      toast.error("Error deleting expense");
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  // Open delete confirmation dialog
+  const openDeleteDialog = (expense) => {
+    setExpenseToDelete(expense);
+    setShowDeleteDialog(true);
+  };
+
+  // Open history dialog
+  const openHistoryDialog = (expense) => {
+    setHistoryExpense(expense);
+    setShowHistoryDialog(true);
   };
 
   // Bulk selection handlers
@@ -838,7 +1046,7 @@ export default function ExpensesSection() {
     }
   };
 
-  // Summary stats
+  // Summary stats with currency conversion
   const stats = {
     total: expenses.length,
     pending: expenses.filter((e) => e.status === "pending").length,
@@ -846,12 +1054,76 @@ export default function ExpensesSection() {
     denied: expenses.filter((e) => e.status === "denied").length,
     totalAmount: expenses
       .filter((e) => e.status === "approved")
-      .reduce((sum, e) => sum + e.amount, 0),
+      .reduce((sum, e) => {
+        // Convert each expense amount to display currency
+        const convertedAmount = convertCurrency(
+          e.amount,
+          e.currency || "THB",
+          displayCurrency
+        );
+        return sum + convertedAmount;
+      }, 0),
   };
 
   // Filter expenses by status
   const pendingExpenses = expenses.filter((e) => e.status === "pending");
   const approvedExpenses = expenses.filter((e) => e.status === "approved");
+
+  // Filter approved expenses based on all filter criteria
+  const filteredApprovedExpenses = approvedExpenses.filter((expense) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      expense.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      expense.employeeName?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory =
+      filterCategory === "all" || expense.category === filterCategory;
+    const matchesCurrency =
+      filterCurrency === "all" || expense.currency === filterCurrency;
+    const matchesSource =
+      filterSource === "all" || expense.source === filterSource;
+    const matchesEmployee =
+      filterEmployee === "all" || expense.employeeName === filterEmployee;
+
+    // Date filtering
+    let matchesDate = true;
+    if (dateRange.from || dateRange.to) {
+      const expenseDate = new Date(expense.date || expense.createdAt);
+      expenseDate.setHours(0, 0, 0, 0); // Normalize to start of day
+
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from);
+        fromDate.setHours(0, 0, 0, 0);
+        matchesDate = matchesDate && expenseDate >= fromDate;
+      }
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to);
+        toDate.setHours(23, 59, 59, 999);
+        matchesDate = matchesDate && expenseDate <= toDate;
+      }
+    }
+
+    return (
+      matchesSearch &&
+      matchesCategory &&
+      matchesCurrency &&
+      matchesSource &&
+      matchesEmployee &&
+      matchesDate
+    );
+  });
+
+  // Calculate stats for filtered expenses
+  const filteredStats = {
+    approved: filteredApprovedExpenses.length,
+    totalAmount: filteredApprovedExpenses.reduce((sum, e) => {
+      const convertedAmount = convertCurrency(
+        e.amount,
+        e.currency || "THB",
+        displayCurrency
+      );
+      return sum + convertedAmount;
+    }, 0),
+  };
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 p-6">
@@ -874,74 +1146,6 @@ export default function ExpensesSection() {
             <Plus className="mr-2 h-5 w-5" />
             Add Expense
           </Button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Total Expenses
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {stats.total}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-yellow-200 dark:border-yellow-800">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
-                Pending Approval
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-500">
-                {stats.pending}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-green-200 dark:border-green-800">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-green-600 dark:text-green-400">
-                Approved
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-700 dark:text-green-500">
-                {stats.approved}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-red-200 dark:border-red-800">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">
-                Denied
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-700 dark:text-red-500">
-                {stats.denied}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-blue-200 dark:border-blue-800">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                Approved Amount
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-700 dark:text-blue-500">
-                {formatCurrency(stats.totalAmount)}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Categories Management Section */}
@@ -1217,7 +1421,21 @@ export default function ExpensesSection() {
               <CardContent className="pt-6">
                 {/* Comprehensive Filters */}
                 <div className="space-y-4 mb-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {/* Date Range - Full Width Row */}
+                  <div className="w-full">
+                    <Label className="text-xs font-medium mb-1.5 block">
+                      Date Range
+                    </Label>
+                    <DateRangePicker
+                      dateRange={dateRange}
+                      onDateRangeChange={setDateRange}
+                      periodName="last30"
+                      showTimeFilter={false}
+                    />
+                  </div>
+
+                  {/* Other Filters Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Search */}
                     <div className="space-y-1.5">
                       <Label htmlFor="search" className="text-xs font-medium">
@@ -1233,37 +1451,6 @@ export default function ExpensesSection() {
                           className="pl-8 h-9"
                         />
                       </div>
-                    </div>
-
-                    {/* Date From */}
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="date-from"
-                        className="text-xs font-medium"
-                      >
-                        Date From
-                      </Label>
-                      <Input
-                        id="date-from"
-                        type="date"
-                        value={filterDateFrom}
-                        onChange={(e) => setFilterDateFrom(e.target.value)}
-                        className="h-9"
-                      />
-                    </div>
-
-                    {/* Date To */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="date-to" className="text-xs font-medium">
-                        Date To
-                      </Label>
-                      <Input
-                        id="date-to"
-                        type="date"
-                        value={filterDateTo}
-                        onChange={(e) => setFilterDateTo(e.target.value)}
-                        className="h-9"
-                      />
                     </div>
 
                     {/* Employee Filter */}
@@ -1283,19 +1470,21 @@ export default function ExpensesSection() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Employees</SelectItem>
-                          {[
-                            ...new Set(
-                              approvedExpenses
-                                .map((e) => e.employeeName)
-                                .filter(Boolean)
-                            ),
-                          ]
-                            .sort()
-                            .map((emp) => (
-                              <SelectItem key={emp} value={emp}>
-                                {emp}
-                              </SelectItem>
-                            ))}
+                          {users.length === 0 ? (
+                            <SelectItem value="loading" disabled>
+                              Loading...
+                            </SelectItem>
+                          ) : (
+                            users
+                              .sort((a, b) =>
+                                (a.name || "").localeCompare(b.name || "")
+                              )
+                              .map((user) => (
+                                <SelectItem key={user.id} value={user.name}>
+                                  {user.name}
+                                </SelectItem>
+                              ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1391,8 +1580,10 @@ export default function ExpensesSection() {
                         variant="outline"
                         onClick={() => {
                           setSearchQuery("");
-                          setFilterDateFrom("");
-                          setFilterDateTo("");
+                          setDateRange({
+                            from: subDays(new Date(), 30),
+                            to: new Date(),
+                          });
                           setFilterEmployee("all");
                           setFilterCategory("all");
                           setFilterCurrency("all");
@@ -1408,60 +1599,8 @@ export default function ExpensesSection() {
                     {/* Results Count */}
                     <div className="flex items-end">
                       <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Showing{" "}
-                        {
-                          approvedExpenses.filter((expense) => {
-                            const matchesSearch =
-                              searchQuery === "" ||
-                              expense.description
-                                ?.toLowerCase()
-                                .includes(searchQuery.toLowerCase()) ||
-                              expense.employeeName
-                                ?.toLowerCase()
-                                .includes(searchQuery.toLowerCase());
-                            const matchesCategory =
-                              filterCategory === "all" ||
-                              expense.category === filterCategory;
-                            const matchesCurrency =
-                              filterCurrency === "all" ||
-                              expense.currency === filterCurrency;
-                            const matchesSource =
-                              filterSource === "all" ||
-                              expense.source === filterSource;
-                            const matchesEmployee =
-                              filterEmployee === "all" ||
-                              expense.employeeName === filterEmployee;
-
-                            // Date filtering
-                            let matchesDate = true;
-                            if (filterDateFrom || filterDateTo) {
-                              const expenseDate = new Date(
-                                expense.date || expense.createdAt
-                              );
-                              if (filterDateFrom) {
-                                const fromDate = new Date(filterDateFrom);
-                                matchesDate =
-                                  matchesDate && expenseDate >= fromDate;
-                              }
-                              if (filterDateTo) {
-                                const toDate = new Date(filterDateTo);
-                                toDate.setHours(23, 59, 59, 999); // End of day
-                                matchesDate =
-                                  matchesDate && expenseDate <= toDate;
-                              }
-                            }
-
-                            return (
-                              matchesSearch &&
-                              matchesCategory &&
-                              matchesCurrency &&
-                              matchesSource &&
-                              matchesEmployee &&
-                              matchesDate
-                            );
-                          }).length
-                        }{" "}
-                        of {approvedExpenses.length} expenses
+                        Showing {filteredApprovedExpenses.length} of{" "}
+                        {approvedExpenses.length} expenses
                       </div>
                     </div>
                   </div>
@@ -1506,57 +1645,7 @@ export default function ExpensesSection() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {approvedExpenses
-                            .filter((expense) => {
-                              const matchesSearch =
-                                searchQuery === "" ||
-                                expense.description
-                                  ?.toLowerCase()
-                                  .includes(searchQuery.toLowerCase()) ||
-                                expense.employeeName
-                                  ?.toLowerCase()
-                                  .includes(searchQuery.toLowerCase());
-                              const matchesCategory =
-                                filterCategory === "all" ||
-                                expense.category === filterCategory;
-                              const matchesCurrency =
-                                filterCurrency === "all" ||
-                                expense.currency === filterCurrency;
-                              const matchesSource =
-                                filterSource === "all" ||
-                                expense.source === filterSource;
-                              const matchesEmployee =
-                                filterEmployee === "all" ||
-                                expense.employeeName === filterEmployee;
-
-                              // Date filtering
-                              let matchesDate = true;
-                              if (filterDateFrom || filterDateTo) {
-                                const expenseDate = new Date(
-                                  expense.date || expense.createdAt
-                                );
-                                if (filterDateFrom) {
-                                  const fromDate = new Date(filterDateFrom);
-                                  matchesDate =
-                                    matchesDate && expenseDate >= fromDate;
-                                }
-                                if (filterDateTo) {
-                                  const toDate = new Date(filterDateTo);
-                                  toDate.setHours(23, 59, 59, 999); // End of day
-                                  matchesDate =
-                                    matchesDate && expenseDate <= toDate;
-                                }
-                              }
-
-                              return (
-                                matchesSearch &&
-                                matchesCategory &&
-                                matchesCurrency &&
-                                matchesSource &&
-                                matchesEmployee &&
-                                matchesDate
-                              );
-                            })
+                          {filteredApprovedExpenses
                             .sort((a, b) => {
                               const dateA = new Date(a.date || a.createdAt);
                               const dateB = new Date(b.date || b.createdAt);
@@ -1565,7 +1654,17 @@ export default function ExpensesSection() {
                             .map((expense) => (
                               <TableRow
                                 key={expense.id}
-                                className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
+                                onClick={(e) => {
+                                  // Don't trigger if clicking on action buttons or category badge
+                                  if (
+                                    e.target.closest("button") ||
+                                    e.target.closest(".badge-category")
+                                  ) {
+                                    return;
+                                  }
+                                  openEditDialog(expense);
+                                }}
                               >
                                 <TableCell className="font-medium whitespace-nowrap">
                                   {format(
@@ -1642,10 +1741,11 @@ export default function ExpensesSection() {
                                   ) : (
                                     <Badge
                                       variant="outline"
-                                      className="whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                                      onClick={() =>
-                                        handleStartCategoryEdit(expense)
-                                      }
+                                      className="badge-category whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStartCategoryEdit(expense);
+                                      }}
                                     >
                                       {expense.category}
                                     </Badge>
@@ -1691,56 +1791,134 @@ export default function ExpensesSection() {
                               </TableRow>
                             ))}
                         </TableBody>
+                        <TableFooter>
+                          <TableRow className="hover:bg-transparent border-t border-border">
+                            <TableCell colSpan={4} className="py-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-muted-foreground">
+                                  Total Expenses:
+                                </span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {filteredStats.approved}{" "}
+                                  {filteredStats.approved === 1
+                                    ? "expense"
+                                    : "expenses"}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell colSpan={4} className="py-4 text-right">
+                              <div className="flex items-center justify-end gap-3">
+                                <Popover
+                                  open={showCurrencyPicker}
+                                  onOpenChange={setShowCurrencyPicker}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-[140px] justify-between"
+                                    >
+                                      <span className="flex items-center gap-1.5">
+                                        <DollarSign className="h-3.5 w-3.5" />
+                                        {displayCurrency}
+                                      </span>
+                                      <Search className="h-3.5 w-3.5 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    className="w-[300px] p-0"
+                                    align="end"
+                                  >
+                                    <div className="flex items-center border-b px-3 py-2">
+                                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                                      <Input
+                                        placeholder="Search currency..."
+                                        value={currencySearch}
+                                        onChange={(e) =>
+                                          setCurrencySearch(e.target.value)
+                                        }
+                                        className="border-0 p-0 h-8 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      />
+                                    </div>
+                                    <div className="max-h-[300px] overflow-y-auto p-1">
+                                      {getAllCurrencyCodes()
+                                        .filter((code) => {
+                                          const details =
+                                            getCurrencyDetails(code);
+                                          const searchLower =
+                                            currencySearch.toLowerCase();
+                                          return (
+                                            code
+                                              .toLowerCase()
+                                              .includes(searchLower) ||
+                                            details.name
+                                              .toLowerCase()
+                                              .includes(searchLower)
+                                          );
+                                        })
+                                        .map((code) => {
+                                          const details =
+                                            getCurrencyDetails(code);
+                                          const isSelected =
+                                            displayCurrency === code;
+                                          return (
+                                            <Button
+                                              key={code}
+                                              variant={
+                                                isSelected
+                                                  ? "secondary"
+                                                  : "ghost"
+                                              }
+                                              className="w-full justify-start text-left font-normal"
+                                              onClick={() => {
+                                                setDisplayCurrency(code);
+                                                setShowCurrencyPicker(false);
+                                                setCurrencySearch("");
+                                              }}
+                                            >
+                                              <span className="font-medium mr-2">
+                                                {details.symbol}
+                                              </span>
+                                              <span className="font-medium mr-2">
+                                                {code}
+                                              </span>
+                                              <span className="text-xs text-muted-foreground truncate">
+                                                {details.name}
+                                              </span>
+                                            </Button>
+                                          );
+                                        })}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+
+                                <div className="flex flex-col items-end">
+                                  <div className="text-2xl font-bold">
+                                    {(() => {
+                                      const details =
+                                        getCurrencyDetails(displayCurrency);
+                                      return `${
+                                        details.symbol
+                                      }${formatNumberWithSeparators(
+                                        filteredStats.totalAmount
+                                      )}`;
+                                    })()}
+                                  </div>
+                                  {exchangeRates &&
+                                    baseCurrency !== displayCurrency && (
+                                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <RefreshCw className="h-3 w-3" />
+                                        Converted from {baseCurrency}
+                                      </div>
+                                    )}
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
                       </Table>
                     </div>
-                    {approvedExpenses.filter((expense) => {
-                      const matchesSearch =
-                        searchQuery === "" ||
-                        expense.description
-                          ?.toLowerCase()
-                          .includes(searchQuery.toLowerCase()) ||
-                        expense.employeeName
-                          ?.toLowerCase()
-                          .includes(searchQuery.toLowerCase());
-                      const matchesCategory =
-                        filterCategory === "all" ||
-                        expense.category === filterCategory;
-                      const matchesCurrency =
-                        filterCurrency === "all" ||
-                        expense.currency === filterCurrency;
-                      const matchesSource =
-                        filterSource === "all" ||
-                        expense.source === filterSource;
-                      const matchesEmployee =
-                        filterEmployee === "all" ||
-                        expense.employeeName === filterEmployee;
-
-                      // Date filtering
-                      let matchesDate = true;
-                      if (filterDateFrom || filterDateTo) {
-                        const expenseDate = new Date(
-                          expense.date || expense.createdAt
-                        );
-                        if (filterDateFrom) {
-                          const fromDate = new Date(filterDateFrom);
-                          matchesDate = matchesDate && expenseDate >= fromDate;
-                        }
-                        if (filterDateTo) {
-                          const toDate = new Date(filterDateTo);
-                          toDate.setHours(23, 59, 59, 999);
-                          matchesDate = matchesDate && expenseDate <= toDate;
-                        }
-                      }
-
-                      return (
-                        matchesSearch &&
-                        matchesCategory &&
-                        matchesCurrency &&
-                        matchesSource &&
-                        matchesEmployee &&
-                        matchesDate
-                      );
-                    }).length === 0 &&
+                    {filteredApprovedExpenses.length === 0 &&
                       approvedExpenses.length > 0 && (
                         <div className="text-center py-8 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50">
                           <Filter className="mx-auto h-8 w-8 mb-2" />
@@ -1751,8 +1929,10 @@ export default function ExpensesSection() {
                             variant="link"
                             onClick={() => {
                               setSearchQuery("");
-                              setFilterDateFrom("");
-                              setFilterDateTo("");
+                              setDateRange({
+                                from: subDays(new Date(), 30),
+                                to: new Date(),
+                              });
                               setFilterEmployee("all");
                               setFilterCategory("all");
                               setFilterCurrency("all");
@@ -1861,6 +2041,38 @@ export default function ExpensesSection() {
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Categories are managed by admin
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="employee">Employee *</Label>
+              <Select
+                value={formData.employeeName}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, employeeName: value })
+                }
+                disabled={submitting}
+              >
+                <SelectTrigger id="employee">
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.length === 0 ? (
+                    <SelectItem value="loading" disabled>
+                      Loading employees...
+                    </SelectItem>
+                  ) : (
+                    users
+                      .sort((a, b) =>
+                        (a.name || "").localeCompare(b.name || "")
+                      )
+                      .map((user) => (
+                        <SelectItem key={user.id} value={user.name}>
+                          {user.name} ({user.role || "N/A"})
+                        </SelectItem>
+                      ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -2102,15 +2314,49 @@ export default function ExpensesSection() {
 
       {/* Edit Expense Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Expense</DialogTitle>
             <DialogDescription>
-              Update the expense details. Note: Update functionality is
-              currently limited.
+              Update the expense details below
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-employee">Employee *</Label>
+              <Select
+                value={formData.employeeName}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, employeeName: value })
+                }
+                disabled={submitting}
+              >
+                <SelectTrigger id="edit-employee">
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.length === 0 ? (
+                    <SelectItem value="loading" disabled>
+                      Loading employees...
+                    </SelectItem>
+                  ) : (
+                    users
+                      .sort((a, b) =>
+                        (a.name || "").localeCompare(b.name || "")
+                      )
+                      .map((user) => (
+                        <SelectItem key={user.id} value={user.name}>
+                          {user.name} ({user.role || "N/A"})
+                        </SelectItem>
+                      ))
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Original employee will be preserved in history
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-description">Description *</Label>
               <Input
@@ -2202,40 +2448,63 @@ export default function ExpensesSection() {
               />
             </div>
 
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
-              <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                <AlertCircle className="inline h-4 w-4 mr-1" />
-                Update functionality is currently limited. For now, please
-                delete and recreate expenses to make changes.
-              </p>
-            </div>
-
-            <div className="flex gap-2 justify-end pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowEditDialog(false)}
-                disabled={submitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="mr-2 h-4 w-4" />
-                    Update (Limited)
-                  </>
-                )}
-              </Button>
+            <div className="flex gap-2 justify-between pt-4 border-t">
+              <div className="flex gap-2">
+                {editingExpense?.editHistory &&
+                  editingExpense.editHistory.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowEditDialog(false);
+                        openHistoryDialog(editingExpense);
+                      }}
+                      disabled={submitting}
+                    >
+                      <History className="mr-2 h-4 w-4" />
+                      View History ({editingExpense.editHistory.length})
+                    </Button>
+                  )}
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => {
+                    setShowEditDialog(false);
+                    openDeleteDialog(editingExpense);
+                  }}
+                  disabled={submitting}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditDialog(false)}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Update Expense
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </form>
         </DialogContent>
@@ -2505,6 +2774,215 @@ export default function ExpensesSection() {
                       Delete Category
                     </>
                   )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Expense Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Expense</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this expense? The expense will be
+              flagged as deleted but not removed from the database.
+            </DialogDescription>
+          </DialogHeader>
+          {expenseToDelete && (
+            <div className="space-y-4">
+              <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-semibold text-red-900 dark:text-red-100">
+                      {expenseToDelete.description}
+                    </h4>
+                    <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                      Amount:{" "}
+                      {formatAmountWithCurrency(
+                        expenseToDelete.amount,
+                        expenseToDelete.currency
+                      )}
+                    </p>
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      Category: {expenseToDelete.category}
+                    </p>
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      Employee: {expenseToDelete.employeeName || "Unknown"}
+                    </p>
+                  </div>
+                  <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                    {expenseToDelete.status}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <AlertCircle className="inline h-4 w-4 mr-1" />
+                  This is a soft delete - the expense will be flagged as deleted
+                  but all data will be preserved in the database for recovery if
+                  needed.
+                </p>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteDialog(false);
+                    setExpenseToDelete(null);
+                  }}
+                  disabled={processingAction}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDeleteExpense}
+                  disabled={processingAction}
+                  variant="destructive"
+                >
+                  {processingAction ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Expense
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit History Dialog */}
+      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit History</DialogTitle>
+            <DialogDescription>
+              Complete history of changes made to this expense
+            </DialogDescription>
+          </DialogHeader>
+          {historyExpense && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border">
+                <h4 className="font-semibold text-gray-900 dark:text-white">
+                  {historyExpense.description}
+                </h4>
+                <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Amount:
+                    </span>{" "}
+                    <span className="font-medium">
+                      {formatAmountWithCurrency(
+                        historyExpense.amount,
+                        historyExpense.currency
+                      )}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Category:
+                    </span>{" "}
+                    <span className="font-medium">
+                      {historyExpense.category}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Status:
+                    </span>{" "}
+                    <Badge>{historyExpense.status}</Badge>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Employee:
+                    </span>{" "}
+                    <span className="font-medium">
+                      {historyExpense.employeeName || "Unknown"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {historyExpense.editHistory &&
+              historyExpense.editHistory.length > 0 ? (
+                <div className="space-y-3">
+                  <h5 className="font-semibold text-gray-900 dark:text-white">
+                    Changes ({historyExpense.editHistory.length})
+                  </h5>
+                  {historyExpense.editHistory.map((entry, index) => (
+                    <div
+                      key={index}
+                      className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <History className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            {entry.editedByName}
+                          </span>
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          {format(
+                            new Date(entry.timestamp),
+                            "MMM dd, yyyy HH:mm"
+                          )}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {entry.changes.map((field) => (
+                          <div key={field} className="text-sm">
+                            <span className="font-semibold text-gray-700 dark:text-gray-300">
+                              {field}:
+                            </span>
+                            <div className="ml-4 mt-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-red-600 dark:text-red-400 line-through">
+                                  {typeof entry.oldValues[field] === "number"
+                                    ? entry.oldValues[field].toFixed(2)
+                                    : entry.oldValues[field] || "(empty)"}
+                                </span>
+                                <span className="text-gray-500">→</span>
+                                <span className="text-green-600 dark:text-green-400 font-medium">
+                                  {typeof entry.newValues[field] === "number"
+                                    ? entry.newValues[field].toFixed(2)
+                                    : entry.newValues[field] || "(empty)"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <History className="mx-auto h-12 w-12 mb-2 opacity-50" />
+                  <p>No edit history available</p>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowHistoryDialog(false);
+                    setHistoryExpense(null);
+                  }}
+                >
+                  Close
                 </Button>
               </div>
             </div>

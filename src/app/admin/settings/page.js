@@ -10,12 +10,33 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useThemeStore } from "@/store/useThemeStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { APKInstallPrompt } from "@/components/APKInstallPrompt";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
+import {
+  getAllCurrencyCodes,
+  getCurrencyDetails,
+} from "@/lib/constants/allCurrencies";
 import {
   Database,
   Wifi,
@@ -35,6 +56,8 @@ import {
   Plug,
   ChevronRight,
   LogOut,
+  DollarSign,
+  RefreshCw,
 } from "lucide-react";
 
 export default function AdminSettings() {
@@ -52,6 +75,79 @@ export default function AdminSettings() {
   } = useThemeStore();
 
   const [isSaving, setIsSaving] = useState(false);
+
+  // Currency exchange rate states
+  const [exchangeRates, setExchangeRates] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [baseCurrency, setBaseCurrency] = useState("THB");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Get all available currencies
+  const allCurrencies = getAllCurrencyCodes();
+
+  // Load exchange rates from Firebase on mount
+  useEffect(() => {
+    loadExchangeRates();
+  }, []);
+
+  const loadExchangeRates = async () => {
+    try {
+      const docRef = doc(db, "settings", "exchange_rates");
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setExchangeRates(data.rates);
+        setLastUpdated(data.lastUpdated);
+        setBaseCurrency(data.baseCurrency || "THB");
+      }
+    } catch (error) {
+      console.error("Error loading exchange rates:", error);
+    }
+  };
+
+  const refreshExchangeRates = async () => {
+    try {
+      setIsRefreshing(true);
+
+      // Fetch from ExchangeRate-API
+      const response = await fetch(
+        `https://v6.exchangerate-api.com/v6/6b455dd83fbad089acb2892c/latest/${baseCurrency}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch exchange rates");
+      }
+
+      const data = await response.json();
+
+      if (data.result !== "success") {
+        throw new Error(data["error-type"] || "Failed to fetch rates");
+      }
+
+      // Save to Firebase
+      const docRef = doc(db, "settings", "exchange_rates");
+      await setDoc(docRef, {
+        rates: data.conversion_rates,
+        baseCurrency: baseCurrency,
+        lastUpdated: new Date().toISOString(),
+        timeLastUpdateUtc: data.time_last_update_utc,
+        timeNextUpdateUtc: data.time_next_update_utc,
+      });
+
+      // Update local state
+      setExchangeRates(data.conversion_rates);
+      setLastUpdated(new Date().toISOString());
+
+      toast.success("Exchange rates updated successfully!");
+    } catch (error) {
+      console.error("Error refreshing exchange rates:", error);
+      toast.error(error.message || "Failed to refresh exchange rates");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -229,6 +325,173 @@ export default function AdminSettings() {
               </p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Currency Exchange Rates */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-xl">
+            <DollarSign className="mr-2 h-6 w-6 md:h-5 md:w-5" />
+            Currency Exchange Rates
+          </CardTitle>
+          <CardDescription className="text-base">
+            Manage currency conversion rates for multi-currency support
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Base Currency Selection */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Base Currency</label>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Select value={baseCurrency} onValueChange={setBaseCurrency}>
+                <SelectTrigger className="w-full sm:w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {allCurrencies.map((code) => {
+                    const details = getCurrencyDetails(code);
+                    return (
+                      <SelectItem key={code} value={code}>
+                        {details.symbol} {code} - {details.name}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={refreshExchangeRates}
+                disabled={isRefreshing}
+                className="w-full sm:w-auto"
+                size="lg"
+              >
+                {isRefreshing ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Fetching...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Refresh Rates
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              All exchange rates will be calculated based on this currency
+            </p>
+          </div>
+
+          {/* Last Updated Info */}
+          {lastUpdated && (
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-900 dark:text-blue-200">
+                <strong>Last Updated:</strong>{" "}
+                {new Date(lastUpdated).toLocaleString()}
+              </p>
+              <p className="text-sm text-blue-900 dark:text-blue-200 mt-1">
+                <strong>Base Currency:</strong>{" "}
+                {(() => {
+                  const details = getCurrencyDetails(baseCurrency);
+                  return `${details.symbol} ${baseCurrency} - ${details.name}`;
+                })()}
+              </p>
+            </div>
+          )}
+
+          {/* Exchange Rates Display */}
+          {exchangeRates && (
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h4 className="font-semibold text-base">
+                  Available Rates ({Object.keys(exchangeRates).length}{" "}
+                  currencies)
+                </h4>
+                <Input
+                  placeholder="Search currency..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full sm:w-64"
+                />
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <div className="max-h-96 overflow-y-auto">
+                  <Table>
+                    <TableHeader className="bg-neutral-50 dark:bg-neutral-900 sticky top-0">
+                      <TableRow>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Currency Name</TableHead>
+                        <TableHead>Country</TableHead>
+                        <TableHead className="text-right">
+                          Exchange Rate
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(exchangeRates)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .filter(([currency]) => {
+                          if (!searchTerm) return true;
+                          const details = getCurrencyDetails(currency);
+                          const term = searchTerm.toLowerCase();
+                          return (
+                            currency.toLowerCase().includes(term) ||
+                            details.name.toLowerCase().includes(term) ||
+                            details.country.toLowerCase().includes(term)
+                          );
+                        })
+                        .map(([currency, rate]) => {
+                          const details = getCurrencyDetails(currency);
+                          return (
+                            <TableRow key={currency}>
+                              <TableCell className="font-semibold text-lg">
+                                {details.symbol}
+                              </TableCell>
+                              <TableCell className="font-mono font-semibold">
+                                {currency}
+                              </TableCell>
+                              <TableCell>{details.name}</TableCell>
+                              <TableCell className="text-neutral-600 dark:text-neutral-400">
+                                {details.country}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {typeof rate === "number"
+                                  ? rate.toFixed(4)
+                                  : rate}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!exchangeRates && !isRefreshing && (
+            <div className="p-8 text-center border rounded-lg border-dashed">
+              <DollarSign className="h-12 w-12 mx-auto mb-3 text-neutral-400" />
+              <p className="text-neutral-600 dark:text-neutral-400 mb-3">
+                No exchange rates loaded yet
+              </p>
+              <Button onClick={refreshExchangeRates} size="lg">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Fetch Exchange Rates
+              </Button>
+            </div>
+          )}
+
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <p className="text-xs text-amber-900 dark:text-amber-200">
+              <strong>Note:</strong> Exchange rates are fetched from
+              ExchangeRate-API. Click refresh to get the latest rates and save
+              them to Firebase. Rates update automatically on the API side.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
