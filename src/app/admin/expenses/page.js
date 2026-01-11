@@ -84,6 +84,10 @@ export default function ExpensesSection() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
+  // Inline category editing states
+  const [editingCategoryExpenseId, setEditingCategoryExpenseId] = useState(null);
+  const [editingCategoryValue, setEditingCategoryValue] = useState("");
+
   // Categories management states
   const [showCategoriesDialog, setShowCategoriesDialog] = useState(false);
   const [showCategoryFormDialog, setShowCategoryFormDialog] = useState(false);
@@ -610,6 +614,60 @@ export default function ExpensesSection() {
     }
   };
 
+  // Inline category editing handlers
+  const handleStartCategoryEdit = (expense) => {
+    setEditingCategoryExpenseId(expense.id);
+    setEditingCategoryValue(expense.category || "");
+  };
+
+  const handleConfirmCategoryEdit = async (expenseId) => {
+    if (!editingCategoryValue.trim()) {
+      toast.error("Please select a category");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/mobile?action=edit-expense", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: expenseId,
+          category: editingCategoryValue.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Category updated successfully");
+        // Update the expense in the local state
+        setExpenses((prevExpenses) =>
+          prevExpenses.map((exp) =>
+            exp.id === expenseId
+              ? { ...exp, category: editingCategoryValue.trim() }
+              : exp
+          )
+        );
+      } else {
+        toast.error(data.error || "Failed to update category");
+      }
+    } catch (error) {
+      console.error("Error updating category:", error);
+      toast.error("Error updating category");
+    } finally {
+      setEditingCategoryExpenseId(null);
+      setEditingCategoryValue("");
+    }
+  };
+
+  const handleCancelCategoryEdit = () => {
+    setEditingCategoryExpenseId(null);
+    setEditingCategoryValue("");
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case "approved":
@@ -1053,19 +1111,11 @@ export default function ExpensesSection() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          {[
-                            ...new Set(
-                              approvedExpenses
-                                .map((e) => e.category)
-                                .filter(Boolean)
-                            ),
-                          ]
-                            .sort()
-                            .map((cat) => (
-                              <SelectItem key={cat} value={cat}>
-                                {cat}
-                              </SelectItem>
-                            ))}
+                          {categories.sort().map((cat) => (
+                            <SelectItem key={cat} value={cat}>
+                              {cat}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1347,12 +1397,49 @@ export default function ExpensesSection() {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge
-                                    variant="outline"
-                                    className="whitespace-nowrap"
-                                  >
-                                    {expense.category}
-                                  </Badge>
+                                  {editingCategoryExpenseId === expense.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <Select
+                                        value={editingCategoryValue}
+                                        onValueChange={setEditingCategoryValue}
+                                      >
+                                        <SelectTrigger className="h-8 w-32">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {categories.map((cat) => (
+                                            <SelectItem key={cat} value={cat}>
+                                              {cat}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleConfirmCategoryEdit(expense.id)}
+                                        className="h-8 w-8 p-0"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={handleCancelCategoryEdit}
+                                        className="h-8 w-8 p-0"
+                                      >
+                                        <XCircle className="h-4 w-4 text-red-600" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                      onClick={() => handleStartCategoryEdit(expense)}
+                                    >
+                                      {expense.category}
+                                    </Badge>
+                                  )}
                                 </TableCell>
                                 <TableCell className="font-bold text-gray-900 dark:text-white text-right whitespace-nowrap">
                                   {expense.currency

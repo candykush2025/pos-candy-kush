@@ -1,12 +1,15 @@
 # Mobile API - Expense Management Documentation
 
 ## Base URL
+
 ```
 POST /api/mobile
 ```
 
 ## Authentication
+
 All expense operations require JWT authentication in the `Authorization` header:
+
 ```
 Authorization: Bearer <jwt_token>
 ```
@@ -20,6 +23,7 @@ Authorization: Bearer <jwt_token>
 **Method:** POST
 
 **Request Body:**
+
 ```json
 {
   "action": "approve-expense",
@@ -31,6 +35,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Example Request:**
+
 ```json
 {
   "action": "approve-expense",
@@ -42,6 +47,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -69,6 +75,7 @@ Authorization: Bearer <jwt_token>
 **Method:** POST
 
 **Request Body:**
+
 ```json
 {
   "action": "deny-expense",
@@ -80,6 +87,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Example Request:**
+
 ```json
 {
   "action": "deny-expense",
@@ -91,6 +99,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -118,6 +127,7 @@ Authorization: Bearer <jwt_token>
 **Method:** POST
 
 **Request Body:**
+
 ```json
 {
   "action": "edit-expense",
@@ -133,18 +143,20 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Example Request:**
+
 ```json
 {
   "action": "edit-expense",
   "id": "MWRofkSZqr7OaKhHFhGc",
   "description": "Updated office supplies",
-  "amount": 150.00,
+  "amount": 150.0,
   "category": "Office Supplies",
   "notes": "Updated amount after receipt review"
 }
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -153,7 +165,7 @@ Authorization: Bearer <jwt_token>
     "expense": {
       "id": "MWRofkSZqr7OaKhHFhGc",
       "description": "Updated office supplies",
-      "amount": 150.00,
+      "amount": 150.0,
       "category": "Office Supplies",
       "notes": "Updated amount after receipt review",
       "updatedAt": "2026-01-10T10:30:00.000Z"
@@ -163,6 +175,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Notes:**
+
 - Only `id` is required, all other fields are optional
 - Employees can only edit pending expenses
 - Admins can edit expenses in any status
@@ -177,6 +190,7 @@ Authorization: Bearer <jwt_token>
 **Method:** POST
 
 **Request Body:**
+
 ```json
 {
   "action": "delete-expense",
@@ -185,6 +199,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Example Request:**
+
 ```json
 {
   "action": "delete-expense",
@@ -193,6 +208,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -202,6 +218,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Notes:**
+
 - Employees can only delete their own pending expenses
 - Admins can delete any expense
 - Approved/denied expenses require admin privileges to delete
@@ -220,6 +237,7 @@ All operations return similar error formats:
 ```
 
 **Common Error Codes:**
+
 - `401`: Authentication required
 - `400`: Invalid request data
 - `404`: Expense not found
@@ -248,22 +266,26 @@ All operations return similar error formats:
 ## Additional Expense Operations
 
 ### Get Expenses
+
 **Action:** `get-expenses`
 
 **Method:** GET
 
 **Query Parameters:**
+
 - `employee_id` (optional): Filter by employee
 - `status` (optional): Filter by status (pending/approved/denied)
 - `start_date` (optional): ISO date
 - `end_date` (optional): ISO date
 
 ### Create Expense
+
 **Action:** `create-expense`
 
 **Method:** POST
 
 **Request Body:**
+
 ```json
 {
   "action": "create-expense",
