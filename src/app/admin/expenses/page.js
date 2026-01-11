@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -85,8 +86,13 @@ export default function ExpensesSection() {
   const [editingExpense, setEditingExpense] = useState(null);
 
   // Inline category editing states
-  const [editingCategoryExpenseId, setEditingCategoryExpenseId] = useState(null);
+  const [editingCategoryExpenseId, setEditingCategoryExpenseId] =
+    useState(null);
   const [editingCategoryValue, setEditingCategoryValue] = useState("");
+
+  // Bulk selection states
+  const [selectedExpenses, setSelectedExpenses] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   // Categories management states
   const [showCategoriesDialog, setShowCategoriesDialog] = useState(false);
@@ -668,6 +674,144 @@ export default function ExpensesSection() {
     setEditingCategoryValue("");
   };
 
+  // Bulk selection handlers
+  const handleSelectExpense = (expenseId, checked) => {
+    if (checked) {
+      setSelectedExpenses((prev) => [...prev, expenseId]);
+    } else {
+      setSelectedExpenses((prev) => prev.filter((id) => id !== expenseId));
+      setSelectAll(false);
+    }
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedExpenses(pendingExpenses.map((expense) => expense.id));
+      setSelectAll(true);
+    } else {
+      setSelectedExpenses([]);
+      setSelectAll(false);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedExpenses.length === 0) {
+      toast.error("Please select expenses to approve");
+      return;
+    }
+
+    try {
+      setProcessingAction(true);
+      const approvalPromises = selectedExpenses.map((expenseId) =>
+        fetch("/api/mobile?action=approve-expense", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            expenseId,
+            approvedBy: user?.id || "admin",
+            approvedByName: user?.name || user?.email || "Admin",
+            notes: `Bulk approved ${selectedExpenses.length} expenses`,
+          }),
+        })
+      );
+
+      const results = await Promise.all(approvalPromises);
+      const failures = results.filter((result) => !result.ok);
+
+      if (failures.length === 0) {
+        toast.success(
+          `Successfully approved ${selectedExpenses.length} expenses`
+        );
+        // Update local state
+        setExpenses((prevExpenses) =>
+          prevExpenses.map((exp) =>
+            selectedExpenses.includes(exp.id)
+              ? {
+                  ...exp,
+                  status: "approved",
+                  approvedBy: user?.id || "admin",
+                  approvedByName: user?.name || user?.email || "Admin",
+                  approvedAt: new Date().toISOString(),
+                  approvalNotes: `Bulk approved ${selectedExpenses.length} expenses`,
+                }
+              : exp
+          )
+        );
+        setSelectedExpenses([]);
+        setSelectAll(false);
+      } else {
+        toast.error(`Failed to approve ${failures.length} expenses`);
+      }
+    } catch (error) {
+      console.error("Error bulk approving expenses:", error);
+      toast.error("Error approving expenses");
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleBulkDeny = async () => {
+    if (selectedExpenses.length === 0) {
+      toast.error("Please select expenses to deny");
+      return;
+    }
+
+    try {
+      setProcessingAction(true);
+      const denialPromises = selectedExpenses.map((expenseId) =>
+        fetch("/api/mobile?action=deny-expense", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            expenseId,
+            deniedBy: user?.id || "admin",
+            deniedByName: user?.name || user?.email || "Admin",
+            notes: `Bulk denied ${selectedExpenses.length} expenses`,
+          }),
+        })
+      );
+
+      const results = await Promise.all(denialPromises);
+      const failures = results.filter((result) => !result.ok);
+
+      if (failures.length === 0) {
+        toast.success(
+          `Successfully denied ${selectedExpenses.length} expenses`
+        );
+        // Update local state
+        setExpenses((prevExpenses) =>
+          prevExpenses.map((exp) =>
+            selectedExpenses.includes(exp.id)
+              ? {
+                  ...exp,
+                  status: "denied",
+                  approvedBy: user?.id || "admin",
+                  approvedByName: user?.name || user?.email || "Admin",
+                  approvedAt: new Date().toISOString(),
+                  approvalNotes: `Bulk denied ${selectedExpenses.length} expenses`,
+                }
+              : exp
+          )
+        );
+        setSelectedExpenses([]);
+        setSelectAll(false);
+      } else {
+        toast.error(`Failed to deny ${failures.length} expenses`);
+      }
+    } catch (error) {
+      console.error("Error bulk denying expenses:", error);
+      toast.error("Error denying expenses");
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case "approved":
@@ -913,22 +1057,84 @@ export default function ExpensesSection() {
             {pendingExpenses.length > 0 && (
               <Card className="border-yellow-200 dark:border-yellow-800">
                 <CardHeader className="bg-yellow-50 dark:bg-yellow-900/20">
-                  <CardTitle className="text-yellow-900 dark:text-yellow-100 flex items-center gap-2">
-                    <Clock className="h-5 w-5" />
-                    Need Approval ({pendingExpenses.length})
-                  </CardTitle>
-                  <CardDescription>
-                    Expenses waiting for your review and approval
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-yellow-900 dark:text-yellow-100 flex items-center gap-2">
+                        <Clock className="h-5 w-5" />
+                        Need Approval ({pendingExpenses.length})
+                      </CardTitle>
+                      <CardDescription>
+                        Expenses waiting for your review and approval
+                      </CardDescription>
+                    </div>
+                    {selectedExpenses.length > 0 && (
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleBulkApprove}
+                          disabled={processingAction}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          {processingAction ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                          )}
+                          Approve ({selectedExpenses.length})
+                        </Button>
+                        <Button
+                          onClick={handleBulkDeny}
+                          disabled={processingAction}
+                          size="sm"
+                          variant="destructive"
+                        >
+                          {processingAction ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <XCircle className="mr-2 h-4 w-4" />
+                          )}
+                          Deny ({selectedExpenses.length})
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
+                    {/* Select All Checkbox */}
+                    {pendingExpenses.length > 1 && (
+                      <div className="flex items-center space-x-2 pb-2 border-b border-yellow-200 dark:border-yellow-800">
+                        <Checkbox
+                          id="select-all"
+                          checked={selectAll}
+                          onCheckedChange={handleSelectAll}
+                        />
+                        <label
+                          htmlFor="select-all"
+                          className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
+                        >
+                          Select All ({pendingExpenses.length})
+                        </label>
+                      </div>
+                    )}
+
                     {pendingExpenses.map((expense) => (
                       <div
                         key={expense.id}
-                        className="flex items-start justify-between p-4 border border-yellow-200 dark:border-yellow-800 rounded-lg bg-yellow-50/50 dark:bg-yellow-900/10"
+                        className={`flex items-start gap-3 p-4 border border-yellow-200 dark:border-yellow-800 rounded-lg bg-yellow-50/50 dark:bg-yellow-900/10 ${
+                          selectedExpenses.includes(expense.id)
+                            ? "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-900/10"
+                            : ""
+                        }`}
                       >
-                        <div className="flex-1 mr-4">
+                        <Checkbox
+                          checked={selectedExpenses.includes(expense.id)}
+                          onCheckedChange={(checked) =>
+                            handleSelectExpense(expense.id, checked)
+                          }
+                          className="mt-1"
+                        />
+                        <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h4 className="font-semibold text-gray-900 dark:text-white">
                               {expense.description}
@@ -1417,7 +1623,9 @@ export default function ExpensesSection() {
                                       <Button
                                         size="sm"
                                         variant="ghost"
-                                        onClick={() => handleConfirmCategoryEdit(expense.id)}
+                                        onClick={() =>
+                                          handleConfirmCategoryEdit(expense.id)
+                                        }
                                         className="h-8 w-8 p-0"
                                       >
                                         <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -1435,7 +1643,9 @@ export default function ExpensesSection() {
                                     <Badge
                                       variant="outline"
                                       className="whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                                      onClick={() => handleStartCategoryEdit(expense)}
+                                      onClick={() =>
+                                        handleStartCategoryEdit(expense)
+                                      }
                                     >
                                       {expense.category}
                                     </Badge>
