@@ -3643,10 +3643,27 @@ export async function GET(request) {
 
 // POST handler - Login and edit operations
 export async function POST(request) {
+  let requestBody = {};
+
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
-    const requestBody = await request.json();
+
+    // Parse request body with error handling
+    try {
+      const bodyText = await request.text();
+      if (bodyText.trim()) {
+        requestBody = JSON.parse(bodyText);
+      }
+    } catch (jsonError) {
+      return Response.json(
+        {
+          success: false,
+          error: "Invalid JSON in request body",
+        },
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
     // Handle login action
     if (action === "login") {
