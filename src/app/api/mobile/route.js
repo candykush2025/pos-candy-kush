@@ -34,6 +34,7 @@ import {
   categoriesService,
   invoicesService,
   purchasesService,
+  suppliersService,
   expensesService,
   expenseCategoriesService,
   getDocuments,
@@ -1114,14 +1115,28 @@ async function getCategories() {
 // ==================== PURCHASES HELPER FUNCTIONS ====================
 
 // Get all purchases
-async function getPurchases() {
+async function getPurchases(filters = {}) {
   try {
-    const purchases = await purchasesService.getAll({
-      orderBy: ["createdAt", "desc"],
-    });
+    const { supplier, payment_status } = filters;
+
+    // Build query options
+    const queryOptions = {};
+
+    // Add filters - Firestore expects where conditions as arrays
+    if (supplier || payment_status) {
+      queryOptions.where = [];
+      if (supplier) {
+        queryOptions.where.push("supplier_name", "==", supplier);
+      }
+      if (payment_status) {
+        queryOptions.where.push("payment_status", "==", payment_status);
+      }
+    }
+
+    const purchases = await purchasesService.getAll(queryOptions);
 
     // Format purchases for mobile app
-    const formattedPurchases = purchases.map((purchase) => ({
+    let formattedPurchases = purchases.map((purchase) => ({
       id: purchase.id,
       supplier_name: purchase.supplier_name || "",
       purchase_date: purchase.purchase_date || "",
@@ -1135,6 +1150,10 @@ async function getPurchases() {
       })),
       total: purchase.total || 0,
       status: purchase.status || "pending",
+      payment_status: purchase.payment_status || "unpaid",
+      payment_method: purchase.payment_method || "",
+      payment_due_date: purchase.payment_due_date || "",
+      notes: purchase.notes || "",
       reminder_type: purchase.reminder_type || "no_reminder",
       reminder_value: purchase.reminder_value || "",
       reminder_time: purchase.reminder_time || "",
@@ -1142,6 +1161,18 @@ async function getPurchases() {
         ? purchase.createdAt.toDate().toISOString()
         : new Date().toISOString(),
     }));
+
+    // Sort: unpaid purchases first, then paid purchases
+    formattedPurchases.sort((a, b) => {
+      if (a.payment_status === "unpaid" && b.payment_status !== "unpaid") {
+        return -1;
+      }
+      if (a.payment_status !== "unpaid" && b.payment_status === "unpaid") {
+        return 1;
+      }
+      // If both have same payment status, sort by created date (newest first)
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
 
     return {
       purchases: formattedPurchases,
@@ -1176,6 +1207,10 @@ async function getPurchaseById(purchaseId) {
       })),
       total: purchase.total || 0,
       status: purchase.status || "pending",
+      payment_status: purchase.payment_status || "unpaid",
+      payment_method: purchase.payment_method || "",
+      payment_due_date: purchase.payment_due_date || "",
+      notes: purchase.notes || "",
       reminder_type: purchase.reminder_type || "no_reminder",
       reminder_value: purchase.reminder_value || "",
       reminder_time: purchase.reminder_time || "",
@@ -1199,6 +1234,10 @@ async function createPurchase(purchaseData) {
       due_date,
       items,
       total,
+      payment_status,
+      payment_method,
+      payment_due_date,
+      notes,
       reminder_type,
       reminder_value,
       reminder_time,
@@ -1224,6 +1263,26 @@ async function createPurchase(purchaseData) {
       throw new Error("Total must be a non-negative number");
     }
 
+    // Validate payment fields
+    const validPaymentStatuses = ["paid", "unpaid"];
+    if (payment_status && !validPaymentStatuses.includes(payment_status)) {
+      throw new Error("Payment status must be 'paid' or 'unpaid'");
+    }
+
+    const validPaymentMethods = ["cash", "card", "bank_transfer", "other"];
+    if (payment_method && !validPaymentMethods.includes(payment_method)) {
+      throw new Error(
+        "Payment method must be 'cash', 'card', 'bank_transfer', or 'other'"
+      );
+    }
+
+    // If payment status is unpaid, payment_due_date is required
+    if (payment_status === "unpaid" && !payment_due_date) {
+      throw new Error(
+        "Payment due date is required when payment status is unpaid"
+      );
+    }
+
     // Create purchase document
     const newPurchase = {
       supplier_name: supplier_name.trim(),
@@ -1238,6 +1297,10 @@ async function createPurchase(purchaseData) {
       })),
       total,
       status: "pending",
+      payment_status: payment_status || "unpaid",
+      payment_method: payment_method || "",
+      payment_due_date: payment_due_date || "",
+      notes: notes || "",
       reminder_type: reminder_type || "no_reminder",
       reminder_value: reminder_value || "",
       reminder_time: reminder_time || "",
@@ -1266,6 +1329,10 @@ async function editPurchase(purchaseData) {
       items,
       total,
       status,
+      payment_status,
+      payment_method,
+      payment_due_date,
+      notes,
       reminder_type,
       reminder_value,
       reminder_time,
@@ -1294,6 +1361,32 @@ async function editPurchase(purchaseData) {
       throw new Error("Total must be a non-negative number");
     }
 
+    // Validate payment fields
+    const validPaymentStatuses = ["paid", "unpaid"];
+    if (
+      payment_status !== undefined &&
+      !validPaymentStatuses.includes(payment_status)
+    ) {
+      throw new Error("Payment status must be 'paid' or 'unpaid'");
+    }
+
+    const validPaymentMethods = ["cash", "card", "bank_transfer", "other"];
+    if (
+      payment_method !== undefined &&
+      !validPaymentMethods.includes(payment_method)
+    ) {
+      throw new Error(
+        "Payment method must be 'cash', 'card', 'bank_transfer', or 'other'"
+      );
+    }
+
+    // If payment status is unpaid, payment_due_date is required
+    if (payment_status === "unpaid" && !payment_due_date) {
+      throw new Error(
+        "Payment due date is required when payment status is unpaid"
+      );
+    }
+
     // Update purchase
     const updateData = {};
     if (supplier_name !== undefined)
@@ -1311,6 +1404,13 @@ async function editPurchase(purchaseData) {
     }
     if (total !== undefined) updateData.total = total;
     if (status !== undefined) updateData.status = status;
+    if (payment_status !== undefined)
+      updateData.payment_status = payment_status;
+    if (payment_method !== undefined)
+      updateData.payment_method = payment_method;
+    if (payment_due_date !== undefined)
+      updateData.payment_due_date = payment_due_date;
+    if (notes !== undefined) updateData.notes = notes;
     if (reminder_type !== undefined) updateData.reminder_type = reminder_type;
     if (reminder_value !== undefined)
       updateData.reminder_value = reminder_value;
@@ -1334,6 +1434,10 @@ async function editPurchase(purchaseData) {
       })),
       total: updatedPurchase.total || 0,
       status: updatedPurchase.status || "pending",
+      payment_status: updatedPurchase.payment_status || "unpaid",
+      payment_method: updatedPurchase.payment_method || "",
+      payment_due_date: updatedPurchase.payment_due_date || "",
+      notes: updatedPurchase.notes || "",
       reminder_type: updatedPurchase.reminder_type || "no_reminder",
       reminder_value: updatedPurchase.reminder_value || "",
       reminder_time: updatedPurchase.reminder_time || "",
@@ -1398,12 +1502,180 @@ async function completePurchase(purchaseId) {
       })),
       total: updatedPurchase.total || 0,
       status: updatedPurchase.status || "completed",
+      payment_status: updatedPurchase.payment_status || "unpaid",
+      payment_method: updatedPurchase.payment_method || "",
+      payment_due_date: updatedPurchase.payment_due_date || "",
+      notes: updatedPurchase.notes || "",
       reminder_type: updatedPurchase.reminder_type || "no_reminder",
       reminder_value: updatedPurchase.reminder_value || "",
       reminder_time: updatedPurchase.reminder_time || "",
     };
   } catch (error) {
     console.error("Error completing purchase:", error);
+    throw error;
+  }
+}
+
+// ==================== SUPPLIERS HELPER FUNCTIONS ====================
+
+// Get all suppliers
+async function getSuppliers() {
+  try {
+    const suppliers = await suppliersService.getAll({
+      orderBy: ["name", "asc"],
+    });
+
+    // Format suppliers for mobile app
+    const formattedSuppliers = suppliers.map((supplier) => ({
+      id: supplier.id,
+      name: supplier.name || "",
+      contact_person: supplier.contact_person || "",
+      email: supplier.email || "",
+      phone: supplier.phone || "",
+      address: supplier.address || "",
+      notes: supplier.notes || "",
+      createdAt: supplier.createdAt?.toDate?.()
+        ? supplier.createdAt.toDate().toISOString()
+        : new Date().toISOString(),
+    }));
+
+    return {
+      suppliers: formattedSuppliers,
+    };
+  } catch (error) {
+    console.error("Error fetching suppliers:", error);
+    throw error;
+  }
+}
+
+// Get single supplier by ID
+async function getSupplierById(supplierId) {
+  try {
+    const supplier = await suppliersService.get(supplierId);
+
+    if (!supplier) {
+      throw new Error("Supplier not found");
+    }
+
+    // Format supplier
+    return {
+      id: supplier.id,
+      name: supplier.name || "",
+      contact_person: supplier.contact_person || "",
+      email: supplier.email || "",
+      phone: supplier.phone || "",
+      address: supplier.address || "",
+      notes: supplier.notes || "",
+      createdAt: supplier.createdAt?.toDate?.()
+        ? supplier.createdAt.toDate().toISOString()
+        : new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching supplier by ID:", error);
+    throw error;
+  }
+}
+
+// Create new supplier
+async function createSupplier(supplierData) {
+  try {
+    // Validate required fields
+    const { name, contact_person, email, phone, address, notes } = supplierData;
+
+    if (!name || !name.trim()) {
+      throw new Error("Supplier name is required");
+    }
+
+    // Create supplier document
+    const newSupplier = {
+      name: name.trim(),
+      contact_person: contact_person || "",
+      email: email || "",
+      phone: phone || "",
+      address: address || "",
+      notes: notes || "",
+    };
+
+    const createdSupplier = await suppliersService.create(newSupplier);
+
+    return {
+      id: createdSupplier.id,
+      ...newSupplier,
+    };
+  } catch (error) {
+    console.error("Error creating supplier:", error);
+    throw error;
+  }
+}
+
+// Edit existing supplier
+async function editSupplier(supplierData) {
+  try {
+    const { id, name, contact_person, email, phone, address, notes } =
+      supplierData;
+
+    if (!id) {
+      throw new Error("Supplier ID is required");
+    }
+
+    // Check if supplier exists
+    const existingSupplier = await suppliersService.get(id);
+    if (!existingSupplier) {
+      throw new Error("Supplier not found");
+    }
+
+    // Validate fields if provided
+    if (name !== undefined && !name.trim()) {
+      throw new Error("Supplier name cannot be empty");
+    }
+
+    // Update supplier
+    const updateData = {};
+    if (name !== undefined) updateData.name = name.trim();
+    if (contact_person !== undefined)
+      updateData.contact_person = contact_person;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined) updateData.phone = phone;
+    if (address !== undefined) updateData.address = address;
+    if (notes !== undefined) updateData.notes = notes;
+
+    await suppliersService.update(id, updateData);
+
+    // Return updated supplier
+    const updatedSupplier = await suppliersService.get(id);
+    return {
+      id: updatedSupplier.id,
+      name: updatedSupplier.name || "",
+      contact_person: updatedSupplier.contact_person || "",
+      email: updatedSupplier.email || "",
+      phone: updatedSupplier.phone || "",
+      address: updatedSupplier.address || "",
+      notes: updatedSupplier.notes || "",
+    };
+  } catch (error) {
+    console.error("Error editing supplier:", error);
+    throw error;
+  }
+}
+
+// Delete supplier
+async function deleteSupplier(supplierId) {
+  try {
+    if (!supplierId) {
+      throw new Error("Supplier ID is required");
+    }
+
+    // Check if supplier exists
+    const existingSupplier = await suppliersService.get(supplierId);
+    if (!existingSupplier) {
+      throw new Error("Supplier not found");
+    }
+
+    await suppliersService.delete(supplierId);
+
+    return { success: true, message: "Supplier deleted successfully" };
+  } catch (error) {
+    console.error("Error deleting supplier:", error);
     throw error;
   }
 }
@@ -2966,31 +3238,6 @@ export async function GET(request) {
       }
     }
 
-    // Get all purchases
-    if (action === "get-purchases") {
-      try {
-        const purchasesData = await getPurchases();
-
-        return Response.json(
-          {
-            success: true,
-            action: "get-purchases",
-            generated_at: new Date().toISOString(),
-            data: purchasesData,
-          },
-          { headers: corsHeaders }
-        );
-      } catch (error) {
-        return Response.json(
-          {
-            success: false,
-            error: error.message || "Failed to retrieve purchases",
-          },
-          { status: 200, headers: corsHeaders }
-        );
-      }
-    }
-
     // Get single purchase by ID
     if (action === "get-purchase") {
       try {
@@ -3769,6 +4016,267 @@ export async function POST(request) {
       }
     }
 
+    // Get suppliers
+    if (action === "get-suppliers") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const suppliers = await getSuppliers();
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-suppliers",
+            data: suppliers,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error fetching suppliers:", error);
+
+        const isProd = process.env.NODE_ENV === "production";
+        const payload = {
+          success: false,
+          error: isProd
+            ? error.message || "Failed to fetch suppliers"
+            : error.message || "Failed to fetch suppliers",
+        };
+
+        if (!isProd) {
+          payload.stack = error.stack;
+        }
+
+        return Response.json(payload, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Get single supplier
+    if (action === "get-supplier") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { id } = requestBody;
+        const supplier = await getSupplierById(id);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-supplier",
+            data: {
+              supplier: supplier,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error fetching supplier:", error);
+
+        const isProd = process.env.NODE_ENV === "production";
+        const payload = {
+          success: false,
+          error: isProd
+            ? error.message || "Failed to fetch supplier"
+            : error.message || "Failed to fetch supplier",
+        };
+
+        if (!isProd) {
+          payload.stack = error.stack;
+        }
+
+        return Response.json(payload, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Create supplier
+    if (action === "create-supplier") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const newSupplier = await createSupplier(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "create-supplier",
+            data: {
+              supplier: newSupplier,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error creating supplier:", error);
+
+        const isProd = process.env.NODE_ENV === "production";
+        const payload = {
+          success: false,
+          error: isProd
+            ? error.message || "Failed to create supplier"
+            : error.message || "Failed to create supplier",
+        };
+
+        if (!isProd) {
+          payload.stack = error.stack;
+        }
+
+        return Response.json(payload, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Edit supplier
+    if (action === "edit-supplier") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const updatedSupplier = await editSupplier(requestBody);
+
+        return Response.json(
+          {
+            success: true,
+            action: "edit-supplier",
+            data: {
+              supplier: updatedSupplier,
+            },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error editing supplier:", error);
+
+        const isProd = process.env.NODE_ENV === "production";
+        const payload = {
+          success: false,
+          error: isProd
+            ? error.message || "Failed to edit supplier"
+            : error.message || "Failed to edit supplier",
+        };
+
+        if (!isProd) {
+          payload.stack = error.stack;
+        }
+
+        return Response.json(payload, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Delete supplier
+    if (action === "delete-supplier") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { id } = requestBody;
+        const result = await deleteSupplier(id);
+
+        return Response.json(
+          {
+            success: true,
+            action: "delete-supplier",
+            data: result,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error deleting supplier:", error);
+
+        const isProd = process.env.NODE_ENV === "production";
+        const payload = {
+          success: false,
+          error: isProd
+            ? error.message || "Failed to delete supplier"
+            : error.message || "Failed to delete supplier",
+        };
+
+        if (!isProd) {
+          payload.stack = error.stack;
+        }
+
+        return Response.json(payload, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Get all purchases
+    if (action === "get-purchases") {
+      // Authenticate request
+      const auth = authenticateRequest(request);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        // Extract filter parameters
+        const { supplier, payment_status } = requestBody;
+        const filters = {};
+        if (supplier) filters.supplier = supplier;
+        if (payment_status) filters.payment_status = payment_status;
+
+        const purchasesData = await getPurchases(filters);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-purchases",
+            generated_at: new Date().toISOString(),
+            data: purchasesData,
+          },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error fetching purchases:", error);
+
+        const isProd = process.env.NODE_ENV === "production";
+        const payload = {
+          success: false,
+          error: isProd
+            ? error.message || "Failed to retrieve purchases"
+            : error.message || "Failed to retrieve purchases",
+        };
+
+        if (!isProd) {
+          payload.stack = error.stack;
+        }
+
+        return Response.json(payload, { status: 500, headers: corsHeaders });
+      }
+    }
+
     // Create expense
     if (action === "create-expense") {
       // Authenticate request
@@ -4087,10 +4595,16 @@ export async function POST(request) {
           "edit-product-cost",
           "create-invoice",
           "edit-invoice",
+          "get-purchases",
           "create-purchase",
           "edit-purchase",
           "delete-purchase",
           "complete-purchase",
+          "get-suppliers",
+          "get-supplier",
+          "create-supplier",
+          "edit-supplier",
+          "delete-supplier",
           "create-expense",
           "edit-expense",
           "delete-expense",

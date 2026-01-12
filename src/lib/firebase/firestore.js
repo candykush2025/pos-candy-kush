@@ -38,6 +38,7 @@ export const COLLECTIONS = {
   CUSTOM_TABS: "custom_tabs",
   INVOICES: "invoices",
   PURCHASES: "purchases",
+  SUPPLIERS: "suppliers",
   EXPENSES: "expenses",
   EXPENSE_CATEGORIES: "expense_categories",
 };
@@ -576,6 +577,17 @@ export const purchasesService = {
 };
 
 /**
+ * Suppliers Service
+ */
+export const suppliersService = {
+  create: async (data) => createDocument(COLLECTIONS.SUPPLIERS, data),
+  get: async (id) => getDocument(COLLECTIONS.SUPPLIERS, id),
+  getAll: async (options) => getDocuments(COLLECTIONS.SUPPLIERS, options),
+  update: async (id, data) => updateDocument(COLLECTIONS.SUPPLIERS, id, data),
+  delete: async (id) => deleteDocument(COLLECTIONS.SUPPLIERS, id),
+};
+
+/**
  * Expenses Service
  */
 export const expensesService = {
@@ -615,6 +627,7 @@ export default {
   invoices: invoicesService,
   customTabs: customTabsService,
   purchases: purchasesService,
+  suppliers: suppliersService,
   expenses: expensesService,
   expenseCategories: expenseCategoriesService,
 };

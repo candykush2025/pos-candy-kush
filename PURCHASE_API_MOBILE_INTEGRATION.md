@@ -2,8 +2,8 @@
 
 **Complete Guide for Sending Purchase Data to POS Candy Kush API**
 
-**Last Updated:** January 6, 2026
-**API Version:** 1.0
+**Last Updated:** January 12, 2026
+**API Version:** 2.1
 **Base URL:** `https://pos-candy-kush.vercel.app/api/mobile`
 
 ---
@@ -12,23 +12,34 @@
 
 1. [Overview](#overview)
 2. [Authentication](#authentication)
-3. [Create Purchase Endpoint](#create-purchase-endpoint)
-4. [Request Format](#request-format)
-5. [Response Format](#response-format)
-6. [Error Handling](#error-handling)
-7. [Testing Examples](#testing-examples)
-8. [Mobile Integration](#mobile-integration)
+3. [Supplier Management](#supplier-management)
+4. [Create Purchase Endpoint](#create-purchase-endpoint)
+5. [Purchase List and Filtering](#purchase-list-and-filtering)
+6. [Edit Purchase](#edit-purchase)
+7. [Request Format](#request-format)
+8. [Response Format](#response-format)
+9. [Error Handling](#error-handling)
+10. [Testing Examples](#testing-examples)
+11. [Mobile Integration](#mobile-integration)
 
 ---
 
 ## Overview
 
-This guide provides complete documentation for creating purchase orders through the POS Candy Kush mobile API. The API allows mobile applications to create purchase orders for inventory management.
+This guide provides complete documentation for managing purchases and suppliers through the POS Candy Kush mobile API. The API allows mobile applications to create, manage, and track purchase orders and suppliers for inventory management.
 
 **Key Features:**
+
 - ✅ JWT Authentication required
+- ✅ Supplier management (create, read, update, delete)
 - ✅ Full purchase order creation with multiple items
+- ✅ Payment status tracking (paid/unpaid) with automatic validation
+- ✅ Payment method tracking (cash, card, bank_transfer, other)
+- ✅ Payment due date validation for unpaid purchases
+- ✅ Notes field for internal purchase information
 - ✅ Automatic validation of required fields
+- ✅ Purchase filtering by supplier and payment status
+- ✅ Unpaid purchases displayed first for priority tracking
 - ✅ Reminder system for due dates
 - ✅ Stock level updates when completed
 
@@ -43,6 +54,7 @@ All purchase API endpoints require JWT authentication.
 **Endpoint:** `POST /api/mobile?action=login`
 
 **Request Body:**
+
 ```json
 {
   "email": "admin@candykush.com",
@@ -51,6 +63,7 @@ All purchase API endpoints require JWT authentication.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -63,8 +76,118 @@ All purchase API endpoints require JWT authentication.
 ```
 
 **Use the token in Authorization header:**
+
 ```
 Authorization: Bearer YOUR_JWT_TOKEN_HERE
+```
+
+---
+
+## Supplier Management
+
+The API provides complete CRUD operations for managing suppliers. Suppliers can be created once and reused across multiple purchases.
+
+### Get All Suppliers
+
+**Endpoint:** `POST /api/mobile?action=get-suppliers`
+
+**Method:** `POST`
+
+**Request Body:**
+
+```json
+{}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "get-suppliers",
+  "data": {
+    "suppliers": [
+      {
+        "id": "supplier_001",
+        "name": "Green Valley Suppliers",
+        "contact_person": "John Doe",
+        "email": "john@greenvalley.com",
+        "phone": "+1234567890",
+        "address": "123 Main St, City, State",
+        "notes": "Preferred supplier for cannabis products",
+        "createdAt": "2026-01-06T10:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+### Get Single Supplier
+
+**Endpoint:** `POST /api/mobile?action=get-supplier`
+
+**Request Body:**
+
+```json
+{
+  "id": "supplier_001"
+}
+```
+
+### Create Supplier
+
+**Endpoint:** `POST /api/mobile?action=create-supplier`
+
+**Request Body:**
+
+```json
+{
+  "name": "Green Valley Suppliers",
+  "contact_person": "John Doe",
+  "email": "john@greenvalley.com",
+  "phone": "+1234567890",
+  "address": "123 Main St, City, State",
+  "notes": "Preferred supplier for cannabis products"
+}
+```
+
+**Required Fields:**
+
+- `name`: Supplier name (required)
+
+**Optional Fields:**
+
+- `contact_person`: Contact person name
+- `email`: Email address
+- `phone`: Phone number
+- `address`: Physical address
+- `notes`: Internal notes
+
+### Update Supplier
+
+**Endpoint:** `POST /api/mobile?action=edit-supplier`
+
+**Request Body:**
+
+```json
+{
+  "id": "supplier_001",
+  "name": "Updated Supplier Name",
+  "contact_person": "Jane Smith",
+  "email": "jane@updatedsupplier.com"
+}
+```
+
+### Delete Supplier
+
+**Endpoint:** `POST /api/mobile?action=delete-supplier`
+
+**Request Body:**
+
+```json
+{
+  "id": "supplier_001"
+}
 ```
 
 ---
@@ -78,6 +201,7 @@ Authorization: Bearer YOUR_JWT_TOKEN_HERE
 **Method:** `POST`
 
 **Headers:**
+
 ```
 Content-Type: application/json
 Authorization: Bearer YOUR_JWT_TOKEN
@@ -85,32 +209,113 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ### Required Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `supplier_name` | string | Yes | Name of the supplier/vendor |
-| `purchase_date` | string | Yes | Purchase date in YYYY-MM-DD format |
-| `due_date` | string | Yes | Due date in YYYY-MM-DD format |
-| `items` | array | Yes | Array of purchase items (min 1 item) |
-| `total` | number | Yes | Total purchase amount (must be >= 0) |
-| `reminder_type` | string | No | Reminder type: "no_reminder", "days_before", "weeks_before", "specific_date" |
-| `reminder_value` | string | No | Reminder value (e.g., "3" for 3 days before) |
-| `reminder_time` | string | No | Reminder time in HH:MM format (e.g., "09:00") |
+| Field              | Type   | Required    | Description                                                                    |
+| ------------------ | ------ | ----------- | ------------------------------------------------------------------------------ |
+| `supplier_name`    | string | Yes         | Name of the supplier/vendor                                                    |
+| `purchase_date`    | string | Yes         | Purchase date in YYYY-MM-DD format                                             |
+| `due_date`         | string | Yes         | Due date in YYYY-MM-DD format                                                  |
+| `items`            | array  | Yes         | Array of purchase items (min 1 item)                                           |
+| `total`            | number | Yes         | Total purchase amount (must be >= 0)                                           |
+| `payment_status`   | string | No          | Payment status: "paid" or "unpaid" (default: "unpaid")                         |
+| `payment_method`   | string | No          | Payment method: "cash", "card", "bank_transfer", "other"                       |
+| `payment_due_date` | string | Conditional | Payment due date in YYYY-MM-DD format (required if payment_status is "unpaid") |
+| `notes`            | string | No          | Internal notes for the purchase                                                |
+| `reminder_type`    | string | No          | Reminder type: "no_reminder", "days_before", "weeks_before", "specific_date"   |
+| `reminder_value`   | string | No          | Reminder value (e.g., "3" for 3 days before)                                   |
+| `reminder_time`    | string | No          | Reminder time in HH:MM format (e.g., "09:00")                                  |
 
 ### Items Array Structure
 
 Each item in the `items` array must have:
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `product_id` | string | Yes | Unique product identifier |
-| `product_name` | string | Yes | Display name of the product |
-| `quantity` | number | Yes | Quantity to purchase (must be > 0) |
-| `price` | number | Yes | Unit price (must be >= 0) |
-| `total` | number | Yes | Line total (quantity × price) |
+| Field          | Type   | Required | Description                        |
+| -------------- | ------ | -------- | ---------------------------------- |
+| `product_id`   | string | Yes      | Unique product identifier          |
+| `product_name` | string | Yes      | Display name of the product        |
+| `quantity`     | number | Yes      | Quantity to purchase (must be > 0) |
+| `price`        | number | Yes      | Unit price (must be >= 0)          |
+| `total`        | number | Yes      | Line total (quantity × price)      |
 
 ---
 
-## Request Format
+## Edit Purchase
+
+### Endpoint Details
+
+**URL:** `https://pos-candy-kush.vercel.app/api/mobile?action=edit-purchase`
+
+**Method:** `POST`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+### Required Fields
+
+| Field | Type   | Required | Description           |
+| ----- | ------ | -------- | --------------------- |
+| `id`  | string | Yes      | Purchase ID to update |
+
+### Optional Fields
+
+| Field              | Type   | Description                                                                    |
+| ------------------ | ------ | ------------------------------------------------------------------------------ |
+| `supplier_name`    | string | Name of the supplier/vendor                                                    |
+| `purchase_date`    | string | Purchase date in YYYY-MM-DD format                                             |
+| `due_date`         | string | Due date in YYYY-MM-DD format                                                  |
+| `items`            | array  | Array of purchase items                                                        |
+| `total`            | number | Total purchase amount                                                          |
+| `payment_status`   | string | Payment status: "paid" or "unpaid"                                             |
+| `payment_method`   | string | Payment method: "cash", "card", "bank_transfer", "other"                       |
+| `payment_due_date` | string | Payment due date in YYYY-MM-DD format (required if payment_status is "unpaid") |
+| `notes`            | string | Internal notes for the purchase                                                |
+| `reminder_type`    | string | Reminder type: "no_reminder", "days_before", "weeks_before", "specific_date"   |
+| `reminder_value`   | string | Reminder value (e.g., "3" for 3 days before)                                   |
+| `reminder_time`    | string | Reminder time in HH:MM format                                                  |
+
+### Request Example
+
+```json
+{
+  "id": "purchase_001",
+  "payment_status": "paid",
+  "payment_method": "cash",
+  "notes": "Payment completed with cash"
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "action": "edit-purchase",
+  "data": {
+    "purchase": {
+      "id": "purchase_001",
+      "supplier_name": "Green Valley Suppliers",
+      "purchase_date": "2026-01-06",
+      "due_date": "2026-01-15",
+      "items": [...],
+      "total": 1000,
+      "status": "pending",
+      "payment_status": "paid",
+      "payment_method": "cash",
+      "payment_due_date": null,
+      "notes": "Payment completed with cash",
+      "reminder_type": "days_before",
+      "reminder_value": "3",
+      "reminder_time": "09:00",
+      "createdAt": "2026-01-06T10:00:00.000Z"
+    }
+  }
+}
+```
+
+---
 
 ### Complete Request Example
 
@@ -140,6 +345,10 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     }
   ],
   "total": 1000.00,
+  "payment_status": "unpaid",
+  "payment_method": "bank_transfer",
+  "payment_due_date": "2026-01-20",
+  "notes": "Urgent order for high-demand products",
   "reminder_type": "days_before",
   "reminder_value": "3",
   "reminder_time": "09:00"
@@ -158,11 +367,72 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "product_id": "test_product_1",
       "product_name": "Test Product",
       "quantity": 1,
-      "price": 100.00,
-      "total": 100.00
+      "price": 100.0,
+      "total": 100.0
     }
   ],
-  "total": 100.00
+  "total": 100.0
+}
+```
+
+---
+
+## Purchase List and Filtering
+
+### Get All Purchases
+
+**Endpoint:** `POST /api/mobile?action=get-purchases`
+
+**Method:** `POST`
+
+**Request Body (optional filters):**
+
+```json
+{
+  "supplier": "Green Valley Suppliers",
+  "payment_status": "unpaid"
+}
+```
+
+**Filter Parameters:**
+
+- `supplier` (optional): Filter by supplier name
+- `payment_status` (optional): Filter by payment status ("paid" or "unpaid")
+
+**Notes:**
+
+- If no filters are provided, all purchases are returned
+- Unpaid purchases are always displayed first, followed by paid purchases
+- Within each payment status group, purchases are sorted by creation date (newest first)
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "get-purchases",
+  "generated_at": "2026-01-12T10:00:00.000Z",
+  "data": {
+    "purchases": [
+      {
+        "id": "purchase_001",
+        "supplier_name": "Green Valley Suppliers",
+        "purchase_date": "2026-01-06",
+        "due_date": "2026-01-15",
+        "payment_status": "unpaid",
+        "payment_method": "bank_transfer",
+        "payment_due_date": "2026-01-20",
+        "notes": "Urgent order for high-demand products",
+        "items": [...],
+        "total": 1000.00,
+        "status": "pending",
+        "reminder_type": "days_before",
+        "reminder_value": "3",
+        "reminder_time": "09:00",
+        "createdAt": "2026-01-06T10:00:00.000Z"
+      }
+    ]
+  }
 }
 ```
 
@@ -202,9 +472,14 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       ],
       "total": 1000,
       "status": "pending",
+      "payment_status": "unpaid",
+      "payment_method": "bank_transfer",
+      "payment_due_date": "2026-01-20",
+      "notes": "Urgent order for high-demand products",
       "reminder_type": "days_before",
       "reminder_value": "3",
-      "reminder_time": "09:00"
+      "reminder_time": "09:00",
+      "createdAt": "2026-01-06T10:00:00.000Z"
     }
   }
 }
@@ -212,13 +487,13 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ### Response Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `success` | boolean | Always `true` for successful requests |
-| `action` | string | Always `"create-purchase"` |
-| `data.purchase.id` | string | Unique purchase ID (auto-generated) |
-| `data.purchase.status` | string | Always `"pending"` for new purchases |
-| Other fields | various | Echo back the submitted data |
+| Field                  | Type    | Description                           |
+| ---------------------- | ------- | ------------------------------------- |
+| `success`              | boolean | Always `true` for successful requests |
+| `action`               | string  | Always `"create-purchase"`            |
+| `data.purchase.id`     | string  | Unique purchase ID (auto-generated)   |
+| `data.purchase.status` | string  | Always `"pending"` for new purchases  |
+| Other fields           | various | Echo back the submitted data          |
 
 ---
 
@@ -269,15 +544,17 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ### Error Codes and Messages
 
-| Error Message | Cause |
-|---------------|-------|
-| `"Supplier name is required"` | `supplier_name` is empty or missing |
-| `"Purchase date is required"` | `purchase_date` is missing |
-| `"Due date is required"` | `due_date` is missing |
-| `"At least one item is required"` | `items` array is empty or missing |
-| `"Total must be a non-negative number"` | `total` is negative or not a number |
-| `"Missing or invalid authorization header"` | No Bearer token provided |
-| `"Invalid or expired token"` | JWT token is invalid |
+| Error Message                                                          | Cause                                                          |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `"Supplier name is required"`                                          | `supplier_name` is empty or missing                            |
+| `"Purchase date is required"`                                          | `purchase_date` is missing                                     |
+| `"Due date is required"`                                               | `due_date` is missing                                          |
+| `"At least one item is required"`                                      | `items` array is empty or missing                              |
+| `"Total must be a non-negative number"`                                | `total` is negative or not a number                            |
+| `"Payment due date is required when payment status is unpaid"`         | `payment_status` is "unpaid" but `payment_due_date` is missing |
+| `"Payment method must be 'cash', 'card', 'bank_transfer', or 'other'"` | `payment_method` contains invalid value                        |
+| `"Missing or invalid authorization header"`                            | No Bearer token provided                                       |
+| `"Invalid or expired token"`                                           | JWT token is invalid                                           |
 
 ---
 
@@ -312,6 +589,10 @@ curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=create-purchas
       }
     ],
     "total": 500.00,
+    "payment_status": "unpaid",
+    "payment_method": "bank_transfer",
+    "payment_due_date": "2026-01-20",
+    "notes": "Test purchase with payment tracking",
     "reminder_type": "days_before",
     "reminder_value": "3",
     "reminder_time": "09:00"
@@ -322,31 +603,38 @@ curl -X POST "https://pos-candy-kush.vercel.app/api/mobile?action=create-purchas
 
 ```javascript
 async function createPurchase(token) {
-  const response = await fetch('https://pos-candy-kush.vercel.app/api/mobile?action=create-purchase', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      supplier_name: "Green Valley Suppliers",
-      purchase_date: "2026-01-06",
-      due_date: "2026-01-15",
-      items: [
-        {
-          product_id: "cannabis_flower_001",
-          product_name: "Premium Cannabis Flower",
-          quantity: 10,
-          price: 50.00,
-          total: 500.00
-        }
-      ],
-      total: 500.00,
-      reminder_type: "days_before",
-      reminder_value: "3",
-      reminder_time: "09:00"
-    })
-  });
+  const response = await fetch(
+    "https://pos-candy-kush.vercel.app/api/mobile?action=create-purchase",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        supplier_name: "Green Valley Suppliers",
+        purchase_date: "2026-01-06",
+        due_date: "2026-01-15",
+        items: [
+          {
+            product_id: "cannabis_001",
+            product_name: "Premium Flower",
+            quantity: 10,
+            price: 50.0,
+            total: 500.0,
+          },
+        ],
+        total: 500.0,
+        payment_status: "unpaid",
+        payment_method: "bank_transfer",
+        payment_due_date: "2026-01-20",
+        notes: "Urgent order for high-demand products",
+        reminder_type: "days_before",
+        reminder_value: "3",
+        reminder_time: "09:00",
+      }),
+    }
+  );
 
   const data = await response.json();
 
@@ -380,6 +668,10 @@ data class CreatePurchaseRequest(
     @SerializedName("due_date") val dueDate: String,
     val items: List<PurchaseItem>,
     val total: Double,
+    @SerializedName("payment_status") val paymentStatus: String = "unpaid",
+    @SerializedName("payment_method") val paymentMethod: String? = null,
+    @SerializedName("payment_due_date") val paymentDueDate: String? = null,
+    val notes: String? = null,
     @SerializedName("reminder_type") val reminderType: String = "no_reminder",
     @SerializedName("reminder_value") val reminderValue: String = "",
     @SerializedName("reminder_time") val reminderTime: String = ""
@@ -404,9 +696,14 @@ data class Purchase(
     val items: List<PurchaseItem>,
     val total: Double,
     val status: String,
+    @SerializedName("payment_status") val paymentStatus: String,
+    @SerializedName("payment_method") val paymentMethod: String?,
+    @SerializedName("payment_due_date") val paymentDueDate: String?,
+    val notes: String?,
     @SerializedName("reminder_type") val reminderType: String,
     @SerializedName("reminder_value") val reminderValue: String,
-    @SerializedName("reminder_time") val reminderTime: String
+    @SerializedName("reminder_time") val reminderTime: String,
+    @SerializedName("createdAt") val createdAt: String
 )
 
 // API Service
@@ -424,6 +721,10 @@ class PurchaseRepository(private val apiService: PurchaseApiService) {
         purchaseDate: String,
         dueDate: String,
         items: List<PurchaseItem>,
+        paymentStatus: String = "unpaid",
+        paymentMethod: String? = null,
+        paymentDueDate: String? = null,
+        notes: String? = null,
         reminderType: String = "no_reminder",
         reminderValue: String = "",
         reminderTime: String = ""
@@ -436,6 +737,10 @@ class PurchaseRepository(private val apiService: PurchaseApiService) {
                 dueDate = dueDate,
                 items = items,
                 total = total,
+                paymentStatus = paymentStatus,
+                paymentMethod = paymentMethod,
+                paymentDueDate = paymentDueDate,
+                notes = notes,
                 reminderType = reminderType,
                 reminderValue = reminderValue,
                 reminderTime = reminderTime
@@ -493,6 +798,10 @@ class CreatePurchaseActivity : AppCompatActivity() {
                     purchaseDate = "2026-01-06",
                     dueDate = "2026-01-15",
                     items = items,
+                    paymentStatus = "unpaid",
+                    paymentMethod = "bank_transfer",
+                    paymentDueDate = "2026-01-20",
+                    notes = "Urgent order for high-demand products",
                     reminderType = "days_before",
                     reminderValue = "3",
                     reminderTime = "09:00"
@@ -536,12 +845,14 @@ class CreatePurchaseActivity : AppCompatActivity() {
 ### Common Issues
 
 1. **400 Bad Request**
+
    - Check all required fields are present
    - Verify date formats (YYYY-MM-DD)
    - Ensure total is a positive number
    - Check items array is not empty
 
 2. **401 Unauthorized**
+
    - Verify JWT token is valid and not expired
    - Check Authorization header format: `Bearer TOKEN`
 
