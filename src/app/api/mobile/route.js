@@ -17,7 +17,7 @@
  * - GET /api/mobile?action=get-expense-categories - Get all expense categories
  * - GET /api/mobile?action=get-expense-category&id={categoryId} - Get single expense category by ID
  * - POST /api/mobile?action=create-expense-category - Create a new expense category
- * - POST /api/mobile?action=update-expense-category - Update an expense category
+ * - POST /api/mobile?action=edit-expense-category - Update an expense category
  * - POST /api/mobile?action=delete-expense-category - Delete an expense category
  *
  * Authentication: All endpoints except login require JWT token in Authorization header
@@ -2343,14 +2343,17 @@ async function createExpenseCategory(categoryData) {
 // Edit expense category
 async function editExpenseCategory(categoryData) {
   try {
-    const { categoryId, name, description, active } = categoryData;
+    const { categoryId, id, name, description, active } = categoryData;
+    const categoryIdToUse = categoryId || id; // Accept both 'categoryId' and 'id'
 
-    if (!categoryId) {
+    if (!categoryIdToUse) {
       throw new Error("Category ID is required");
     }
 
     // Check if category exists
-    const existingCategory = await expenseCategoriesService.get(categoryId);
+    const existingCategory = await expenseCategoriesService.get(
+      categoryIdToUse
+    );
     if (!existingCategory) {
       throw new Error("Category not found");
     }
@@ -2360,14 +2363,75 @@ async function editExpenseCategory(categoryData) {
       const allCategories = await expenseCategoriesService.getAll();
       const duplicate = allCategories.find(
         (cat) =>
-          cat.id !== categoryId &&
-          cat.name.toLowerCase() === name.trim().toLowerCase()
+          cat.id !== categoryIdToUse &&
+          cat.name.toLowerCase() === name.trim().toLowerCase() &&
+          cat.active !== false // Only check active categories
       );
 
       if (duplicate) {
         throw new Error("A category with this name already exists");
       }
     }
+
+    // Prepare history entry to track what changed
+    const changes = {};
+    const historyEntry = {
+      timestamp: new Date(),
+      action: "edit",
+      changedBy: categoryData.changedBy || "system", // Can be passed from frontend
+    };
+
+    if (
+      name !== undefined &&
+      name.trim() !== "" &&
+      name.trim() !== existingCategory.name
+    ) {
+      changes.name = {
+        from: existingCategory.name,
+        to: name.trim(),
+      };
+    }
+
+    if (
+      description !== undefined &&
+      description.trim() !== existingCategory.description
+    ) {
+      changes.description = {
+        from: existingCategory.description || "",
+        to: description.trim(),
+      };
+    }
+
+    if (active !== undefined && active !== existingCategory.active) {
+      changes.active = {
+        from:
+          existingCategory.active !== undefined
+            ? existingCategory.active
+            : true,
+        to: active,
+      };
+    }
+
+    // Only proceed if there are actual changes
+    if (Object.keys(changes).length === 0) {
+      return {
+        id: existingCategory.id,
+        name: existingCategory.name,
+        description: existingCategory.description || "",
+        active:
+          existingCategory.active !== undefined
+            ? existingCategory.active
+            : true,
+        createdAt: existingCategory.createdAt?.toDate?.()
+          ? existingCategory.createdAt.toDate().toISOString()
+          : existingCategory.createdAt,
+        updatedAt: existingCategory.updatedAt?.toDate?.()
+          ? existingCategory.updatedAt.toDate().toISOString()
+          : existingCategory.updatedAt,
+      };
+    }
+
+    historyEntry.changes = changes;
 
     const updateData = {
       updatedAt: new Date(),
@@ -2385,10 +2449,23 @@ async function editExpenseCategory(categoryData) {
       updateData.active = active;
     }
 
-    await expenseCategoriesService.update(categoryId, updateData);
+    // Save history entry to Firestore subcollection
+    try {
+      const db = admin.firestore();
+      await db
+        .collection(COLLECTIONS.EXPENSE_CATEGORIES)
+        .doc(categoryIdToUse)
+        .collection("history")
+        .add(historyEntry);
+    } catch (historyError) {
+      console.error("Error saving history:", historyError);
+      // Continue with update even if history fails
+    }
+
+    await expenseCategoriesService.update(categoryIdToUse, updateData);
 
     // Return updated category
-    const updatedCategory = await expenseCategoriesService.get(categoryId);
+    const updatedCategory = await expenseCategoriesService.get(categoryIdToUse);
     return {
       id: updatedCategory.id,
       name: updatedCategory.name,
@@ -2408,8 +2485,8 @@ async function editExpenseCategory(categoryData) {
   }
 }
 
-// Delete expense category
-async function deleteExpenseCategory(categoryId) {
+// Delete expense category (Soft Delete - flags as inactive instead of removing)
+async function deleteExpenseCategory(categoryId, deletedBy = "system") {
   try {
     if (!categoryId) {
       throw new Error("Category ID is required");
@@ -2421,23 +2498,182 @@ async function deleteExpenseCategory(categoryId) {
       throw new Error("Category not found");
     }
 
-    // Check if category is being used by any expenses
-    const allExpenses = await expensesService.getAll();
-    const expensesUsingCategory = allExpenses.filter(
-      (expense) => expense.category === existingCategory.name
-    );
+    // Soft delete: Set active to false instead of actually deleting
+    // This preserves data integrity for expenses using this category
+    const updateData = {
+      active: false,
+      deletedAt: new Date(),
+      deletedBy: deletedBy,
+      updatedAt: new Date(),
+    };
 
-    if (expensesUsingCategory.length > 0) {
-      throw new Error(
-        `Cannot delete category. It is being used by ${expensesUsingCategory.length} expense(s)`
-      );
+    // Save history entry for deletion
+    const historyEntry = {
+      timestamp: new Date(),
+      action: "delete",
+      changedBy: deletedBy,
+      changes: {
+        active: {
+          from:
+            existingCategory.active !== undefined
+              ? existingCategory.active
+              : true,
+          to: false,
+        },
+      },
+      note: "Category soft deleted - data preserved for existing expenses",
+    };
+
+    try {
+      const db = admin.firestore();
+      await db
+        .collection(COLLECTIONS.EXPENSE_CATEGORIES)
+        .doc(categoryId)
+        .collection("history")
+        .add(historyEntry);
+    } catch (historyError) {
+      console.error("Error saving deletion history:", historyError);
+      // Continue with soft delete even if history fails
     }
 
-    await expenseCategoriesService.delete(categoryId);
+    await expenseCategoriesService.update(categoryId, updateData);
 
-    return { success: true, message: "Category deleted successfully" };
+    return {
+      success: true,
+      message: "Category deleted successfully (soft delete - data preserved)",
+    };
   } catch (error) {
     console.error("Error deleting expense category:", error);
+    throw error;
+  }
+}
+
+// Get expense category history
+async function getExpenseCategoryHistory(categoryId) {
+  try {
+    if (!categoryId) {
+      throw new Error("Category ID is required");
+    }
+
+    // Check if category exists
+    const existingCategory = await expenseCategoriesService.get(categoryId);
+    if (!existingCategory) {
+      throw new Error("Category not found");
+    }
+
+    // Get history from subcollection
+    const db = admin.firestore();
+    const historySnapshot = await db
+      .collection(COLLECTIONS.EXPENSE_CATEGORIES)
+      .doc(categoryId)
+      .collection("history")
+      .orderBy("timestamp", "desc")
+      .get();
+
+    const history = historySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp?.toDate?.()
+        ? doc.data().timestamp.toDate().toISOString()
+        : doc.data().timestamp,
+    }));
+
+    return {
+      category: {
+        id: existingCategory.id,
+        name: existingCategory.name,
+        description: existingCategory.description || "",
+        active:
+          existingCategory.active !== undefined
+            ? existingCategory.active
+            : true,
+        createdAt: existingCategory.createdAt?.toDate?.()
+          ? existingCategory.createdAt.toDate().toISOString()
+          : existingCategory.createdAt,
+        updatedAt: existingCategory.updatedAt?.toDate?.()
+          ? existingCategory.updatedAt.toDate().toISOString()
+          : existingCategory.updatedAt,
+        deletedAt: existingCategory.deletedAt?.toDate?.()
+          ? existingCategory.deletedAt.toDate().toISOString()
+          : existingCategory.deletedAt,
+      },
+      history: history,
+    };
+  } catch (error) {
+    console.error("Error getting expense category history:", error);
+    throw error;
+  }
+}
+
+// Restore deleted expense category
+async function restoreExpenseCategory(categoryId, restoredBy = "system") {
+  try {
+    if (!categoryId) {
+      throw new Error("Category ID is required");
+    }
+
+    // Check if category exists
+    const existingCategory = await expenseCategoriesService.get(categoryId);
+    if (!existingCategory) {
+      throw new Error("Category not found");
+    }
+
+    if (existingCategory.active !== false) {
+      throw new Error("Category is not deleted");
+    }
+
+    // Restore category
+    const updateData = {
+      active: true,
+      restoredAt: new Date(),
+      restoredBy: restoredBy,
+      updatedAt: new Date(),
+    };
+
+    // Save history entry for restoration
+    const historyEntry = {
+      timestamp: new Date(),
+      action: "restore",
+      changedBy: restoredBy,
+      changes: {
+        active: {
+          from: false,
+          to: true,
+        },
+      },
+      note: "Category restored from deleted state",
+    };
+
+    try {
+      const db = admin.firestore();
+      await db
+        .collection(COLLECTIONS.EXPENSE_CATEGORIES)
+        .doc(categoryId)
+        .collection("history")
+        .add(historyEntry);
+    } catch (historyError) {
+      console.error("Error saving restoration history:", historyError);
+      // Continue with restore even if history fails
+    }
+
+    await expenseCategoriesService.update(categoryId, updateData);
+
+    const restoredCategory = await expenseCategoriesService.get(categoryId);
+    return {
+      id: restoredCategory.id,
+      name: restoredCategory.name,
+      description: restoredCategory.description || "",
+      active:
+        restoredCategory.active !== undefined ? restoredCategory.active : true,
+      createdAt: restoredCategory.createdAt?.toDate?.()
+        ? restoredCategory.createdAt.toDate().toISOString()
+        : restoredCategory.createdAt,
+      updatedAt: restoredCategory.updatedAt?.toDate?.()
+        ? restoredCategory.updatedAt.toDate().toISOString()
+        : restoredCategory.updatedAt,
+    };
+  } catch (error) {
+    console.error("Error restoring expense category:", error);
     throw error;
   }
 }
@@ -3031,7 +3267,7 @@ export async function GET(request) {
       "get-expense-categories",
       "get-expense-category",
       "create-expense-category",
-      "update-expense-category",
+      "edit-expense-category",
       "delete-expense-category",
       "get-items",
       "get-categories",
@@ -3402,147 +3638,6 @@ export async function GET(request) {
           {
             success: false,
             error: error.message || "Failed to retrieve expense category",
-          },
-          { status: 200, headers: corsHeaders }
-        );
-      }
-    }
-
-    // Create expense category
-    if (action === "create-expense-category") {
-      try {
-        const { name, description } = await request.json();
-
-        if (!name || !name.trim()) {
-          return Response.json(
-            {
-              success: false,
-              error: "Category name is required",
-            },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-
-        const categoryData = {
-          name: name.trim(),
-          description: description?.trim() || "",
-          active: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        const newCategory = await expenseCategoriesService.create(categoryData);
-
-        return Response.json(
-          {
-            success: true,
-            action: "create-expense-category",
-            generated_at: new Date().toISOString(),
-            data: {
-              id: newCategory.id,
-              ...categoryData,
-            },
-          },
-          { headers: corsHeaders }
-        );
-      } catch (error) {
-        return Response.json(
-          {
-            success: false,
-            error: error.message || "Failed to create expense category",
-          },
-          { status: 200, headers: corsHeaders }
-        );
-      }
-    }
-
-    // Update expense category
-    if (action === "update-expense-category") {
-      try {
-        const { id, name, description } = await request.json();
-
-        if (!id) {
-          return Response.json(
-            {
-              success: false,
-              error: "Category ID is required",
-            },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-
-        if (!name || !name.trim()) {
-          return Response.json(
-            {
-              success: false,
-              error: "Category name is required",
-            },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-
-        const updateData = {
-          name: name.trim(),
-          description: description?.trim() || "",
-          updatedAt: new Date(),
-        };
-
-        await expenseCategoriesService.update(id, updateData);
-
-        return Response.json(
-          {
-            success: true,
-            action: "update-expense-category",
-            generated_at: new Date().toISOString(),
-            data: {
-              id,
-              ...updateData,
-            },
-          },
-          { headers: corsHeaders }
-        );
-      } catch (error) {
-        return Response.json(
-          {
-            success: false,
-            error: error.message || "Failed to update expense category",
-          },
-          { status: 200, headers: corsHeaders }
-        );
-      }
-    }
-
-    // Delete expense category
-    if (action === "delete-expense-category") {
-      try {
-        const { id } = await request.json();
-
-        if (!id) {
-          return Response.json(
-            {
-              success: false,
-              error: "Category ID is required",
-            },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-
-        await expenseCategoriesService.delete(id);
-
-        return Response.json(
-          {
-            success: true,
-            action: "delete-expense-category",
-            generated_at: new Date().toISOString(),
-            data: { id },
-          },
-          { headers: corsHeaders }
-        );
-      } catch (error) {
-        return Response.json(
-          {
-            success: false,
-            error: error.message || "Failed to delete expense category",
           },
           { status: 200, headers: corsHeaders }
         );
@@ -4495,6 +4590,71 @@ export async function POST(request) {
       }
     }
 
+    // Get all expense categories (POST version for consistency)
+    if (action === "get-expense-categories") {
+      try {
+        const categories = await getExpenseCategories();
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-expense-categories",
+            generated_at: new Date().toISOString(),
+            data: categories,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error getting expense categories:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve expense categories",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get single expense category by ID (POST version for consistency)
+    if (action === "get-expense-category") {
+      try {
+        const { id, categoryId } = requestBody;
+        const categoryIdToUse = id || categoryId;
+
+        if (!categoryIdToUse) {
+          return Response.json(
+            {
+              success: false,
+              error: "Category ID is required",
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const categoryData = await getExpenseCategoryById(categoryIdToUse);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-expense-category",
+            generated_at: new Date().toISOString(),
+            data: categoryData,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error getting expense category:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to retrieve expense category",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
     // Create expense category
     if (action === "create-expense-category") {
       // Authenticate request (admin only)
@@ -4543,7 +4703,10 @@ export async function POST(request) {
       }
 
       try {
-        const categoryData = requestBody;
+        const categoryData = {
+          ...requestBody,
+          changedBy: requestBody.changedBy || auth.user?.email || "system",
+        };
         const result = await editExpenseCategory(categoryData);
 
         return Response.json(
@@ -4579,8 +4742,20 @@ export async function POST(request) {
       }
 
       try {
-        const { categoryId } = requestBody;
-        const result = await deleteExpenseCategory(categoryId);
+        const { id, categoryId, deletedBy } = requestBody;
+        const categoryIdToUse = id || categoryId; // Accept both 'id' and 'categoryId'
+
+        if (!categoryIdToUse) {
+          return Response.json(
+            { success: false, error: "Category ID is required" },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const result = await deleteExpenseCategory(
+          categoryIdToUse,
+          deletedBy || auth.user?.email || "system"
+        );
 
         return Response.json(
           {
@@ -4596,6 +4771,97 @@ export async function POST(request) {
           {
             success: false,
             error: error.message || "Failed to delete expense category",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get expense category history
+    if (action === "get-expense-category-history") {
+      // Authenticate request (admin only)
+      const auth = authenticateRequest(request, true);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { id, categoryId } = requestBody;
+        const categoryIdToUse = id || categoryId;
+
+        if (!categoryIdToUse) {
+          return Response.json(
+            { success: false, error: "Category ID is required" },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const result = await getExpenseCategoryHistory(categoryIdToUse);
+
+        return Response.json(
+          {
+            success: true,
+            action: "get-expense-category-history",
+            data: result,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error getting expense category history:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to get expense category history",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Restore deleted expense category
+    if (action === "restore-expense-category") {
+      // Authenticate request (admin only)
+      const auth = authenticateRequest(request, true);
+      if (auth.error) {
+        return Response.json(
+          { success: false, error: auth.error },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      try {
+        const { id, categoryId, restoredBy } = requestBody;
+        const categoryIdToUse = id || categoryId;
+
+        if (!categoryIdToUse) {
+          return Response.json(
+            { success: false, error: "Category ID is required" },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const restoredCategory = await restoreExpenseCategory(
+          categoryIdToUse,
+          restoredBy || auth.user?.email || "system"
+        );
+
+        return Response.json(
+          {
+            success: true,
+            action: "restore-expense-category",
+            data: { category: restoredCategory },
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error("Error restoring expense category:", error);
+        return Response.json(
+          {
+            success: false,
+            error: error.message || "Failed to restore expense category",
           },
           { status: 400, headers: corsHeaders }
         );
@@ -4627,9 +4893,13 @@ export async function POST(request) {
           "delete-expense",
           "approve-expense",
           "deny-expense",
+          "get-expense-categories",
+          "get-expense-category",
           "create-expense-category",
           "edit-expense-category",
           "delete-expense-category",
+          "get-expense-category-history",
+          "restore-expense-category",
         ],
       },
       { status: 400, headers: corsHeaders }

@@ -3,7 +3,7 @@
 **Complete Guide for Sending Purchase Data to POS Candy Kush API**
 
 **Last Updated:** January 12, 2026
-**API Version:** 2.1
+**API Version:** 2.2
 **Base URL:** `https://pos-candy-kush.vercel.app/api/mobile`
 
 ---
@@ -13,14 +13,15 @@
 1. [Overview](#overview)
 2. [Authentication](#authentication)
 3. [Supplier Management](#supplier-management)
-4. [Create Purchase Endpoint](#create-purchase-endpoint)
-5. [Purchase List and Filtering](#purchase-list-and-filtering)
-6. [Edit Purchase](#edit-purchase)
-7. [Request Format](#request-format)
-8. [Response Format](#response-format)
-9. [Error Handling](#error-handling)
-10. [Testing Examples](#testing-examples)
-11. [Mobile Integration](#mobile-integration)
+4. [Purchase Management](#purchase-management)
+5. [Create Purchase Endpoint](#create-purchase-endpoint)
+6. [Purchase List and Filtering](#purchase-list-and-filtering)
+7. [Edit Purchase](#edit-purchase)
+8. [Request Format](#request-format)
+9. [Response Format](#response-format)
+10. [Error Handling](#error-handling)
+11. [Testing Examples](#testing-examples)
+12. [Mobile Integration](#mobile-integration)
 
 ---
 
@@ -42,6 +43,9 @@ This guide provides complete documentation for managing purchases and suppliers 
 - ✅ Unpaid purchases displayed first for priority tracking
 - ✅ Reminder system for due dates
 - ✅ Stock level updates when completed
+- ✅ Single purchase retrieval by ID
+- ✅ Purchase deletion and completion
+- ✅ Android app compatibility with empty request body handling
 
 ---
 
@@ -178,6 +182,138 @@ The API provides complete CRUD operations for managing suppliers. Suppliers can 
 }
 ```
 
+### Get Single Supplier
+
+**Endpoint:** `POST /api/mobile?action=get-supplier`
+
+**Request Body:**
+
+```json
+{
+  "id": "supplier_001"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "get-supplier",
+  "data": {
+    "supplier": {
+      "id": "supplier_001",
+      "name": "Green Valley Suppliers",
+      "contact_person": "John Doe",
+      "email": "john@greenvalley.com",
+      "phone": "+1234567890",
+      "address": "123 Main St, City, State",
+      "notes": "Preferred supplier for cannabis products",
+      "createdAt": "2026-01-06T10:00:00.000Z"
+    }
+  }
+}
+```
+
+### Create Supplier
+
+**Endpoint:** `POST /api/mobile?action=create-supplier`
+
+**Request Body:**
+
+```json
+{
+  "name": "Green Valley Suppliers",
+  "contact_person": "John Doe",
+  "email": "john@greenvalley.com",
+  "phone": "+1234567890",
+  "address": "123 Main St, City, State",
+  "notes": "Preferred supplier for cannabis products"
+}
+```
+
+**Required Fields:**
+
+- `name`: Supplier name (required)
+
+**Optional Fields:**
+
+- `contact_person`: Contact person name
+- `email`: Email address
+- `phone`: Phone number
+- `address`: Physical address
+- `notes`: Internal notes
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "create-supplier",
+  "data": {
+    "supplier": {
+      "id": "supplier_123",
+      "name": "Green Valley Suppliers",
+      "contact_person": "John Doe",
+      "email": "john@greenvalley.com",
+      "phone": "+1234567890",
+      "address": "123 Main St, City, State",
+      "notes": "Preferred supplier for cannabis products",
+      "createdAt": "2026-01-12T10:00:00.000Z"
+    }
+  }
+}
+```
+
+### Update Supplier
+
+**Endpoint:** `POST /api/mobile?action=edit-supplier`
+
+**Request Body:**
+
+```json
+{
+  "id": "supplier_001",
+  "name": "Updated Supplier Name",
+  "contact_person": "Jane Smith",
+  "email": "jane@updatedsupplier.com"
+}
+```
+
+**Required Fields:**
+
+- `id`: Supplier ID to update
+
+**Optional Fields:**
+
+- `name`: Supplier name
+- `contact_person`: Contact person name
+- `email`: Email address
+- `phone`: Phone number
+- `address`: Physical address
+- `notes`: Internal notes
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "edit-supplier",
+  "data": {
+    "supplier": {
+      "id": "supplier_001",
+      "name": "Updated Supplier Name",
+      "contact_person": "Jane Smith",
+      "email": "jane@updatedsupplier.com",
+      "phone": "+1234567890",
+      "address": "123 Main St, City, State",
+      "notes": "Preferred supplier for cannabis products",
+      "createdAt": "2026-01-06T10:00:00.000Z"
+    }
+  }
+}
+```
+
 ### Delete Supplier
 
 **Endpoint:** `POST /api/mobile?action=delete-supplier`
@@ -190,9 +326,132 @@ The API provides complete CRUD operations for managing suppliers. Suppliers can 
 }
 ```
 
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "delete-supplier",
+  "message": "Supplier deleted successfully"
+}
+```
+
 ---
 
-## Create Purchase Endpoint
+## Purchase Management
+
+### Get Single Purchase
+
+**Endpoint:** `GET /api/mobile?action=get-purchase&id={purchaseId}`
+
+**Method:** `GET`
+
+**URL Parameters:**
+
+- `id`: Purchase ID (required)
+
+**Example:** `GET /api/mobile?action=get-purchase&id=purchase_001`
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "get-purchase",
+  "generated_at": "2026-01-12T10:00:00.000Z",
+  "data": {
+    "id": "purchase_001",
+    "supplier_name": "Green Valley Suppliers",
+    "purchase_date": "2026-01-06",
+    "due_date": "2026-01-15",
+    "items": [
+      {
+        "product_id": "cannabis_flower_001",
+        "product_name": "Premium Cannabis Flower",
+        "quantity": 10,
+        "price": 50.0,
+        "total": 500.0
+      }
+    ],
+    "total": 500.0,
+    "status": "pending",
+    "payment_status": "unpaid",
+    "payment_method": "bank_transfer",
+    "payment_due_date": "2026-01-20",
+    "notes": "Urgent order for high-demand products",
+    "reminder_type": "days_before",
+    "reminder_value": "3",
+    "reminder_time": "09:00",
+    "createdAt": "2026-01-06T10:00:00.000Z"
+  }
+}
+```
+
+### Delete Purchase
+
+**Endpoint:** `POST /api/mobile?action=delete-purchase`
+
+**Method:** `POST`
+
+**Request Body:**
+
+```json
+{
+  "id": "purchase_001"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "delete-purchase",
+  "message": "Purchase deleted successfully"
+}
+```
+
+### Complete Purchase
+
+**Endpoint:** `POST /api/mobile?action=complete-purchase`
+
+**Method:** `POST`
+
+**Request Body:**
+
+```json
+{
+  "id": "purchase_001"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "action": "complete-purchase",
+  "data": {
+    "purchase": {
+      "id": "purchase_001",
+      "supplier_name": "Green Valley Suppliers",
+      "purchase_date": "2026-01-06",
+      "due_date": "2026-01-15",
+      "items": [...],
+      "total": 500.00,
+      "status": "completed",
+      "payment_status": "unpaid",
+      "payment_method": "bank_transfer",
+      "payment_due_date": "2026-01-20",
+      "notes": "Urgent order for high-demand products",
+      "reminder_type": "days_before",
+      "reminder_value": "3",
+      "reminder_time": "09:00",
+      "createdAt": "2026-01-06T10:00:00.000Z"
+    }
+  }
+}
+```
 
 ### Endpoint Details
 
@@ -401,6 +660,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 **Notes:**
 
+- Request body can be empty for fetching all purchases
+- Android app compatibility: Empty request bodies are properly handled
 - If no filters are provided, all purchases are returned
 - Unpaid purchases are always displayed first, followed by paid purchases
 - Within each payment status group, purchases are sorted by creation date (newest first)
@@ -863,11 +1124,22 @@ class CreatePurchaseActivity : AppCompatActivity() {
 ### Testing Checklist
 
 - [ ] Login works and returns valid JWT token
+- [ ] Create supplier with required fields
+- [ ] Get all suppliers
+- [ ] Get single supplier by ID
+- [ ] Edit supplier
+- [ ] Delete supplier
 - [ ] Create purchase with minimal required fields
 - [ ] Create purchase with all optional fields
-- [ ] Verify purchase appears in get-purchases list
+- [ ] Get single purchase by ID
+- [ ] Get all purchases (with empty request body for Android compatibility)
+- [ ] Get purchases with filters (supplier, payment_status)
+- [ ] Edit purchase
+- [ ] Complete purchase
+- [ ] Delete purchase
 - [ ] Test error scenarios (missing fields, invalid dates)
 - [ ] Test with different reminder configurations
+- [ ] Verify Android app compatibility with empty request bodies
 
 ---
 

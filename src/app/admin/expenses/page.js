@@ -420,29 +420,28 @@ export default function ExpensesSection() {
     try {
       setSubmitting(true);
 
-      const response = await fetch(
-        "/api/mobile?action=update-expense-category",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: editingCategory.id,
-            name: categoryFormData.name.trim(),
-            description: categoryFormData.description?.trim() || "",
-          }),
-        }
-      );
+      const response = await fetch("/api/mobile?action=edit-expense-category", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: editingCategory.id,
+          name: categoryFormData.name.trim(),
+          description: categoryFormData.description?.trim() || "",
+        }),
+      });
 
       const data = await response.json();
 
       if (data.success) {
-        toast.success("Category updated successfully");
+        // Close modal immediately
         setShowCategoryFormDialog(false);
         setEditingCategory(null);
         setCategoryFormData({ name: "", description: "" });
+
+        toast.success("Category updated successfully");
         fetchCategories(); // Refresh categories
       } else {
         toast.error(data.error || "Failed to update category");
@@ -479,17 +478,26 @@ export default function ExpensesSection() {
       const data = await response.json();
 
       if (data.success) {
-        toast.success("Category deleted successfully");
+        // Reset processing state and close both modals immediately
+        setProcessingAction(false);
         setShowDeleteCategoryDialog(false);
+        setShowCategoryFormDialog(false);
         setCategoryToDelete(null);
-        fetchCategories(); // Refresh categories
+        setEditingCategory(null);
+        setCategoryFormData({ name: "", description: "" });
+
+        // Show success message
+        toast.success("Category deleted successfully");
+
+        // Refresh categories in background
+        fetchCategories();
       } else {
         toast.error(data.error || "Failed to delete category");
+        setProcessingAction(false);
       }
     } catch (error) {
       console.error("Error deleting category:", error);
       toast.error("Error deleting category");
-    } finally {
       setProcessingAction(false);
     }
   };
@@ -1184,45 +1192,40 @@ export default function ExpensesSection() {
                 .filter((cat) => cat.active !== false)
                 .slice(0, 6)
                 .map((category) => (
-                  <div
+                  <button
                     key={category.id}
-                    className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                    onClick={() => openCategoryForm(category)}
+                    className="flex items-center justify-between p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all cursor-pointer text-left"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-white truncate">
+                      <div className="font-semibold text-gray-900 dark:text-white truncate">
                         {category.name}
                       </div>
                       {category.description && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <div className="text-sm text-gray-500 dark:text-gray-400 truncate mt-1">
                           {category.description}
                         </div>
                       )}
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <div className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-medium">
                         {categoryStats[category.name] || 0} expenses
                       </div>
                     </div>
-                    <div className="flex gap-1 ml-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openCategoryForm(category)}
-                        className="h-8 w-8 p-0"
+                    <div className="ml-3 text-gray-400">
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <span className="sr-only">Edit</span>
-                        ✏️
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteConfirmation(category)}
-                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                        disabled={(categoryStats[category.name] || 0) > 0}
-                      >
-                        <span className="sr-only">Delete</span>
-                        🗑️
-                      </Button>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
                     </div>
-                  </div>
+                  </button>
                 ))}
               {allCategories.filter((cat) => cat.active !== false).length ===
                 0 && (
@@ -2544,12 +2547,16 @@ export default function ExpensesSection() {
               {allCategories
                 .filter((cat) => cat.active !== false)
                 .map((category) => (
-                  <div
+                  <button
                     key={category.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
+                    onClick={() => {
+                      setShowCategoriesDialog(false);
+                      openCategoryForm(category);
+                    }}
+                    className="flex items-center justify-between p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all cursor-pointer text-left"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-white">
+                      <div className="font-semibold text-gray-900 dark:text-white">
                         {category.name}
                       </div>
                       {category.description && (
@@ -2557,35 +2564,27 @@ export default function ExpensesSection() {
                           {category.description}
                         </div>
                       )}
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      <div className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-medium">
                         {categoryStats[category.name] || 0} expenses • Created{" "}
                         {format(new Date(category.createdAt), "MMM dd, yyyy")}
                       </div>
                     </div>
-                    <div className="flex gap-2 ml-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setShowCategoriesDialog(false);
-                          openCategoryForm(category);
-                        }}
+                    <div className="ml-3 text-gray-400">
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => {
-                          setShowCategoriesDialog(false);
-                          openDeleteConfirmation(category);
-                        }}
-                        disabled={(categoryStats[category.name] || 0) > 0}
-                      >
-                        Delete
-                      </Button>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
                     </div>
-                  </div>
+                  </button>
                 ))}
               {allCategories.filter((cat) => cat.active !== false).length ===
                 0 && (
@@ -2659,36 +2658,53 @@ export default function ExpensesSection() {
               />
             </div>
 
-            <div className="flex gap-2 justify-end pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowCategoryFormDialog(false);
-                  setEditingCategory(null);
-                  setCategoryFormData({ name: "", description: "" });
-                }}
-                disabled={submitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {editingCategory ? "Updating..." : "Creating..."}
-                  </>
-                ) : (
-                  <>
-                    <Plus className="mr-2 h-4 w-4" />
-                    {editingCategory ? "Update Category" : "Create Category"}
-                  </>
-                )}
-              </Button>
+            <div className="flex gap-2 justify-between pt-4">
+              {editingCategory && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => {
+                    setCategoryToDelete(editingCategory);
+                    setShowDeleteCategoryDialog(true);
+                  }}
+                  disabled={submitting}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowCategoryFormDialog(false);
+                    setEditingCategory(null);
+                    setCategoryFormData({ name: "", description: "" });
+                  }}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {editingCategory ? "Updating..." : "Creating..."}
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      {editingCategory ? "Update Category" : "Create Category"}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </form>
         </DialogContent>
@@ -2703,8 +2719,8 @@ export default function ExpensesSection() {
           <DialogHeader>
             <DialogTitle>Delete Category</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this category? This action cannot
-              be undone.
+              Are you sure you want to delete this category? It will be hidden
+              but the data will be preserved.
             </DialogDescription>
           </DialogHeader>
           {categoryToDelete && (
@@ -2724,24 +2740,15 @@ export default function ExpensesSection() {
                 </div>
               </div>
 
-              {(categoryStats[categoryToDelete.name] || 0) > 0 ? (
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    <AlertCircle className="inline h-4 w-4 mr-1" />
-                    This category cannot be deleted because it is currently used
-                    by {categoryStats[categoryToDelete.name]} expense(s). Remove
-                    all expenses from this category first.
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    <AlertCircle className="inline h-4 w-4 mr-1" />
-                    Deleting this category will permanently remove it from the
-                    system.
-                  </p>
-                </div>
-              )}
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <AlertCircle className="inline h-4 w-4 mr-1" />
+                  This is a <strong>soft delete</strong>. The category will be
+                  hidden from the list, but all data will be preserved. Expenses
+                  using this category will not be affected. You can restore it
+                  later if needed.
+                </p>
+              </div>
 
               <div className="flex gap-2 justify-end">
                 <Button
@@ -2757,10 +2764,7 @@ export default function ExpensesSection() {
                 </Button>
                 <Button
                   onClick={handleDeleteCategory}
-                  disabled={
-                    processingAction ||
-                    (categoryStats[categoryToDelete.name] || 0) > 0
-                  }
+                  disabled={processingAction}
                   variant="destructive"
                 >
                   {processingAction ? (
