@@ -929,7 +929,6 @@ export default function ExpensesSection() {
             expenseId,
             approvedBy: user?.id || "admin",
             approvedByName: user?.name || user?.email || "Admin",
-            notes: `Bulk approved ${selectedExpenses.length} expenses`,
           }),
         })
       );
@@ -951,7 +950,6 @@ export default function ExpensesSection() {
                   approvedBy: user?.id || "admin",
                   approvedByName: user?.name || user?.email || "Admin",
                   approvedAt: new Date().toISOString(),
-                  approvalNotes: `Bulk approved ${selectedExpenses.length} expenses`,
                 }
               : exp
           )
