@@ -1998,9 +1998,9 @@ async function editExpense(expenseData, userRole = "employee") {
       throw new Error("Cannot edit a deleted expense");
     }
 
-    // Permission check: Only admins can edit approved/denied expenses
-    if (existingExpense.status !== "pending" && userRole !== "admin") {
-      throw new Error("Cannot edit expense that has been approved or denied");
+    // Permission check: Only admins can edit denied expenses, but approved expenses can be edited by anyone
+    if (existingExpense.status === "denied" && userRole !== "admin") {
+      throw new Error("Cannot edit expense that has been denied");
     }
 
     // Validate fields if provided
