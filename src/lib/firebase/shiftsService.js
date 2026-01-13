@@ -404,12 +404,102 @@ export const shiftsService = {
 
     const shift = shiftSnap.data();
 
+    // Fetch all receipts that belong to this shift to check for refunds
+    let totalRefunds = 0;
+    let totalCashRefunds = 0;
+
+    if (shift.transactions && shift.transactions.length > 0) {
+      // Import receipts collection reference
+      const receiptsCollectionRef = collection(db, "receipts");
+
+      // The transactions array contains order numbers (like "O-260113-1121-533")
+      // NOT document IDs, so we need to query by orderNumber/receipt_number field
+      const batchSize = 10;
+      for (let i = 0; i < shift.transactions.length; i += batchSize) {
+        const batch = shift.transactions.slice(i, i + batchSize);
+
+        // Try querying by orderNumber field first
+        const receiptsQuery = query(
+          receiptsCollectionRef,
+          where("orderNumber", "in", batch)
+        );
+        const receiptsSnapshot = await getDocs(receiptsQuery);
+
+        console.log(
+          `Batch ${i / batchSize + 1}: Found ${
+            receiptsSnapshot.size
+          } receipts for order numbers:`,
+          batch
+        );
+
+        receiptsSnapshot.forEach((receiptDoc) => {
+          const receipt = receiptDoc.data();
+          // Check if this receipt has been refunded
+          if (receipt.isRefunded || receipt.refund) {
+            const refundAmount =
+              receipt.refundAmount || receipt.total_money || 0;
+
+            console.log(`Found refunded receipt ${receiptDoc.id}:`, {
+              orderNumber: receipt.orderNumber,
+              refundAmount,
+              paymentMethod: receipt.payment_method || receipt.paymentMethod,
+              isRefunded: receipt.isRefunded,
+              refund: receipt.refund,
+            });
+
+            totalRefunds += refundAmount;
+
+            // Check if it was a cash payment - check multiple fields
+            const paymentMethod = (
+              receipt.payment_method ||
+              receipt.paymentMethod ||
+              ""
+            ).toLowerCase();
+            const paymentTypeName = (
+              receipt.paymentTypeName || ""
+            ).toLowerCase();
+            const payments = receipt.payments || [];
+            const hasCashPayment = payments.some(
+              (p) =>
+                (p.type || "").toLowerCase().includes("cash") ||
+                (p.payment_type_id || "").toLowerCase().includes("cash")
+            );
+
+            if (
+              paymentMethod.includes("cash") ||
+              paymentTypeName.includes("cash") ||
+              hasCashPayment
+            ) {
+              totalCashRefunds += refundAmount;
+              console.log(`  -> Cash refund: ${refundAmount}`);
+            }
+          }
+        });
+      }
+    }
+
+    console.log(`Shift ${shiftId} refund calculation:`, {
+      totalTransactions: shift.transactions?.length || 0,
+      totalRefunds,
+      totalCashRefunds,
+      startingCash: shift.startingCash || 0,
+      totalCashSales: shift.totalCashSales || 0,
+      totalPaidIn: shift.totalPaidIn || 0,
+      totalPaidOut: shift.totalPaidOut || 0,
+    });
+
+    // Update shift with refund totals
+    const updatedShiftData = {
+      totalRefunds,
+      totalCashRefunds,
+    };
+
     // Calculate expected cash using correct formula:
     // Expected Cash = Starting Cash + Cash Sales - Cash Refunds + Paid In - Paid Out
     const expectedCash =
       (shift.startingCash || 0) +
       (shift.totalCashSales || 0) -
-      (shift.totalCashRefunds || 0) +
+      totalCashRefunds +
       (shift.totalPaidIn || 0) -
       (shift.totalPaidOut || 0);
 
@@ -418,6 +508,7 @@ export const shiftsService = {
     const variance = actualCash - expectedCash;
 
     const updateData = {
+      ...updatedShiftData,
       expectedCash,
       variance,
       updatedAt: Timestamp.now(),

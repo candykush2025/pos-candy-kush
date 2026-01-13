@@ -36,6 +36,8 @@ import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
 
 export default function ShiftsSection({ cashier }) {
+  console.log("🚀 ShiftsSection rendering, cashier:", cashier?.id);
+
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statistics, setStatistics] = useState(null);
@@ -70,7 +72,32 @@ export default function ShiftsSection({ cashier }) {
         shiftsService.getByUser(cashier.id),
         shiftsService.getStatistics(cashier.id),
       ]);
-      setShifts(shiftsData);
+
+      console.log("📊 Loaded shifts before recalculation:", shiftsData.length);
+
+      // Calculate refunds for all shifts (including active ones)
+      const shiftsWithRefunds = await Promise.all(
+        shiftsData.map(async (shift) => {
+          try {
+            console.log(`🔄 Recalculating shift ${shift.id}...`);
+            // Use the recalculateShift method to get updated refund data
+            const updatedShift = await shiftsService.recalculateShift(shift.id);
+            console.log(`✅ Shift ${shift.id} recalculated:`, {
+              totalRefunds: updatedShift.totalRefunds,
+              totalCashRefunds: updatedShift.totalCashRefunds,
+              expectedCash: updatedShift.expectedCash,
+              transactionCount: updatedShift.transactions?.length || 0,
+            });
+            return updatedShift;
+          } catch (error) {
+            console.error(`❌ Error recalculating shift ${shift.id}:`, error);
+            return shift; // Return original shift if recalculation fails
+          }
+        })
+      );
+
+      console.log("✅ All shifts recalculated, updating state");
+      setShifts(shiftsWithRefunds);
       setStatistics(stats);
     } catch (error) {
       console.error("Error loading shifts:", error);
@@ -520,6 +547,17 @@ export default function ShiftsSection({ cashier }) {
         ) : (
           <div className="space-y-4">
             {shifts.map((shift) => {
+              console.log("🔍 Rendering shift:", {
+                id: shift.id,
+                status: shift.status,
+                transactions: shift.transactions,
+                transactionCount: shift.transactions?.length || 0,
+                totalRefunds: shift.totalRefunds,
+                totalCashRefunds: shift.totalCashRefunds,
+                totalCashSales: shift.totalCashSales,
+                expectedCash: shift.expectedCash,
+              });
+
               const variance = shift.variance || 0;
               const hasDiscrepancy = variance !== 0;
               const isShort = variance < 0;

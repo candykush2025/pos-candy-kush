@@ -2589,9 +2589,11 @@ export default function SalesSection({ cashier }) {
 
       // Try to save to Firebase if online
       let firebaseSaved = false;
+      let savedReceiptId = null;
       if (isOnlineNow) {
         try {
-          await receiptsService.create(receiptData);
+          const receiptRef = await receiptsService.create(receiptData);
+          savedReceiptId = receiptRef.id; // Capture the generated receipt ID
           firebaseSaved = true;
           receiptData.syncStatus = "synced";
           receiptData.syncedAt = now.toISOString();
@@ -2914,10 +2916,10 @@ export default function SalesSection({ cashier }) {
             const activeShift = JSON.parse(savedShift);
             if (activeShift && activeShift.status === "active") {
               // Add transaction to shift (works both online and offline)
-              if (isOnlineNow) {
+              if (isOnlineNow && savedReceiptId) {
                 try {
                   await shiftsService.addTransaction(activeShift.id, {
-                    id: receiptData.orderNumber,
+                    id: savedReceiptId, // Use the actual receipt document ID
                     total: total,
                     paymentMethod: paymentMethod,
                     createdAt: now.toISOString(),
