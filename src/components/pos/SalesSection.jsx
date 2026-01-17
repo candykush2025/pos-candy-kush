@@ -2758,10 +2758,11 @@ export default function SalesSection({ cashier }) {
       // Update customer stats if customer is selected
       if (cartCustomer) {
         try {
-          // Update visit stats
+          // Update visit stats and total spent
           await customersService.update(cartCustomer.id, {
             visits: (cartCustomer.visits || 0) + 1,
             lastVisit: new Date(),
+            totalSpent: (cartCustomer.totalSpent || 0) + grandTotal,
           });
 
           // Check if customer is eligible for points (member with active membership)

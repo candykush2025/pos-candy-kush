@@ -22,7 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -1030,6 +1036,177 @@ function CustomerFormModal({ isOpen, onClose, customer, onSave, cashier }) {
 }
 
 // Purchase History Modal Component
+function PurchaseHistoryInline({ customer }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (customer) {
+      loadPurchaseHistory();
+    }
+  }, [customer]);
+
+  const loadPurchaseHistory = async () => {
+    try {
+      setLoading(true);
+
+      // Get all orders for this customer
+      const allOrders = await ordersService.getAll({
+        where: ["customerId", "==", customer.id],
+      });
+
+      // Sort by createdAt descending on client side
+      const customerOrders = allOrders.sort((a, b) => {
+        const dateA = a.createdAt?.toDate
+          ? a.createdAt.toDate()
+          : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate
+          ? b.createdAt.toDate()
+          : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+
+      setOrders(customerOrders);
+    } catch (error) {
+      console.error("Error loading purchase history:", error);
+      toast.error("Failed to load purchase history");
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getTotalSpent = () => {
+    return orders.reduce(
+      (sum, order) => sum + (order.total_money || order.total || 0),
+      0
+    );
+  };
+
+  const getTotalPointsEarned = () => {
+    return orders.reduce(
+      (sum, order) => sum + (order.cashback_earned || order.points_earned || 0),
+      0
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShoppingBag className="h-5 w-5" />
+          Purchase History
+        </CardTitle>
+        <CardDescription>
+          All orders and purchases for this customer
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-gray-500">Loading purchase history...</p>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="text-center py-8">
+            <ShoppingBag className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500">No purchases yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {orders.map((order) => (
+              <Card key={order.id} className="p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <p className="font-medium">
+                      Order #{order.orderNumber || order.id?.slice(0, 8)}
+                    </p>
+                    <p className="text-sm text-gray-500 flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {order.createdAt
+                        ? formatDate(order.createdAt.toDate(), "datetime")
+                        : "N/A"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-green-600">
+                      {formatCurrency(order.total_money || order.total || 0)}
+                    </p>
+                    <Badge
+                      className={
+                        order.status === "completed"
+                          ? "bg-green-900/30 text-green-400"
+                          : "bg-gray-800 text-gray-400"
+                      }
+                    >
+                      {order.status}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Cashback Points Display */}
+                {(order.cashback_earned > 0 || order.points_earned > 0) && (
+                  <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
+                    <div className="flex items-center gap-2 text-sm">
+                      <svg
+                        className="h-4 w-4 text-blue-600 dark:text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <span className="font-medium text-blue-700 dark:text-blue-300">
+                        +{order.cashback_earned || order.points_earned} points
+                        earned
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Order Items */}
+                {order.items && order.items.length > 0 && (
+                  <div className="mt-3 pt-3 border-t space-y-2">
+                    {order.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span className="text-gray-600">
+                          {item.quantity}x {item.name}
+                        </span>
+                        <span className="font-medium">
+                          {formatCurrency(
+                            item.total || item.price * item.quantity
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Payment Method */}
+                <div className="mt-3 pt-3 border-t flex items-center justify-between text-sm">
+                  <span className="text-gray-600">
+                    Payment: {order.paymentMethod || "Cash"}
+                  </span>
+                  <span className="text-gray-600">
+                    {order.paymentStatus === "paid" && (
+                      <Badge className="bg-green-100 text-green-800">
+                        Paid
+                      </Badge>
+                    )}
+                  </span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 function PurchaseHistoryModal({ isOpen, onClose, customer }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1246,8 +1423,6 @@ function PurchaseHistoryModal({ isOpen, onClose, customer }) {
     </Dialog>
   );
 }
-
-// Customer Form Inline Component (for in-page editing)
 function CustomerFormInline({ customer, onSave, onCancel, cashier }) {
   const [formData, setFormData] = useState({
     // Personal Information
@@ -1799,6 +1974,14 @@ export default function CustomersSection({ cashier }) {
     loading: false,
   });
 
+  // Redeem points modal state
+  const [redeemModal, setRedeemModal] = useState({
+    isOpen: false,
+    customer: null,
+    pointsToRedeem: "",
+    loading: false,
+  });
+
   // Load customers when component mounts or cashier changes
   useEffect(() => {
     loadCustomers();
@@ -1851,8 +2034,48 @@ export default function CustomersSection({ cashier }) {
 
       // DON'T FILTER BY CASHIER - SHOW ALL CUSTOMERS
 
-      setCustomers(data);
-      setFilteredCustomers(data);
+      // Automatically recalculate totalSpent for each customer from their transaction history
+      const { receiptsService } = await import("@/lib/firebase/firestore");
+      const customersWithCorrectTotals = await Promise.all(
+        data.map(async (customer) => {
+          try {
+            // Fetch all orders for this customer
+            const orders = await receiptsService.getAll({
+              where: ["customerId", "==", customer.id],
+            });
+
+            // Calculate actual total spent from orders
+            const calculatedTotal = orders.reduce(
+              (sum, order) => sum + (order.total_money || order.total || 0),
+              0
+            );
+
+            // If the stored totalSpent doesn't match calculated, update it in Firebase
+            if (customer.totalSpent !== calculatedTotal) {
+              console.log(
+                `📊 Updating totalSpent for ${customer.name}: ${
+                  customer.totalSpent || 0
+                } → ${calculatedTotal}`
+              );
+              await customersService.update(customer.id, {
+                totalSpent: calculatedTotal,
+              });
+              return { ...customer, totalSpent: calculatedTotal };
+            }
+
+            return customer;
+          } catch (error) {
+            console.error(
+              `Error calculating total for customer ${customer.id}:`,
+              error
+            );
+            return customer;
+          }
+        })
+      );
+
+      setCustomers(customersWithCorrectTotals);
+      setFilteredCustomers(customersWithCorrectTotals);
 
       toast.success(`Loaded ${data.length} customers from Firebase`);
     } catch (error) {
@@ -2264,40 +2487,67 @@ export default function CustomersSection({ cashier }) {
     setShowPurchaseHistory(true);
   };
 
-  const handleRedeemPoints = async (customer) => {
+  const handleRedeemPoints = (customer) => {
     const currentPoints = getPointsValue(customer);
+
     if (currentPoints === 0) {
       toast.error("No points available to redeem");
       return;
     }
 
-    const points = prompt(
-      `${customer.name} has ${currentPoints} points. How many points to redeem?`,
-      currentPoints.toString()
-    );
+    setRedeemModal({
+      isOpen: true,
+      customer: customer,
+      pointsToRedeem: "",
+      loading: false,
+    });
+  };
 
-    if (!points || isNaN(points) || parseInt(points) <= 0) {
+  const handleConfirmRedeemPoints = async () => {
+    const { customer, pointsToRedeem } = redeemModal;
+    const currentPoints = getPointsValue(customer);
+
+    const redeemAmount = parseInt(pointsToRedeem);
+    if (isNaN(redeemAmount) || redeemAmount <= 0) {
+      toast.error("Please enter a valid number of points");
       return;
     }
 
-    const redeemAmount = parseInt(points);
     if (redeemAmount > currentPoints) {
       toast.error("Cannot redeem more points than available");
       return;
     }
+
+    setRedeemModal((prev) => ({ ...prev, loading: true }));
 
     try {
       const newPoints = currentPoints - redeemAmount;
       await customersService.update(customer.id, {
         points: newPoints, // Store as number after redemption
       });
+
       toast.success(
         `Redeemed ${redeemAmount} points. New balance: ${newPoints}`
       );
+
+      // Close modal and refresh data
+      setRedeemModal({
+        isOpen: false,
+        customer: null,
+        pointsToRedeem: "",
+        loading: false,
+      });
+
       loadCustomers();
+
+      // Update selected customer if viewing details
+      if (selectedCustomer && selectedCustomer.id === customer.id) {
+        setSelectedCustomer({ ...selectedCustomer, pointList: [] }); // Clear points since they're redeemed
+      }
     } catch (error) {
       console.error("Error redeeming points:", error);
       toast.error("Failed to redeem points");
+      setRedeemModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -2413,29 +2663,8 @@ export default function CustomersSection({ cashier }) {
                 </CardContent>
               </Card>
 
-              {/* Actions */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => handleViewPurchases(selectedCustomer)}
-                  >
-                    <ShoppingBag className="h-4 w-4 mr-2" />
-                    View Purchases
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleRedeemPoints(selectedCustomer)}
-                    disabled={getPointsValue(selectedCustomer) === 0}
-                  >
-                    <Award className="h-4 w-4 mr-2" />
-                    Redeem Points
-                  </Button>
-                </CardContent>
-              </Card>
+              {/* Purchase History */}
+              <PurchaseHistoryInline customer={selectedCustomer} />
             </div>
 
             {/* Right Column - Expiry Management */}
@@ -2521,6 +2750,27 @@ export default function CustomersSection({ cashier }) {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Redeem Points */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5" />
+                    Points Redemption
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleRedeemPoints(selectedCustomer)}
+                    disabled={getPointsValue(selectedCustomer) === 0}
+                    className="w-full"
+                  >
+                    <Award className="h-4 w-4 mr-2" />
+                    Redeem Points ({getPointsValue(selectedCustomer)} available)
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
@@ -2534,6 +2784,127 @@ export default function CustomersSection({ cashier }) {
           }}
           customer={selectedCustomerForHistory}
         />
+
+        {/* Redeem Points Modal */}
+        <Dialog
+          open={redeemModal.isOpen}
+          onOpenChange={(open) => {
+            if (!open && !redeemModal.loading) {
+              setRedeemModal({
+                isOpen: false,
+                customer: null,
+                pointsToRedeem: "",
+                loading: false,
+              });
+            }
+          }}
+          modal={true}
+        >
+          <DialogContent
+            className="sm:max-w-md !z-[9999]"
+            style={{ zIndex: 9999 }}
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Award className="h-5 w-5 text-purple-600" />
+                Redeem Points
+              </DialogTitle>
+              <DialogDescription>
+                Redeem points for {redeemModal.customer?.name}. Available
+                points:{" "}
+                {redeemModal.customer
+                  ? getPointsValue(redeemModal.customer)
+                  : 0}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="points" className="text-sm font-medium">
+                  Points to Redeem
+                </label>
+                <Input
+                  id="points"
+                  type="number"
+                  placeholder="Enter points to redeem"
+                  value={redeemModal.pointsToRedeem}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (
+                      value === "" ||
+                      (!isNaN(value) && parseInt(value) >= 0)
+                    ) {
+                      setRedeemModal((prev) => ({
+                        ...prev,
+                        pointsToRedeem: value,
+                      }));
+                    }
+                  }}
+                  min="1"
+                  max={
+                    redeemModal.customer
+                      ? getPointsValue(redeemModal.customer)
+                      : 0
+                  }
+                  disabled={redeemModal.loading}
+                />
+                {redeemModal.pointsToRedeem &&
+                  parseInt(redeemModal.pointsToRedeem) >
+                    (redeemModal.customer
+                      ? getPointsValue(redeemModal.customer)
+                      : 0) && (
+                    <p className="text-sm text-red-600">
+                      Cannot redeem more points than available
+                    </p>
+                  )}
+              </div>
+
+              {redeemModal.pointsToRedeem &&
+                parseInt(redeemModal.pointsToRedeem) > 0 && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      Remaining points after redemption:{" "}
+                      {redeemModal.customer
+                        ? getPointsValue(redeemModal.customer) -
+                          parseInt(redeemModal.pointsToRedeem || 0)
+                        : 0}
+                    </p>
+                  </div>
+                )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRedeemModal({
+                    isOpen: false,
+                    customer: null,
+                    pointsToRedeem: "",
+                    loading: false,
+                  });
+                }}
+                disabled={redeemModal.loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmRedeemPoints}
+                disabled={
+                  redeemModal.loading ||
+                  !redeemModal.pointsToRedeem ||
+                  parseInt(redeemModal.pointsToRedeem) <= 0 ||
+                  parseInt(redeemModal.pointsToRedeem) >
+                    (redeemModal.customer
+                      ? getPointsValue(redeemModal.customer)
+                      : 0)
+                }
+              >
+                {redeemModal.loading ? "Redeeming..." : "Redeem Points"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -3194,6 +3565,127 @@ export default function CustomersSection({ cashier }) {
                 disabled={deleteModal.loading}
               >
                 {deleteModal.loading ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Redeem Points Modal */}
+        <Dialog
+          open={redeemModal.isOpen}
+          onOpenChange={(open) => {
+            if (!open && !redeemModal.loading) {
+              setRedeemModal({
+                isOpen: false,
+                customer: null,
+                pointsToRedeem: "",
+                loading: false,
+              });
+            }
+          }}
+          modal={true}
+        >
+          <DialogContent
+            className="sm:max-w-md !z-[9999]"
+            style={{ zIndex: 9999 }}
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Award className="h-5 w-5 text-purple-600" />
+                Redeem Points
+              </DialogTitle>
+              <DialogDescription>
+                Redeem points for {redeemModal.customer?.name}. Available
+                points:{" "}
+                {redeemModal.customer
+                  ? getPointsValue(redeemModal.customer)
+                  : 0}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="points" className="text-sm font-medium">
+                  Points to Redeem
+                </label>
+                <Input
+                  id="points"
+                  type="number"
+                  placeholder="Enter points to redeem"
+                  value={redeemModal.pointsToRedeem}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (
+                      value === "" ||
+                      (!isNaN(value) && parseInt(value) >= 0)
+                    ) {
+                      setRedeemModal((prev) => ({
+                        ...prev,
+                        pointsToRedeem: value,
+                      }));
+                    }
+                  }}
+                  min="1"
+                  max={
+                    redeemModal.customer
+                      ? getPointsValue(redeemModal.customer)
+                      : 0
+                  }
+                  disabled={redeemModal.loading}
+                />
+                {redeemModal.pointsToRedeem &&
+                  parseInt(redeemModal.pointsToRedeem) >
+                    (redeemModal.customer
+                      ? getPointsValue(redeemModal.customer)
+                      : 0) && (
+                    <p className="text-sm text-red-600">
+                      Cannot redeem more points than available
+                    </p>
+                  )}
+              </div>
+
+              {redeemModal.pointsToRedeem &&
+                parseInt(redeemModal.pointsToRedeem) > 0 && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      Remaining points after redemption:{" "}
+                      {redeemModal.customer
+                        ? getPointsValue(redeemModal.customer) -
+                          parseInt(redeemModal.pointsToRedeem || 0)
+                        : 0}
+                    </p>
+                  </div>
+                )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRedeemModal({
+                    isOpen: false,
+                    customer: null,
+                    pointsToRedeem: "",
+                    loading: false,
+                  });
+                }}
+                disabled={redeemModal.loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmRedeemPoints}
+                disabled={
+                  redeemModal.loading ||
+                  !redeemModal.pointsToRedeem ||
+                  parseInt(redeemModal.pointsToRedeem) <= 0 ||
+                  parseInt(redeemModal.pointsToRedeem) >
+                    (redeemModal.customer
+                      ? getPointsValue(redeemModal.customer)
+                      : 0)
+                }
+              >
+                {redeemModal.loading ? "Redeeming..." : "Redeem Points"}
               </Button>
             </DialogFooter>
           </DialogContent>
