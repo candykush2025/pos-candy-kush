@@ -152,7 +152,7 @@ function SortableTab({
           isSelected
             ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2"
             : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800",
-          isDragMode && "ring-2 ring-blue-400 cursor-move"
+          isDragMode && "ring-2 ring-blue-400 cursor-move",
         )}
         style={{
           WebkitTouchCallout: "none",
@@ -207,7 +207,7 @@ export default function SalesSection({ cashier }) {
   const [categories, setCategories] = useState([]); // category names for tabs
   const [categoriesData, setCategoriesData] = useState([]); // full category objects from Firebase
   const [selectedCategory, setSelectedCategory] = useState(
-    searchParams.get("tab") || "all"
+    searchParams.get("tab") || "all",
   );
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -335,7 +335,7 @@ export default function SalesSection({ cashier }) {
     return () => {
       window.removeEventListener(
         "open-print-jobs-modal",
-        handleOpenPrintJobsModal
+        handleOpenPrintJobsModal,
       );
     };
   }, []);
@@ -430,7 +430,7 @@ export default function SalesSection({ cashier }) {
   const calculateCashbackNow = (
     currentItems,
     currentCustomer,
-    currentRules
+    currentRules,
   ) => {
     console.log("💰 calculateCashbackNow called");
 
@@ -467,7 +467,7 @@ export default function SalesSection({ cashier }) {
       itemsToUse.length,
       "items,",
       rulesToUse.length,
-      "rules"
+      "rules",
     );
 
     const total = getTotal();
@@ -487,7 +487,7 @@ export default function SalesSection({ cashier }) {
       const result = cashbackRulesService.calculateItemCashback(
         itemData,
         rulesToUse,
-        total
+        total,
       );
 
       console.log("💰 Points:", result?.points || 0);
@@ -619,7 +619,7 @@ export default function SalesSection({ cashier }) {
       // First, check if it's a product barcode
       const matchingProduct = products.find(
         (product) =>
-          product.barcode === scannedCode || product.sku === scannedCode
+          product.barcode === scannedCode || product.sku === scannedCode,
       );
 
       if (matchingProduct) {
@@ -647,7 +647,7 @@ export default function SalesSection({ cashier }) {
             "[Barcode Scanner] Customer matched by memberId:",
             customer.name,
             "memberId:",
-            customer.memberId
+            customer.memberId,
           );
           return true;
         }
@@ -656,7 +656,7 @@ export default function SalesSection({ cashier }) {
         if (customer.customerId?.toLowerCase() === code) {
           console.log(
             "[Barcode Scanner] Customer matched by customerId:",
-            customer.name
+            customer.name,
           );
           return true;
         }
@@ -664,7 +664,7 @@ export default function SalesSection({ cashier }) {
         if (customer.id?.toLowerCase() === code) {
           console.log(
             "[Barcode Scanner] Customer matched by id:",
-            customer.name
+            customer.name,
           );
           return true;
         }
@@ -672,7 +672,7 @@ export default function SalesSection({ cashier }) {
         if (customer.phone === codeOriginal) {
           console.log(
             "[Barcode Scanner] Customer matched by phone:",
-            customer.name
+            customer.name,
           );
           return true;
         }
@@ -680,7 +680,7 @@ export default function SalesSection({ cashier }) {
         if (customer.email?.toLowerCase() === code) {
           console.log(
             "[Barcode Scanner] Customer matched by email:",
-            customer.name
+            customer.name,
           );
           return true;
         }
@@ -699,11 +699,11 @@ export default function SalesSection({ cashier }) {
             toast.error(
               `Cannot select ${
                 matchingCustomer.name
-              } - membership expired on ${expiryDate.toLocaleDateString()}`
+              } - membership expired on ${expiryDate.toLocaleDateString()}`,
             );
             console.log(
               "[Barcode Scanner] Customer membership expired:",
-              matchingCustomer
+              matchingCustomer,
             );
             return;
           }
@@ -714,28 +714,28 @@ export default function SalesSection({ cashier }) {
         // NO toast notification - silent customer selection
         console.log(
           "[Barcode Scanner] Customer matched and selected:",
-          matchingCustomer.name
+          matchingCustomer.name,
         );
         console.log(
           "[Barcode Scanner] Customer memberId:",
-          matchingCustomer.memberId
+          matchingCustomer.memberId,
         );
         // Calculate cashback after selecting customer
         setTimeout(
           () => calculateCashbackNow(null, matchingCustomer, null),
-          100
+          100,
         );
       } else {
         console.log("[Barcode Scanner] No match found for:", scannedCode);
         console.log(
           "[Barcode Scanner] Checked against",
           customers.length,
-          "customers"
+          "customers",
         );
         // NO toast notification for no match - silent failure
       }
     },
-    [products, customers, addItem, setCartCustomer, calculateCashbackNow]
+    [products, customers, addItem, setCartCustomer, calculateCashbackNow],
   );
 
   // Barcode scanner listener
@@ -775,11 +775,11 @@ export default function SalesSection({ cashier }) {
           console.log("[Barcode Scanner] Scanned code:", scannedCode);
           console.log(
             "[Barcode Scanner] Current products count:",
-            products.length
+            products.length,
           );
           console.log(
             "[Barcode Scanner] Current customers count:",
-            customers.length
+            customers.length,
           );
           processScannedBarcode(scannedCode);
         }
@@ -818,12 +818,6 @@ export default function SalesSection({ cashier }) {
 
     // Always listen for barcode scans
     document.addEventListener("keydown", handleKeyDown);
-    console.log(
-      "[Barcode Scanner] Listener attached, products:",
-      products.length,
-      "customers:",
-      customers.length
-    );
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
@@ -858,7 +852,7 @@ export default function SalesSection({ cashier }) {
         ) {
           activeElement.blur();
           console.log(
-            "[Auto-blur] Search input blurred after 5 seconds of inactivity"
+            "[Auto-blur] Search input blurred after 5 seconds of inactivity",
           );
         }
       }, 5000);
@@ -874,7 +868,7 @@ export default function SalesSection({ cashier }) {
 
     // Add listeners to all input elements
     const inputs = document.querySelectorAll(
-      'input[type="text"], input:not([type])'
+      'input[type="text"], input:not([type])',
     );
     inputs.forEach((input) => {
       input.addEventListener("focus", handleSearchInputFocus);
@@ -1062,7 +1056,7 @@ export default function SalesSection({ cashier }) {
 
           // Ensure array is always 20 slots (pad with null if shorter)
           resolvedSlots[category] = Array.from({ length: 20 }, (_, i) =>
-            resolvedArray[i] !== undefined ? resolvedArray[i] : null
+            resolvedArray[i] !== undefined ? resolvedArray[i] : null,
           );
         });
 
@@ -1070,7 +1064,7 @@ export default function SalesSection({ cashier }) {
         setCategorySlotColors(loadedColors);
         localStorage.setItem(
           "category_slot_colors",
-          JSON.stringify(loadedColors)
+          JSON.stringify(loadedColors),
         );
 
         setCustomCategoryProducts(resolvedSlots);
@@ -1078,11 +1072,11 @@ export default function SalesSection({ cashier }) {
         // Also save to localStorage as backup
         localStorage.setItem(
           "custom_categories",
-          JSON.stringify(firebaseTabs.categories || [])
+          JSON.stringify(firebaseTabs.categories || []),
         );
         localStorage.setItem(
           "custom_category_products",
-          JSON.stringify(resolvedSlots)
+          JSON.stringify(resolvedSlots),
         );
       }
     } catch (error) {
@@ -1132,7 +1126,7 @@ export default function SalesSection({ cashier }) {
         (p) =>
           p.name?.toLowerCase().includes(query) ||
           p.barcode?.includes(query) ||
-          p.sku?.toLowerCase().includes(query)
+          p.sku?.toLowerCase().includes(query),
       );
     }
 
@@ -1153,7 +1147,7 @@ export default function SalesSection({ cashier }) {
         try {
           const cats = await dbService.getCategories();
           const allCategories = cats.filter(
-            (cat) => cat.name && !cat.deletedAt
+            (cat) => cat.name && !cat.deletedAt,
           );
           setCategoriesData(allCategories);
           setCategories(allCategories.map((c) => c.name).sort());
@@ -1174,9 +1168,8 @@ export default function SalesSection({ cashier }) {
       // Enrich products with latest stock from stock history (so Sales shows correct stock)
       let finalProducts = productsData;
       try {
-        const { stockHistoryService } = await import(
-          "@/lib/firebase/stockHistoryService"
-        );
+        const { stockHistoryService } =
+          await import("@/lib/firebase/stockHistoryService");
 
         // Get all latest stock levels in one call (more efficient)
         const latestStockMap =
@@ -1203,7 +1196,7 @@ export default function SalesSection({ cashier }) {
       } catch (err) {
         console.warn(
           "Stock history enrichment failed, using raw products:",
-          err
+          err,
         );
         finalProducts = productsData;
       }
@@ -1213,7 +1206,7 @@ export default function SalesSection({ cashier }) {
 
       // Get ALL categories from Firebase (not filtered by user)
       const allCategories = categoriesData.filter(
-        (cat) => cat.name && !cat.deletedAt
+        (cat) => cat.name && !cat.deletedAt,
       );
 
       // If still no categories, extract from products as fallback
@@ -1292,18 +1285,18 @@ export default function SalesSection({ cashier }) {
                   }
                   return null;
                 });
-              }
+              },
             );
             setCustomCategoryProducts(resolvedSlots);
 
             // Also save to localStorage as backup
             localStorage.setItem(
               "custom_categories",
-              JSON.stringify(firebaseTabs.categories || [])
+              JSON.stringify(firebaseTabs.categories || []),
             );
             localStorage.setItem(
               "custom_category_products",
-              JSON.stringify(resolvedSlots)
+              JSON.stringify(resolvedSlots),
             );
           } else {
             // Fallback to localStorage if no Firebase data
@@ -1314,11 +1307,11 @@ export default function SalesSection({ cashier }) {
             }
 
             const savedCustomCategoryProducts = localStorage.getItem(
-              "custom_category_products"
+              "custom_category_products",
             );
             if (savedCustomCategoryProducts) {
               setCustomCategoryProducts(
-                JSON.parse(savedCustomCategoryProducts)
+                JSON.parse(savedCustomCategoryProducts),
               );
             }
           }
@@ -1332,7 +1325,7 @@ export default function SalesSection({ cashier }) {
           }
 
           const savedCustomCategoryProducts = localStorage.getItem(
-            "custom_category_products"
+            "custom_category_products",
           );
           if (savedCustomCategoryProducts) {
             setCustomCategoryProducts(JSON.parse(savedCustomCategoryProducts));
@@ -1346,7 +1339,7 @@ export default function SalesSection({ cashier }) {
         }
 
         const savedCustomCategoryProducts = localStorage.getItem(
-          "custom_category_products"
+          "custom_category_products",
         );
         if (savedCustomCategoryProducts) {
           setCustomCategoryProducts(JSON.parse(savedCustomCategoryProducts));
@@ -1390,7 +1383,7 @@ export default function SalesSection({ cashier }) {
     } catch (error) {
       console.error(
         "Failed to load products from Firebase, trying IndexedDB:",
-        error
+        error,
       );
 
       // Fallback to IndexedDB if Firebase fails (offline mode)
@@ -1503,7 +1496,7 @@ export default function SalesSection({ cashier }) {
     // If product has categoryId, look up the category name from categoriesData
     if (product.categoryId && categoriesData.length > 0) {
       const category = categoriesData.find(
-        (cat) => cat.id === product.categoryId
+        (cat) => cat.id === product.categoryId,
       );
 
       if (category) {
@@ -1714,7 +1707,7 @@ export default function SalesSection({ cashier }) {
 
     // Find cart item by productId (cart item.id !== product.id)
     const cartItem = items.find(
-      (it) => it.productId === selectedWeightProduct.id
+      (it) => it.productId === selectedWeightProduct.id,
     );
 
     if (cartItem) {
@@ -1739,7 +1732,7 @@ export default function SalesSection({ cashier }) {
   const ensureTwentySlots = (slots) => {
     if (!slots) return Array(20).fill(null);
     return Array.from({ length: 20 }, (_, i) =>
-      slots[i] !== undefined ? slots[i] : null
+      slots[i] !== undefined ? slots[i] : null,
     );
   };
 
@@ -1749,7 +1742,7 @@ export default function SalesSection({ cashier }) {
     localStorage.setItem("custom_categories", JSON.stringify(categories));
     localStorage.setItem(
       "custom_category_products",
-      JSON.stringify(categoryProducts)
+      JSON.stringify(categoryProducts),
     );
 
     if (!userId) {
@@ -1815,10 +1808,10 @@ export default function SalesSection({ cashier }) {
     try {
       await saveCustomTabsToFirebase(
         updatedCategories,
-        updatedCategoryProducts
+        updatedCategoryProducts,
       );
       toast.success(
-        `Category "${newCategoryName.trim()}" added and synced to cloud`
+        `Category "${newCategoryName.trim()}" added and synced to cloud`,
       );
     } catch (error) {
       toast.error(`Category added but failed to sync to cloud`);
@@ -1831,7 +1824,7 @@ export default function SalesSection({ cashier }) {
 
   const handleDeleteCustomCategory = async (categoryName) => {
     const updatedCategories = customCategories.filter(
-      (c) => c !== categoryName
+      (c) => c !== categoryName,
     );
     setCustomCategories(updatedCategories);
 
@@ -1847,11 +1840,11 @@ export default function SalesSection({ cashier }) {
       // Fallback to localStorage if not logged in
       localStorage.setItem(
         "custom_categories",
-        JSON.stringify(updatedCategories)
+        JSON.stringify(updatedCategories),
       );
       localStorage.setItem(
         "custom_category_products",
-        JSON.stringify(updatedProducts)
+        JSON.stringify(updatedProducts),
       );
     }
 
@@ -1871,7 +1864,7 @@ export default function SalesSection({ cashier }) {
     slotLongPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
       const currentSlots = ensureTwentySlots(
-        customCategoryProducts[selectedCategory]
+        customCategoryProducts[selectedCategory],
       );
       const currentSlot = currentSlots[index];
 
@@ -1903,7 +1896,7 @@ export default function SalesSection({ cashier }) {
     ) {
       // ALWAYS ensure array is exactly 20 slots
       const updatedSlots = ensureTwentySlots(
-        customCategoryProducts[selectedCategory]
+        customCategoryProducts[selectedCategory],
       );
 
       // Store as object with type and data
@@ -1944,7 +1937,7 @@ export default function SalesSection({ cashier }) {
     if (customCategories.includes(selectedCategory)) {
       // ALWAYS ensure array is exactly 20 slots
       const updatedSlots = ensureTwentySlots(
-        customCategoryProducts[selectedCategory]
+        customCategoryProducts[selectedCategory],
       );
       updatedSlots[index] = null;
 
@@ -2070,7 +2063,7 @@ export default function SalesSection({ cashier }) {
 
     // Update category name in the list
     const updatedCategories = customCategories.map((cat) =>
-      cat === oldName ? newName : cat
+      cat === oldName ? newName : cat,
     );
     setCustomCategories(updatedCategories);
 
@@ -2099,7 +2092,7 @@ export default function SalesSection({ cashier }) {
     const categoryToDelete = selectedTabForMenu;
 
     const updatedCategories = customCategories.filter(
-      (c) => c !== categoryToDelete
+      (c) => c !== categoryToDelete,
     );
     setCustomCategories(updatedCategories);
 
@@ -2115,11 +2108,11 @@ export default function SalesSection({ cashier }) {
       // Fallback to localStorage if not logged in
       localStorage.setItem(
         "custom_categories",
-        JSON.stringify(updatedCategories)
+        JSON.stringify(updatedCategories),
       );
       localStorage.setItem(
         "custom_category_products",
-        JSON.stringify(updatedProducts)
+        JSON.stringify(updatedProducts),
       );
     }
 
@@ -2234,7 +2227,7 @@ export default function SalesSection({ cashier }) {
     toast.success(
       `Discount "${discount.name}" applied! (${
         cartDiscounts.length + 1
-      } total discounts)`
+      } total discounts)`,
     );
   };
 
@@ -2280,7 +2273,7 @@ export default function SalesSection({ cashier }) {
     toast.success(
       `Custom discount "${customDiscountTitle}" applied! (${
         cartDiscounts.length + 1
-      } total discounts)`
+      } total discounts)`,
     );
   };
 
@@ -2321,7 +2314,7 @@ export default function SalesSection({ cashier }) {
         status: "parked",
         total: cartData.total,
       },
-      items
+      items,
     );
 
     clearCart();
@@ -2329,7 +2322,7 @@ export default function SalesSection({ cashier }) {
     toast.success(
       customer
         ? `Ticket saved for ${customer.name}`
-        : "Ticket saved successfully"
+        : "Ticket saved successfully",
     );
   };
 
@@ -2343,7 +2336,7 @@ export default function SalesSection({ cashier }) {
     const savedShift = localStorage.getItem("active_shift");
     if (!savedShift) {
       toast.error(
-        "No active shift! Please start a shift to make transactions."
+        "No active shift! Please start a shift to make transactions.",
       );
       return;
     }
@@ -2352,14 +2345,14 @@ export default function SalesSection({ cashier }) {
       const activeShift = JSON.parse(savedShift);
       if (!activeShift || activeShift.status !== "active") {
         toast.error(
-          "No active shift! Please start a shift to make transactions."
+          "No active shift! Please start a shift to make transactions.",
         );
         return;
       }
     } catch (error) {
       console.error("Error parsing active shift:", error);
       toast.error(
-        "No active shift! Please start a shift to make transactions."
+        "No active shift! Please start a shift to make transactions.",
       );
       return;
     }
@@ -2369,7 +2362,7 @@ export default function SalesSection({ cashier }) {
       if (customerApprovalService.isCustomerExpired(cartCustomer.expiryDate)) {
         toast.error(
           `Customer "${cartCustomer.name}" membership has expired! Please extend the expiry date before checkout.`,
-          { duration: 5000 }
+          { duration: 5000 },
         );
         return;
       }
@@ -2377,13 +2370,13 @@ export default function SalesSection({ cashier }) {
       // Warn if expiring soon
       if (customerApprovalService.isExpiringSoon(cartCustomer.expiryDate)) {
         const expiryStatus = customerApprovalService.getExpiryStatus(
-          cartCustomer.expiryDate
+          cartCustomer.expiryDate,
         );
         toast.warning(
           `Customer "${
             cartCustomer.name
           }" ${expiryStatus.message.toLowerCase()}`,
-          { duration: 4000 }
+          { duration: 4000 },
         );
       }
     }
@@ -2421,14 +2414,14 @@ export default function SalesSection({ cashier }) {
       console.log("💰 PAYMENT CASHBACK CALC - isMember:", isMember);
       console.log(
         "💰 PAYMENT CASHBACK CALC - isNoMember:",
-        cartCustomer?.isNoMember
+        cartCustomer?.isNoMember,
       );
 
       if (isMember) {
         const isEligibleForCashback = isCustomerEligibleForPoints(cartCustomer);
         console.log(
           "💰 PAYMENT - Eligible for cashback:",
-          isEligibleForCashback
+          isEligibleForCashback,
         );
         console.log("💰 PAYMENT - Items to calculate:", items.length);
 
@@ -2441,16 +2434,16 @@ export default function SalesSection({ cashier }) {
               quantity: item.quantity,
               name: item.name,
             })),
-            cartData.total
+            cartData.total,
           );
 
           console.log(
             "💰 PAYMENT - Calculated cashback result:",
-            calculatedCashback
+            calculatedCashback,
           );
           console.log(
             "💰 PAYMENT - Total points to save:",
-            calculatedCashback.totalPoints
+            calculatedCashback.totalPoints,
           );
         }
       }
@@ -2520,12 +2513,12 @@ export default function SalesSection({ cashier }) {
               console.log("💾 SAVING TO FIREBASE:");
               console.log(
                 "   cashback_earned:",
-                calculatedCashback.totalPoints
+                calculatedCashback.totalPoints,
               );
               console.log("   points_earned:", calculatedCashback.totalPoints);
               console.log(
                 "   cashback_breakdown:",
-                calculatedCashback.itemBreakdown
+                calculatedCashback.itemBreakdown,
               );
               return (
                 currentPoints - pointsToUse + calculatedCashback.totalPoints
@@ -2610,9 +2603,8 @@ export default function SalesSection({ cashier }) {
 
       // Update stock levels and log history for items that track stock
       try {
-        const { stockHistoryService } = await import(
-          "@/lib/firebase/stockHistoryService"
-        );
+        const { stockHistoryService } =
+          await import("@/lib/firebase/stockHistoryService");
 
         for (const item of items) {
           // Fetch full product details to check if it tracks stock
@@ -2655,12 +2647,12 @@ export default function SalesSection({ cashier }) {
             // RECIPE/BUNDLE SYSTEM: Reduce stock from configured products
             for (const reduction of product.stockReductions) {
               const reductionProduct = await productsService.get(
-                reduction.productId
+                reduction.productId,
               );
               if (!reductionProduct) {
                 console.warn(
                   "⚠️ Stock reduction product not found:",
-                  reduction.productId
+                  reduction.productId,
                 );
                 continue;
               }
@@ -2671,7 +2663,7 @@ export default function SalesSection({ cashier }) {
               const totalReduction = reduction.quantity * item.quantity;
               const reductionNewStock = Math.max(
                 0,
-                reductionCurrentStock - totalReduction
+                reductionCurrentStock - totalReduction,
               );
 
               // Update reduction product stock
@@ -2778,7 +2770,7 @@ export default function SalesSection({ cashier }) {
           console.log("   isEligibleForPoints:", isEligibleForPoints);
           console.log(
             "   calculatedCashback.totalPoints:",
-            calculatedCashback.totalPoints
+            calculatedCashback.totalPoints,
           );
 
           if (isEligibleForPoints) {
@@ -2793,7 +2785,7 @@ export default function SalesSection({ cashier }) {
                   pointsToUse,
                   orderNumber,
                   receiptData.id || orderNumber,
-                  valueRedeemed
+                  valueRedeemed,
                 );
 
                 // Update local customer object so UI reflects point deduction immediately
@@ -2815,13 +2807,13 @@ export default function SalesSection({ cashier }) {
             console.log("   shouldEarnCashback:", shouldEarnCashback);
             console.log(
               "   calculatedCashback.totalPoints:",
-              calculatedCashback.totalPoints
+              calculatedCashback.totalPoints,
             );
 
             if (shouldEarnCashback && calculatedCashback.totalPoints > 0) {
               console.log(
                 "📈 Recording EARNED points:",
-                calculatedCashback.totalPoints
+                calculatedCashback.totalPoints,
               );
               try {
                 const earnedEntry =
@@ -2830,7 +2822,7 @@ export default function SalesSection({ cashier }) {
                     calculatedCashback.totalPoints,
                     orderNumber,
                     receiptData.id || orderNumber,
-                    calculatedCashback.itemBreakdown
+                    calculatedCashback.itemBreakdown,
                   );
 
                 // Update local customer so points show immediately in UI
@@ -2844,7 +2836,7 @@ export default function SalesSection({ cashier }) {
             }
           } else {
             console.log(
-              "❌ Customer NOT eligible for points - points will NOT be recorded to customer"
+              "❌ Customer NOT eligible for points - points will NOT be recorded to customer",
             );
           }
         } catch (error) {
@@ -2899,7 +2891,7 @@ export default function SalesSection({ cashier }) {
                 orderId: localOrderId,
               });
             }
-          }
+          },
         );
 
         // Trigger sync check to update UI badge
@@ -2928,11 +2920,11 @@ export default function SalesSection({ cashier }) {
 
                   // Refresh shift data
                   const updatedShift = await shiftsService.getById(
-                    activeShift.id
+                    activeShift.id,
                   );
                   localStorage.setItem(
                     "active_shift",
-                    JSON.stringify(updatedShift)
+                    JSON.stringify(updatedShift),
                   );
                 } catch (error) {
                   console.error("Error updating shift online:", error);
@@ -2946,7 +2938,7 @@ export default function SalesSection({ cashier }) {
                   });
                   localStorage.setItem(
                     "active_shift",
-                    JSON.stringify(activeShift)
+                    JSON.stringify(activeShift),
                   );
                 }
               } else {
@@ -2960,7 +2952,7 @@ export default function SalesSection({ cashier }) {
                 });
                 localStorage.setItem(
                   "active_shift",
-                  JSON.stringify(activeShift)
+                  JSON.stringify(activeShift),
                 );
               }
 
@@ -2994,9 +2986,8 @@ export default function SalesSection({ cashier }) {
       // Update kiosk order status if this was from kiosk
       if (cartData.kioskOrderId) {
         try {
-          const { doc, updateDoc, serverTimestamp } = await import(
-            "firebase/firestore"
-          );
+          const { doc, updateDoc, serverTimestamp } =
+            await import("firebase/firestore");
           const { db } = await import("@/lib/firebase");
 
           const kioskOrderRef = doc(db, "kioskOrders", cartData.kioskOrderId);
@@ -3097,7 +3088,7 @@ export default function SalesSection({ cashier }) {
         job.id,
         cashier?.id,
         cashier?.name || "Staff",
-        "Manual reprint from print jobs panel"
+        "Manual reprint from print jobs panel",
       );
 
       // Log the reprint activity
@@ -3134,7 +3125,7 @@ export default function SalesSection({ cashier }) {
         setTimeout(async () => {
           await printJobsService.updatePrintJobStatus(
             job.id,
-            PRINT_STATUS.SUCCESS
+            PRINT_STATUS.SUCCESS,
           );
           loadPrintJobs(); // Refresh the list
         }, 2000);
@@ -3142,7 +3133,7 @@ export default function SalesSection({ cashier }) {
         await printJobsService.updatePrintJobStatus(
           job.id,
           PRINT_STATUS.FAILED,
-          result.error || "Print API error"
+          result.error || "Print API error",
         );
         toast.error("Failed to send receipt to printer");
       }
@@ -3155,7 +3146,7 @@ export default function SalesSection({ cashier }) {
       await printJobsService.updatePrintJobStatus(
         job.id,
         PRINT_STATUS.FAILED,
-        error.message
+        error.message,
       );
     } finally {
       setReprintingJobId(null);
@@ -3223,7 +3214,7 @@ export default function SalesSection({ cashier }) {
         // Update print job status to sent
         await printJobsService.updatePrintJobStatus(
           printJob.id,
-          PRINT_STATUS.SENT
+          PRINT_STATUS.SENT,
         );
 
         // Log success
@@ -3243,7 +3234,7 @@ export default function SalesSection({ cashier }) {
         setTimeout(async () => {
           await printJobsService.updatePrintJobStatus(
             printJob.id,
-            PRINT_STATUS.SUCCESS
+            PRINT_STATUS.SUCCESS,
           );
           await createLog({
             userId: cashier?.id,
@@ -3263,7 +3254,7 @@ export default function SalesSection({ cashier }) {
         await printJobsService.updatePrintJobStatus(
           printJob.id,
           PRINT_STATUS.FAILED,
-          result.error || "Print API error"
+          result.error || "Print API error",
         );
 
         // Log failure
@@ -3290,7 +3281,7 @@ export default function SalesSection({ cashier }) {
         await printJobsService.updatePrintJobStatus(
           printJob.id,
           PRINT_STATUS.FAILED,
-          error.message
+          error.message,
         );
         await createLog({
           userId: cashier?.id,
@@ -3340,7 +3331,7 @@ export default function SalesSection({ cashier }) {
     // Use setTimeout to ensure state is updated
     setTimeout(() => {
       const completeButton = document.querySelector(
-        '[data-quick-complete="true"]'
+        '[data-quick-complete="true"]',
       );
       if (completeButton && !completeButton.disabled) {
         completeButton.click();
@@ -3527,14 +3518,14 @@ export default function SalesSection({ cashier }) {
                     const isOutOfStock = isRecipeMode
                       ? false // Recipe mode products are never "out of stock" based on own stock
                       : hasVariants
-                      ? product.variants.every(
-                          (v) =>
-                            !v.sku ||
-                            (v.stock_quantity !== undefined &&
-                              v.stock_quantity === 0)
-                        )
-                      : product.stock_quantity !== undefined &&
-                        product.stock_quantity === 0;
+                        ? product.variants.every(
+                            (v) =>
+                              !v.sku ||
+                              (v.stock_quantity !== undefined &&
+                                v.stock_quantity === 0),
+                          )
+                        : product.stock_quantity !== undefined &&
+                          product.stock_quantity === 0;
                     const canSell = availableForSale && !isOutOfStock;
                     const imageUrl = getProductImage(product);
                     const productColor = getProductColor(product);
@@ -3550,7 +3541,7 @@ export default function SalesSection({ cashier }) {
                         key={product.id || product.sku}
                         className={cn(
                           "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none touch-manipulation",
-                          !canSell && "cursor-not-allowed opacity-70"
+                          !canSell && "cursor-not-allowed opacity-70",
                         )}
                         style={{
                           WebkitTouchCallout: "none",
@@ -3594,14 +3585,14 @@ export default function SalesSection({ cashier }) {
                                           product.source === "local" &&
                                             "bg-purple-500 text-white border-0",
                                           product.source === "loyverse" &&
-                                            "bg-gray-500 text-white border-0"
+                                            "bg-gray-500 text-white border-0",
                                         )}
                                       >
                                         {product.source === "kiosk"
                                           ? "K"
                                           : product.source === "local"
-                                          ? "L"
-                                          : "LV"}
+                                            ? "L"
+                                            : "LV"}
                                       </Badge>
                                     )}
                                   </div>
@@ -3612,7 +3603,7 @@ export default function SalesSection({ cashier }) {
                               <div
                                 className={cn(
                                   "w-full h-full flex items-center justify-center",
-                                  colorClass
+                                  colorClass,
                                 )}
                               >
                                 <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
@@ -3657,7 +3648,7 @@ export default function SalesSection({ cashier }) {
               /* Custom Category - 5x4 Grid of Product Slots */
               <div className="grid gap-4 grid-cols-5 grid-rows-4">
                 {ensureTwentySlots(
-                  customCategoryProducts[selectedCategory]
+                  customCategoryProducts[selectedCategory],
                 ).map((slot, index) => (
                   <Card
                     key={index}
@@ -3760,7 +3751,7 @@ export default function SalesSection({ cashier }) {
                                     <div
                                       className={cn(
                                         "w-full h-full flex items-center justify-center",
-                                        colorClass
+                                        colorClass,
                                       )}
                                     >
                                       <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
@@ -3847,7 +3838,7 @@ export default function SalesSection({ cashier }) {
                       key={product.id || product.sku}
                       className={cn(
                         "p-0 group overflow-hidden border bg-white dark:bg-gray-900 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md select-none touch-manipulation",
-                        !canSell && "cursor-not-allowed opacity-70"
+                        !canSell && "cursor-not-allowed opacity-70",
                       )}
                       style={{
                         WebkitTouchCallout: "none",
@@ -3887,7 +3878,7 @@ export default function SalesSection({ cashier }) {
                             <div
                               className={cn(
                                 "w-full h-full flex items-center justify-center",
-                                colorClass
+                                colorClass,
                               )}
                             >
                               <h3 className="text-lg font-bold text-white text-center px-4 line-clamp-3">
@@ -3941,7 +3932,7 @@ export default function SalesSection({ cashier }) {
                     "px-8 py-4 text-xl font-medium border-r border-gray-300 dark:border-gray-700 whitespace-nowrap transition-colors",
                     selectedCategory === "all"
                       ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-t-2 border-t-green-600"
-                      : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800"
+                      : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-800 dark:hover:bg-gray-800",
                   )}
                 >
                   All
@@ -4052,7 +4043,7 @@ export default function SalesSection({ cashier }) {
                         {cartCustomer.expiryDate &&
                           (() => {
                             const expiryDate = new Date(
-                              cartCustomer.expiryDate
+                              cartCustomer.expiryDate,
                             );
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
@@ -4143,7 +4134,7 @@ export default function SalesSection({ cashier }) {
 
                 // Find cashback for this item
                 const itemCashback = calculatedCashback.itemBreakdown.find(
-                  (cb) => cb.itemId === (item.productId || item.id)
+                  (cb) => cb.itemId === (item.productId || item.id),
                 );
 
                 console.log(
@@ -4154,7 +4145,7 @@ export default function SalesSection({ cashier }) {
                   "cashback:",
                   itemCashback,
                   "breakdown:",
-                  calculatedCashback.itemBreakdown
+                  calculatedCashback.itemBreakdown,
                 );
 
                 return (
@@ -4217,7 +4208,7 @@ export default function SalesSection({ cashier }) {
                               onClick={() => {
                                 setSelectedWeightProduct(item);
                                 setWeightInput(
-                                  item.quantity.toString().replace(".", ",")
+                                  item.quantity.toString().replace(".", ","),
                                 );
                                 setShowWeightModal(true);
                               }}
@@ -4543,7 +4534,7 @@ export default function SalesSection({ cashier }) {
                 <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                   {formatCurrency(
                     getTotal() -
-                      pointsToUse * (pointUsageRules?.pointValue || 1)
+                      pointsToUse * (pointUsageRules?.pointValue || 1),
                   )}
                 </div>
                 {pointsToUse > 0 && (
@@ -4551,7 +4542,7 @@ export default function SalesSection({ cashier }) {
                     <span className="font-medium">{pointsToUse} points</span>{" "}
                     applied (-
                     {formatCurrency(
-                      pointsToUse * (pointUsageRules?.pointValue || 1)
+                      pointsToUse * (pointUsageRules?.pointValue || 1),
                     )}
                     )
                   </div>
@@ -4563,7 +4554,7 @@ export default function SalesSection({ cashier }) {
                 !cartCustomer.isNoMember &&
                 cartCustomer.expiryDate &&
                 !customerApprovalService.isCustomerExpired(
-                  cartCustomer.expiryDate
+                  cartCustomer.expiryDate,
                 ) && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -4581,14 +4572,14 @@ export default function SalesSection({ cashier }) {
                       {[10, 25, 50, 100].map((percent) => {
                         const availablePoints = getCustomerPoints(cartCustomer);
                         const pointsForPercent = Math.floor(
-                          (availablePoints * percent) / 100
+                          (availablePoints * percent) / 100,
                         );
                         const maxPointsAllowed = Math.floor(
-                          getTotal() / (pointUsageRules?.pointValue || 1)
+                          getTotal() / (pointUsageRules?.pointValue || 1),
                         );
                         const pointsToApply = Math.min(
                           pointsForPercent,
-                          maxPointsAllowed
+                          maxPointsAllowed,
                         );
 
                         return (
@@ -4631,12 +4622,12 @@ export default function SalesSection({ cashier }) {
                             getCustomerPoints(cartCustomer);
                           const input = parseInt(pointsInputValue) || 0;
                           const maxPointsAllowed = Math.floor(
-                            getTotal() / (pointUsageRules?.pointValue || 1)
+                            getTotal() / (pointUsageRules?.pointValue || 1),
                           );
                           const pointsToApply = Math.min(
                             input,
                             availablePoints,
-                            maxPointsAllowed
+                            maxPointsAllowed,
                           );
                           setPointsToUse(pointsToApply);
                           setPointsInputValue("");
@@ -4765,7 +4756,7 @@ export default function SalesSection({ cashier }) {
                         <div className="text-sm text-red-700 dark:text-red-400">
                           Insufficient amount. Need{" "}
                           {formatCurrency(
-                            getFinalTotal() - parseFloat(cashReceived)
+                            getFinalTotal() - parseFloat(cashReceived),
                           )}{" "}
                           more.
                         </div>
@@ -4881,7 +4872,7 @@ export default function SalesSection({ cashier }) {
                         {formatCurrency(
                           completedOrder.total_money ||
                             completedOrder.total ||
-                            0
+                            0,
                         )}
                       </span>
                     </div>
@@ -5000,7 +4991,7 @@ export default function SalesSection({ cashier }) {
                         // Calculate cashback after selecting customer
                         setTimeout(
                           () => calculateCashbackNow(null, customer, null),
-                          100
+                          100,
                         );
                       }}
                     >
@@ -5120,8 +5111,8 @@ export default function SalesSection({ cashier }) {
                               `Cannot select ${
                                 customer.name
                               } - membership expired on ${new Date(
-                                customer.expiryDate
-                              ).toLocaleDateString()}`
+                                customer.expiryDate,
+                              ).toLocaleDateString()}`,
                             );
                             return;
                           }
@@ -5129,12 +5120,12 @@ export default function SalesSection({ cashier }) {
                           setShowCustomerSelectModal(false);
                           setCustomerSearchQuery("");
                           toast.success(
-                            `Customer ${customer.name} added to cart`
+                            `Customer ${customer.name} added to cart`,
                           );
                           // Calculate cashback after selecting customer
                           setTimeout(
                             () => calculateCashbackNow(null, customer, null),
-                            100
+                            100,
                           );
                         }}
                       >
@@ -5169,7 +5160,7 @@ export default function SalesSection({ cashier }) {
                               {customer.expiryDate &&
                                 (() => {
                                   const expiryDate = new Date(
-                                    customer.expiryDate
+                                    customer.expiryDate,
                                   );
                                   const today = new Date();
                                   today.setHours(0, 0, 0, 0);
@@ -5231,7 +5222,7 @@ export default function SalesSection({ cashier }) {
                                   <span>
                                     Expires:{" "}
                                     {new Date(
-                                      customer.expiryDate
+                                      customer.expiryDate,
                                     ).toLocaleDateString()}
                                   </span>
                                 </div>
@@ -5258,7 +5249,9 @@ export default function SalesSection({ cashier }) {
                                   <CreditCard className="h-4 w-4" />
                                   <span className="font-medium">
                                     {formatCurrency(
-                                      customer.totalSpent || customer.spent || 0
+                                      customer.totalSpent ||
+                                        customer.spent ||
+                                        0,
                                     )}
                                   </span>
                                 </div>
@@ -5447,19 +5440,19 @@ export default function SalesSection({ cashier }) {
                       const subtotal = getSubtotal();
                       const applicability = discountsService.isApplicable(
                         discount,
-                        subtotal
+                        subtotal,
                       );
                       const now = new Date();
                       const validFrom = discount.validFrom?.toDate
                         ? discount.validFrom.toDate()
                         : discount.validFrom
-                        ? new Date(discount.validFrom)
-                        : null;
+                          ? new Date(discount.validFrom)
+                          : null;
                       const validTo = discount.validTo?.toDate
                         ? discount.validTo.toDate()
                         : discount.validTo
-                        ? new Date(discount.validTo)
-                        : null;
+                          ? new Date(discount.validTo)
+                          : null;
 
                       // Determine status badge
                       let statusColor = "bg-green-100 text-green-700";
@@ -5624,7 +5617,7 @@ export default function SalesSection({ cashier }) {
               {selectedSlotIndex !== null &&
                 (() => {
                   const currentSlots = ensureTwentySlots(
-                    customCategoryProducts[selectedCategory]
+                    customCategoryProducts[selectedCategory],
                   );
                   const currentSlot = currentSlots[selectedSlotIndex];
 
@@ -5824,7 +5817,7 @@ export default function SalesSection({ cashier }) {
                     className="flex-1"
                     onClick={async () => {
                       const updatedSlots = ensureTwentySlots(
-                        customCategoryProducts[selectedCategory]
+                        customCategoryProducts[selectedCategory],
                       );
                       updatedSlots[selectedSlotIndex] = null;
 
@@ -5836,11 +5829,11 @@ export default function SalesSection({ cashier }) {
                       setCustomCategoryProducts(updatedCategories);
                       await saveCustomTabsToFirebase(
                         customCategories,
-                        updatedCategories
+                        updatedCategories,
                       );
 
                       toast.success(
-                        `Removed from slot ${selectedSlotIndex + 1}`
+                        `Removed from slot ${selectedSlotIndex + 1}`,
                       );
                       setShowProductSelectModal(false);
                       setSelectedSlotIndex(null);
@@ -5937,7 +5930,7 @@ export default function SalesSection({ cashier }) {
                   onChange={(e) =>
                     saveCategorySlotColor(
                       selectedSlotForColor?.key,
-                      e.target.value
+                      e.target.value,
                     )
                   }
                   className="h-16 cursor-pointer"
@@ -5953,7 +5946,7 @@ export default function SalesSection({ cashier }) {
                   setCategorySlotColors(updatedColors);
                   saveCustomTabsToFirebase(
                     customCategories,
-                    customCategoryProducts
+                    customCategoryProducts,
                   );
                   toast.success("Color reset to default blue");
                   setShowSlotColorPicker(false);
@@ -6015,7 +6008,7 @@ export default function SalesSection({ cashier }) {
                           "border rounded-lg p-4 transition-colors",
                           selectedPrintJob?.id === job.id
                             ? "border-primary bg-primary/5"
-                            : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                            : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600",
                         )}
                       >
                         {/* Header Row */}
@@ -6071,7 +6064,9 @@ export default function SalesSection({ cashier }) {
                               <button
                                 onClick={() =>
                                   setSelectedPrintJob(
-                                    selectedPrintJob?.id === job.id ? null : job
+                                    selectedPrintJob?.id === job.id
+                                      ? null
+                                      : job,
                                   )
                                 }
                                 className="flex items-center gap-1 mt-1 text-primary hover:underline"
@@ -6109,7 +6104,7 @@ export default function SalesSection({ cashier }) {
                                   <div>
                                     At:{" "}
                                     {new Date(
-                                      reprint.reprintedAt
+                                      reprint.reprintedAt,
                                     ).toLocaleString()}
                                   </div>
                                   {reprint.reason && (
@@ -6195,7 +6190,7 @@ export default function SalesSection({ cashier }) {
                 <RefreshCw
                   className={cn(
                     "h-4 w-4 mr-1",
-                    printJobsLoading && "animate-spin"
+                    printJobsLoading && "animate-spin",
                   )}
                 />
                 Refresh

@@ -111,7 +111,7 @@ export default function POSLayout({ children }) {
   // Apply idle timeout when cashier is logged in and timeout > 0
   const remainingTime = useIdleTimeout(
     handleIdle,
-    cashier && idleTimeoutMs > 0 ? idleTimeoutMs : 0
+    cashier && idleTimeoutMs > 0 ? idleTimeoutMs : 0,
   );
 
   // Update countdown display
@@ -159,15 +159,11 @@ export default function POSLayout({ children }) {
       if (savedCashier) {
         try {
           const parsed = JSON.parse(savedCashier);
-          console.log(
-            `📋 Layout loading cashier: ${parsed.name} (${parsed.id})`
-          );
           setCashier(parsed);
         } catch (error) {
           console.error("Error loading cashier:", error);
         }
       } else {
-        console.log("🔓 Layout: No cashier in localStorage, clearing state");
         setCashier(null);
       }
 
@@ -307,7 +303,7 @@ export default function POSLayout({ children }) {
         activeShift.id,
         { actualCash: parseFloat(endingCash) },
         cashier?.id,
-        cashier?.name
+        cashier?.name,
       );
 
       const variance = endedShift.variance || 0;
@@ -317,11 +313,11 @@ export default function POSLayout({ children }) {
         toast.success("Perfect! Cash matches expected amount.");
       } else if (variance > 0) {
         toast.success(
-          `Shift ended. Surplus: ${formatCurrency(Math.abs(variance))}`
+          `Shift ended. Surplus: ${formatCurrency(Math.abs(variance))}`,
         );
       } else {
         toast.error(
-          `Shift ended. Shortage: ${formatCurrency(Math.abs(variance))}`
+          `Shift ended. Shortage: ${formatCurrency(Math.abs(variance))}`,
         );
       }
 
@@ -361,17 +357,17 @@ export default function POSLayout({ children }) {
             if (localIds.length > 0) {
               await dbService.bulkDeleteProducts(localIds);
               console.log(
-                `Force-refresh: cleared ${localIds.length} local products before rewrite`
+                `Force-refresh: cleared ${localIds.length} local products before rewrite`,
               );
             }
             await dbService.upsertProducts(products);
             console.log(
-              `Force-refresh: rewrote ${products.length} products from Firebase into local DB`
+              `Force-refresh: rewrote ${products.length} products from Firebase into local DB`,
             );
           } catch (err) {
             console.warn(
               "Force-refresh: failed to clear-and-rewrite products:",
-              err
+              err,
             );
           }
         }
@@ -389,12 +385,12 @@ export default function POSLayout({ children }) {
             }
             await dbService.upsertCategories(categories);
             console.log(
-              `Force-refresh: rewrote ${categories.length} categories from Firebase into local DB`
+              `Force-refresh: rewrote ${categories.length} categories from Firebase into local DB`,
             );
           } catch (err) {
             console.warn(
               "Force-refresh: failed to clear-and-rewrite categories:",
-              err
+              err,
             );
           }
         }
@@ -412,12 +408,12 @@ export default function POSLayout({ children }) {
             }
             await dbService.upsertCustomers(customers);
             console.log(
-              `Force-refresh: rewrote ${customers.length} customers from Firebase into local DB`
+              `Force-refresh: rewrote ${customers.length} customers from Firebase into local DB`,
             );
           } catch (err) {
             console.warn(
               "Force-refresh: failed to clear-and-rewrite customers:",
-              err
+              err,
             );
           }
         }
@@ -674,7 +670,7 @@ export default function POSLayout({ children }) {
                 onClick={() => {
                   // Dispatch custom event to open print jobs modal in SalesSection
                   window.dispatchEvent(
-                    new CustomEvent("open-print-jobs-modal")
+                    new CustomEvent("open-print-jobs-modal"),
                   );
                 }}
                 title="Print Jobs"
@@ -795,7 +791,7 @@ export default function POSLayout({ children }) {
                   </span>
                   <span className="font-bold text-lg">
                     {formatCurrency(
-                      activeShift.expectedCash || activeShift.startingCash || 0
+                      activeShift.expectedCash || activeShift.startingCash || 0,
                     )}
                   </span>
                 </div>
@@ -845,15 +841,15 @@ export default function POSLayout({ children }) {
                           isShort
                             ? "text-red-600"
                             : isOver
-                            ? "text-yellow-600"
-                            : "text-green-600"
+                              ? "text-yellow-600"
+                              : "text-green-600"
                         }`}
                       >
                         {variance === 0
                           ? "✓ Perfect Match"
                           : isShort
-                          ? `⚠ Short ${formatCurrency(Math.abs(variance))}`
-                          : `⚠ Over ${formatCurrency(variance)}`}
+                            ? `⚠ Short ${formatCurrency(Math.abs(variance))}`
+                            : `⚠ Over ${formatCurrency(variance)}`}
                       </span>
                     );
                   })()}
@@ -883,8 +879,8 @@ export default function POSLayout({ children }) {
                 {isEndingShift
                   ? "Processing..."
                   : endingCash
-                  ? "End Shift & Logout"
-                  : "Logout Without Clocking Out"}
+                    ? "End Shift & Logout"
+                    : "Logout Without Clocking Out"}
               </Button>
             </div>
           </div>

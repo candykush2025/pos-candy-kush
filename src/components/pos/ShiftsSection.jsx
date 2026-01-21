@@ -36,8 +36,6 @@ import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
 
 export default function ShiftsSection({ cashier }) {
-  console.log("🚀 ShiftsSection rendering, cashier:", cashier?.id);
-
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statistics, setStatistics] = useState(null);
@@ -527,21 +525,6 @@ export default function ShiftsSection({ cashier }) {
               // Check if this shift contains the problematic order
               const hasProblematicOrder =
                 shift.transactions?.includes("O-260121-1334-224");
-
-              console.log("🔍 Rendering shift:", {
-                id: shift.id,
-                status: shift.status,
-                transactions: shift.transactions,
-                transactionCount: shift.transactions?.length || 0,
-                totalRefunds: shift.totalRefunds,
-                totalCashRefunds: shift.totalCashRefunds,
-                totalCashSales: shift.totalCashSales,
-                totalCardSales: shift.totalCardSales,
-                expectedCash: shift.expectedCash,
-                hasProblematicOrder: hasProblematicOrder
-                  ? "⚠️ YES - Contains O-260121-1334-224"
-                  : "no",
-              });
 
               const variance = shift.variance || 0;
               const hasDiscrepancy = variance !== 0;

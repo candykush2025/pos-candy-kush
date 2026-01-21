@@ -33,7 +33,7 @@ export const useCartStore = create((set, get) => ({
                 total:
                   (item.price - item.discount) * (item.quantity + quantity),
               }
-            : item
+            : item,
         ),
       });
       get().syncCartToAPI();
@@ -98,7 +98,7 @@ export const useCartStore = create((set, get) => ({
               quantity,
               total: (item.price - item.discount) * quantity,
             }
-          : item
+          : item,
       ),
     });
     get().syncCartToAPI();
@@ -115,7 +115,7 @@ export const useCartStore = create((set, get) => ({
               discount,
               total: (item.price - discount) * item.quantity,
             }
-          : item
+          : item,
       ),
     });
     get().syncCartToAPI();
@@ -323,11 +323,6 @@ export const useCartStore = create((set, get) => ({
 
     const cartData = get().getCartData();
     try {
-      console.log("[CartStore] Syncing cart to API:", {
-        itemCount: cartData.items.length,
-        total: cartData.total,
-      });
-
       const response = await fetch("/api/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -337,14 +332,10 @@ export const useCartStore = create((set, get) => ({
       if (!response.ok) {
         console.error(
           "[CartStore] Failed to sync cart to API:",
-          response.status
+          response.status,
         );
       } else {
         const result = await response.json();
-        console.log("[CartStore] Cart synced successfully:", {
-          itemCount: result.cart?.items?.length || 0,
-          total: result.cart?.total || 0,
-        });
       }
     } catch (error) {
       console.error("[CartStore] Error syncing cart to API:", error);
