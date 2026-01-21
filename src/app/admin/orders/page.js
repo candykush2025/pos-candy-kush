@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { receiptsService } from "@/lib/firebase/firestore";
 import { loyverseService } from "@/lib/api/loyverse";
+import { shiftsService } from "@/lib/firebase/shiftsService";
 import { Timestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +92,7 @@ export default function AdminOrders() {
           now.getDate(),
           0,
           0,
-          0
+          0,
         );
         endDate = new Date(
           now.getFullYear(),
@@ -99,7 +100,7 @@ export default function AdminOrders() {
           now.getDate(),
           23,
           59,
-          59
+          59,
         );
         break;
       case "yesterday":
@@ -111,7 +112,7 @@ export default function AdminOrders() {
           yesterday.getDate(),
           0,
           0,
-          0
+          0,
         );
         endDate = new Date(
           yesterday.getFullYear(),
@@ -119,7 +120,7 @@ export default function AdminOrders() {
           yesterday.getDate(),
           23,
           59,
-          59
+          59,
         );
         break;
       case "this_week":
@@ -131,7 +132,7 @@ export default function AdminOrders() {
           weekStart.getDate(),
           0,
           0,
-          0
+          0,
         );
         endDate = new Date(
           now.getFullYear(),
@@ -139,7 +140,7 @@ export default function AdminOrders() {
           now.getDate(),
           23,
           59,
-          59
+          59,
         );
         break;
       case "last_week":
@@ -153,7 +154,7 @@ export default function AdminOrders() {
           lastWeekStart.getDate(),
           0,
           0,
-          0
+          0,
         );
         endDate = new Date(
           lastWeekEnd.getFullYear(),
@@ -161,7 +162,7 @@ export default function AdminOrders() {
           lastWeekEnd.getDate(),
           23,
           59,
-          59
+          59,
         );
         break;
       case "this_month":
@@ -172,7 +173,7 @@ export default function AdminOrders() {
           now.getDate(),
           23,
           59,
-          59
+          59,
         );
         break;
       case "last_month":
@@ -184,7 +185,7 @@ export default function AdminOrders() {
         const lastDayOfLastMonth = new Date(
           lastMonthYear,
           actualLastMonth + 1,
-          0
+          0,
         ).getDate();
         endDate = new Date(
           lastMonthYear,
@@ -192,7 +193,7 @@ export default function AdminOrders() {
           lastDayOfLastMonth,
           23,
           59,
-          59
+          59,
         );
         break;
       case "custom":
@@ -212,7 +213,7 @@ export default function AdminOrders() {
           now.getDate(),
           0,
           0,
-          0
+          0,
         );
         endDate = new Date(
           now.getFullYear(),
@@ -220,7 +221,7 @@ export default function AdminOrders() {
           now.getDate(),
           23,
           59,
-          59
+          59,
         );
     }
 
@@ -281,7 +282,7 @@ export default function AdminOrders() {
       // Show warning if no results
       if (filteredData.length === 0 && data.length > 0) {
         toast.info(
-          `No receipts found for the selected date range. Total receipts available: ${data.length}`
+          `No receipts found for the selected date range. Total receipts available: ${data.length}`,
         );
       }
     } catch (error) {
@@ -458,7 +459,63 @@ export default function AdminOrders() {
         });
       }
 
-      toast.success("Payment method change approved");
+      // Find and recalculate the shift that contains this receipt
+      try {
+        const orderNumber =
+          actualReceipt.orderNumber ||
+          actualReceipt.receipt_number ||
+          actualReceipt.order;
+        if (orderNumber) {
+          console.log(`Looking for shift containing order: ${orderNumber}`);
+
+          // Get all shifts (or filter by date range if needed for performance)
+          const receiptDate =
+            actualReceipt.receipt_date?.toDate?.() ||
+            (actualReceipt.receipt_date
+              ? new Date(actualReceipt.receipt_date)
+              : null) ||
+            actualReceipt.createdAt?.toDate?.() ||
+            (actualReceipt.createdAt
+              ? new Date(actualReceipt.createdAt)
+              : null) ||
+            new Date();
+
+          // Search for shifts around the receipt date (±7 days for safety)
+          const startDate = new Date(receiptDate);
+          startDate.setDate(startDate.getDate() - 7);
+          const endDate = new Date(receiptDate);
+          endDate.setDate(endDate.getDate() + 7);
+
+          const shifts = await shiftsService.getByDateRange(startDate, endDate);
+
+          // Find the shift that contains this transaction
+          const matchingShift = shifts.find(
+            (shift) =>
+              shift.transactions && shift.transactions.includes(orderNumber),
+          );
+
+          if (matchingShift) {
+            console.log(`Found shift ${matchingShift.id}, recalculating...`);
+            await shiftsService.recalculateShift(matchingShift.id);
+            console.log(`Shift ${matchingShift.id} recalculated successfully`);
+            toast.success(
+              "Payment method change approved and shift recalculated",
+            );
+          } else {
+            console.log(`No shift found containing order ${orderNumber}`);
+            toast.success("Payment method change approved");
+          }
+        } else {
+          toast.success("Payment method change approved");
+        }
+      } catch (shiftError) {
+        console.error("Error recalculating shift:", shiftError);
+        // Don't fail the approval if shift recalculation fails
+        toast.success(
+          "Payment method change approved (shift recalculation pending)",
+        );
+      }
+
       loadReceipts();
       loadPendingRequests();
     } catch (error) {
@@ -515,7 +572,7 @@ export default function AdminOrders() {
       setEditPaymentLoading(true);
       // Fetch the actual receipt to get the latest data
       const actualReceipt = await receiptsService.get(
-        selectedReceiptForEdit.id
+        selectedReceiptForEdit.id,
       );
       if (!actualReceipt) {
         toast.error("Receipt not found");
@@ -579,7 +636,7 @@ export default function AdminOrders() {
       ...new Set(
         visibleReceipts
           .map((r) => r.employeeId)
-          .filter((id) => id && !employees[id])
+          .filter((id) => id && !employees[id]),
       ),
     ];
 
@@ -718,7 +775,7 @@ export default function AdminOrders() {
     .filter(
       (r) =>
         !isRefundReceipt(r) &&
-        (r.receiptType || r.receipt_type || "").toUpperCase() === "SALE"
+        (r.receiptType || r.receipt_type || "").toUpperCase() === "SALE",
     )
     .reduce((sum, r) => sum + (r.totalMoney || r.total_money || 0), 0);
   const totalRefunds = filteredReceipts
@@ -810,7 +867,7 @@ export default function AdminOrders() {
                           Requested by {request.requestedByName} •{" "}
                           {formatDate(
                             new Date(request.requestedAt),
-                            "datetime"
+                            "datetime",
                           )}
                         </p>
                       </div>
@@ -832,7 +889,7 @@ export default function AdminOrders() {
                       <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
                         Amount:{" "}
                         {formatCurrency(
-                          request.amount || request.originalAmount || 0
+                          request.amount || request.originalAmount || 0,
                         )}
                       </span>
                     </div>
@@ -942,7 +999,7 @@ export default function AdminOrders() {
                           Requested by {request.requestedByName} •{" "}
                           {formatDate(
                             new Date(request.requestedAt),
-                            "datetime"
+                            "datetime",
                           )}
                         </p>
                       </div>
@@ -951,7 +1008,7 @@ export default function AdminOrders() {
                       <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
                         Amount:{" "}
                         {formatCurrency(
-                          request.amount || request.originalAmount || 0
+                          request.amount || request.originalAmount || 0,
                         )}
                       </span>
                     </div>
@@ -1092,7 +1149,7 @@ export default function AdminOrders() {
                             {
                               month: "short",
                               day: "numeric",
-                            }
+                            },
                           )
                         ) : (
                           // Date range selected
@@ -1102,7 +1159,7 @@ export default function AdminOrders() {
                               {
                                 month: "short",
                                 day: "numeric",
-                              }
+                              },
                             )}
                             {" - "}
                             {new Date(customEndDate).toLocaleDateString(
@@ -1110,7 +1167,7 @@ export default function AdminOrders() {
                               {
                                 month: "short",
                                 day: "numeric",
-                              }
+                              },
                             )}
                           </>
                         )}
@@ -1159,7 +1216,7 @@ export default function AdminOrders() {
                         day: "numeric",
                       })} - ${new Date(customEndDate).toLocaleDateString(
                         "en-US",
-                        { month: "short", day: "numeric" }
+                        { month: "short", day: "numeric" },
                       )}`
                     : "Custom Range"}
                 </option>
@@ -1293,8 +1350,8 @@ export default function AdminOrders() {
                   {dateRange === "today"
                     ? "Today"
                     : dateRange === "yesterday"
-                    ? "Yesterday"
-                    : dateRange.replace("_", " ")}
+                      ? "Yesterday"
+                      : dateRange.replace("_", " ")}
                 </span>
               )}
             </div>
@@ -1383,15 +1440,15 @@ export default function AdminOrders() {
                           {receipt.receiptDate
                             ? new Date(receipt.receiptDate).toLocaleDateString()
                             : receipt.createdAt?.toDate
-                            ? receipt.createdAt.toDate().toLocaleDateString()
-                            : "N/A"}
+                              ? receipt.createdAt.toDate().toLocaleDateString()
+                              : "N/A"}
                         </div>
                         <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {receipt.receiptDate
                             ? new Date(receipt.receiptDate).toLocaleTimeString()
                             : receipt.createdAt?.toDate
-                            ? receipt.createdAt.toDate().toLocaleTimeString()
-                            : ""}
+                              ? receipt.createdAt.toDate().toLocaleTimeString()
+                              : ""}
                         </div>
                       </td>
 
@@ -1462,7 +1519,7 @@ export default function AdminOrders() {
                                           (p) =>
                                             p.name ||
                                             p.payment_type?.name ||
-                                            "Cash"
+                                            "Cash",
                                         )
                                         .join(", ")
                                     : "N/A"}
@@ -1484,7 +1541,7 @@ export default function AdminOrders() {
                                           (p) =>
                                             p.name ||
                                             p.payment_type?.name ||
-                                            "Cash"
+                                            "Cash",
                                         )
                                         .join(", ")
                                     : receipt.paymentMethod ||
@@ -1541,7 +1598,7 @@ export default function AdminOrders() {
                               receipt.payments
                                 .map(
                                   (p) =>
-                                    p.name || p.payment_type?.name || "Cash"
+                                    p.name || p.payment_type?.name || "Cash",
                                 )
                                 .join(", ")
                             ) : (
@@ -1555,7 +1612,7 @@ export default function AdminOrders() {
                             <div className="text-xs text-orange-600 dark:text-orange-400">
                               Discount:{" "}
                               {formatCurrency(
-                                receipt.totalDiscount || receipt.total_discount
+                                receipt.totalDiscount || receipt.total_discount,
                               )}
                             </div>
                           )}
@@ -1570,9 +1627,9 @@ export default function AdminOrders() {
                               ? employees[receipt.employeeId]?.name ||
                                 receipt.employeeId.slice(0, 8) + "..."
                               : receipt.cashierId
-                              ? employees[receipt.cashierId]?.name ||
-                                receipt.cashierId.slice(0, 8) + "..."
-                              : "N/A")}
+                                ? employees[receipt.cashierId]?.name ||
+                                  receipt.cashierId.slice(0, 8) + "..."
+                                : "N/A")}
                         </div>
                       </td>
 
@@ -1580,7 +1637,7 @@ export default function AdminOrders() {
                       <td className="px-4 py-3 text-right">
                         <div className="text-lg font-bold text-green-600 dark:text-green-500">
                           {formatCurrency(
-                            receipt.totalMoney || receipt.total_money || 0
+                            receipt.totalMoney || receipt.total_money || 0,
                           )}
                         </div>
                       </td>
@@ -1590,7 +1647,7 @@ export default function AdminOrders() {
                         <div className="flex flex-col items-center gap-1">
                           <Badge
                             className={getReceiptTypeColor(
-                              getEffectiveReceiptType(receipt)
+                              getEffectiveReceiptType(receipt),
                             )}
                           >
                             {getEffectiveReceiptType(receipt)}
@@ -1634,7 +1691,7 @@ export default function AdminOrders() {
                         (page) =>
                           page === 1 ||
                           page === totalPages ||
-                          Math.abs(page - currentPage) <= 1
+                          Math.abs(page - currentPage) <= 1,
                       )
                       .map((page, idx, arr) => (
                         <div key={page} className="flex items-center">
@@ -1704,7 +1761,7 @@ export default function AdminOrders() {
                     {formatCurrency(
                       selectedReceiptForEdit.totalMoney ||
                         selectedReceiptForEdit.total_money ||
-                        0
+                        0,
                     )}
                   </span>
                 </div>

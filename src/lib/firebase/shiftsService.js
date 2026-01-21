@@ -20,7 +20,7 @@ export const shiftsService = {
     const q = query(
       collection(db, COLLECTION_NAME),
       where("userId", "==", userId),
-      where("status", "==", "active")
+      where("status", "==", "active"),
     );
 
     const snapshot = await getDocs(q);
@@ -66,19 +66,19 @@ export const shiftsService = {
     // If multiple active shifts exist (legacy issue), close them all
     if (activeShifts.length > 1) {
       console.log(
-        `Found ${activeShifts.length} active shifts for user ${userName}, auto-closing all...`
+        `Found ${activeShifts.length} active shifts for user ${userName}, auto-closing all...`,
       );
       for (const shift of activeShifts) {
         await this.autoCloseShift(
           shift.id,
-          "Auto-closed: Multiple shifts detected"
+          "Auto-closed: Multiple shifts detected",
         );
       }
       // After closing all, proceed to create a new shift
     } else if (activeShifts.length === 1) {
       // If exactly one active shift exists, return it (continue with existing shift)
       console.log(
-        `User ${userName} already has an active shift, continuing with existing shift`
+        `User ${userName} already has an active shift, continuing with existing shift`,
       );
       return activeShifts[0];
     }
@@ -201,7 +201,7 @@ export const shiftsService = {
 
     const q = query(
       collection(db, COLLECTION_NAME),
-      orderBy(orderByField, orderDirection)
+      orderBy(orderByField, orderDirection),
     );
 
     const snapshot = await getDocs(q);
@@ -218,7 +218,7 @@ export const shiftsService = {
     const q = query(
       collection(db, COLLECTION_NAME),
       where("userId", "==", userId),
-      orderBy(orderByField, orderDirection)
+      orderBy(orderByField, orderDirection),
     );
 
     const snapshot = await getDocs(q);
@@ -233,7 +233,7 @@ export const shiftsService = {
     const q = query(
       collection(db, COLLECTION_NAME),
       where("userId", "==", userId),
-      where("status", "==", "active")
+      where("status", "==", "active"),
     );
 
     const snapshot = await getDocs(q);
@@ -261,7 +261,7 @@ export const shiftsService = {
       where("userId", "==", userId),
       where("startTime", ">=", Timestamp.fromDate(startOfDay)),
       where("startTime", "<=", Timestamp.fromDate(endOfDay)),
-      orderBy("startTime", "desc")
+      orderBy("startTime", "desc"),
     );
 
     const snapshot = await getDocs(q);
@@ -347,7 +347,7 @@ export const shiftsService = {
       collection(db, COLLECTION_NAME),
       where("startTime", ">=", Timestamp.fromDate(startDate)),
       where("startTime", "<=", Timestamp.fromDate(endDate)),
-      orderBy("startTime", "desc")
+      orderBy("startTime", "desc"),
     );
 
     const snapshot = await getDocs(q);
@@ -375,11 +375,11 @@ export const shiftsService = {
       activeShifts: shifts.filter((s) => s.status === "active").length,
       totalSales: completedShifts.reduce(
         (sum, s) => sum + (s.totalSales || 0),
-        0
+        0,
       ),
       totalVariance: completedShifts.reduce(
         (sum, s) => sum + (s.variance || 0),
-        0
+        0,
       ),
       shiftsWithShortage: completedShifts.filter((s) => (s.variance || 0) < 0)
         .length,
@@ -395,120 +395,217 @@ export const shiftsService = {
 
   // Recalculate expected cash and variance for a completed shift
   async recalculateShift(shiftId) {
+    console.log(`\n🔄 ============================================`);
+    console.log(`🔄 RECALCULATE SHIFT STARTED`);
+    console.log(`🔄 Shift ID: ${shiftId}`);
+    console.log(`🔄 ============================================\n`);
+
     const docRef = doc(db, COLLECTION_NAME, shiftId);
     const shiftSnap = await getDoc(docRef);
 
     if (!shiftSnap.exists()) {
+      console.error(`❌ Shift ${shiftId} not found!`);
       throw new Error("Shift not found");
     }
 
     const shift = shiftSnap.data();
+    console.log(`✅ Shift found:`, {
+      id: shiftId,
+      userName: shift.userName,
+      status: shift.status,
+      transactionCount: shift.transactions?.length || 0,
+      currentTotalCashSales: shift.totalCashSales || 0,
+      currentTotalCardSales: shift.totalCardSales || 0,
+    });
 
-    // Fetch all receipts that belong to this shift to check for refunds
+    // Fetch all receipts that belong to this shift to check for refunds AND recalculate payment methods
     let totalRefunds = 0;
     let totalCashRefunds = 0;
+    let totalCashSales = 0;
+    let totalCardSales = 0;
+    let totalBankTransferSales = 0;
+    let totalCryptoSales = 0;
+    let totalOtherSales = 0;
+    let totalPaymentChangesAffectingCash = 0; // Track adjustments to actualCash
 
     if (shift.transactions && shift.transactions.length > 0) {
-      // Import receipts collection reference
       const receiptsCollectionRef = collection(db, "receipts");
 
-      // The transactions array contains order numbers (like "O-260113-1121-533")
-      // NOT document IDs, so we need to query by orderNumber/receipt_number field
-      const batchSize = 10;
-      for (let i = 0; i < shift.transactions.length; i += batchSize) {
-        const batch = shift.transactions.slice(i, i + batchSize);
+      for (const transactionId of shift.transactions) {
+        try {
+          let receipt = null;
+          let receiptDocId = null;
 
-        // Try querying by orderNumber field first
-        const receiptsQuery = query(
-          receiptsCollectionRef,
-          where("orderNumber", "in", batch)
-        );
-        const receiptsSnapshot = await getDocs(receiptsQuery);
+          // Try fetching by document ID first
+          const receiptDocRef = doc(receiptsCollectionRef, transactionId);
+          const receiptSnap = await getDoc(receiptDocRef);
 
-        console.log(
-          `Batch ${i / batchSize + 1}: Found ${
-            receiptsSnapshot.size
-          } receipts for order numbers:`,
-          batch
-        );
-
-        receiptsSnapshot.forEach((receiptDoc) => {
-          const receipt = receiptDoc.data();
-          // Check if this receipt has been refunded
-          if (receipt.isRefunded || receipt.refund) {
-            const refundAmount =
-              receipt.refundAmount || receipt.total_money || 0;
-
-            console.log(`Found refunded receipt ${receiptDoc.id}:`, {
-              orderNumber: receipt.orderNumber,
-              refundAmount,
-              paymentMethod: receipt.payment_method || receipt.paymentMethod,
-              isRefunded: receipt.isRefunded,
-              refund: receipt.refund,
-            });
-
-            totalRefunds += refundAmount;
-
-            // Check if it was a cash payment - check multiple fields
-            const paymentMethod = (
-              receipt.payment_method ||
-              receipt.paymentMethod ||
-              ""
-            ).toLowerCase();
-            const paymentTypeName = (
-              receipt.paymentTypeName || ""
-            ).toLowerCase();
-            const payments = receipt.payments || [];
-            const hasCashPayment = payments.some(
-              (p) =>
-                (p.type || "").toLowerCase().includes("cash") ||
-                (p.payment_type_id || "").toLowerCase().includes("cash")
+          if (receiptSnap.exists()) {
+            receipt = receiptSnap.data();
+            receiptDocId = receiptSnap.id;
+          } else {
+            // Not a document ID, try querying by orderNumber
+            const receiptsQuery = query(
+              receiptsCollectionRef,
+              where("orderNumber", "==", transactionId),
             );
+            const receiptsSnapshot = await getDocs(receiptsQuery);
 
-            if (
-              paymentMethod.includes("cash") ||
-              paymentTypeName.includes("cash") ||
-              hasCashPayment
-            ) {
-              totalCashRefunds += refundAmount;
-              console.log(`  -> Cash refund: ${refundAmount}`);
+            if (!receiptsSnapshot.empty) {
+              const receiptDoc = receiptsSnapshot.docs[0];
+              receipt = receiptDoc.data();
+              receiptDocId = receiptDoc.id;
+            } else {
+              continue; // Skip to next transaction
             }
           }
-        });
+
+          // Now process the receipt
+          if (receipt) {
+            const receiptTotal = receipt.total_money || 0;
+
+            // Determine the CURRENT payment method (considering payment history changes)
+            let currentPaymentMethod = "";
+            let hasPaymentChange = false;
+
+            // Check if there's a payment history with approved changes
+            if (receipt.paymentHistory && receipt.paymentHistory.length > 0) {
+              const approvedChanges = receipt.paymentHistory.filter(
+                (h) => h.status === "approved",
+              );
+              if (approvedChanges.length > 0) {
+                hasPaymentChange = true;
+                const latestChange =
+                  approvedChanges[approvedChanges.length - 1];
+
+                // Track cash adjustments
+                const oldMethod = (
+                  latestChange.oldMethod ||
+                  latestChange.oldPaymentMethod ||
+                  ""
+                ).toLowerCase();
+                const newMethod = (
+                  latestChange.newMethod ||
+                  latestChange.newPaymentMethod ||
+                  ""
+                ).toLowerCase();
+
+                // If changed FROM cash TO something else, subtract from actualCash
+                if (oldMethod === "cash" && newMethod !== "cash") {
+                  totalPaymentChangesAffectingCash -= receiptTotal;
+                }
+                // If changed FROM something else TO cash, add to actualCash
+                else if (oldMethod !== "cash" && newMethod === "cash") {
+                  totalPaymentChangesAffectingCash += receiptTotal;
+                }
+              }
+            }
+
+            // ALWAYS check the payments array first - this is the source of truth
+            const payments = receipt.payments || [];
+
+            if (payments.length > 0) {
+              currentPaymentMethod = (
+                payments[0].type ||
+                payments[0].name ||
+                ""
+              ).toLowerCase();
+            } else {
+              const paymentMethod = (
+                receipt.payment_method ||
+                receipt.paymentMethod ||
+                ""
+              ).toLowerCase();
+              const paymentTypeName = (
+                receipt.paymentTypeName || ""
+              ).toLowerCase();
+
+              if (paymentMethod) {
+                currentPaymentMethod = paymentMethod;
+              } else if (paymentTypeName) {
+                currentPaymentMethod = paymentTypeName;
+              }
+              console.log(
+                `   💳 Fallback payment method: "${currentPaymentMethod}"`,
+              );
+            }
+
+            // Categorize sales by current payment method (only if not refunded)
+            const isRefunded = receipt.isRefunded || receipt.refund;
+            if (!isRefunded) {
+              if (currentPaymentMethod.includes("cash")) {
+                totalCashSales += receiptTotal;
+              } else if (
+                currentPaymentMethod.includes("card") ||
+                currentPaymentMethod.includes("credit")
+              ) {
+                totalCardSales += receiptTotal;
+              } else if (
+                currentPaymentMethod.includes("bank") ||
+                currentPaymentMethod.includes("transfer")
+              ) {
+                totalBankTransferSales += receiptTotal;
+              } else if (
+                currentPaymentMethod.includes("crypto") ||
+                currentPaymentMethod.includes("bitcoin") ||
+                currentPaymentMethod.includes("btc")
+              ) {
+                totalCryptoSales += receiptTotal;
+              } else {
+                totalOtherSales += receiptTotal;
+              }
+            }
+
+            // Check if this receipt has been refunded
+            if (isRefunded) {
+              const refundAmount =
+                receipt.refundAmount || receipt.total_money || 0;
+              totalRefunds += refundAmount;
+
+              // Check if it was a cash payment (based on current/final payment method)
+              if (currentPaymentMethod.includes("cash")) {
+                totalCashRefunds += refundAmount;
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching receipt ${transactionId}:`, error);
+        }
       }
     }
 
-    console.log(`Shift ${shiftId} refund calculation:`, {
-      totalTransactions: shift.transactions?.length || 0,
-      totalRefunds,
-      totalCashRefunds,
-      startingCash: shift.startingCash || 0,
-      totalCashSales: shift.totalCashSales || 0,
-      totalPaidIn: shift.totalPaidIn || 0,
-      totalPaidOut: shift.totalPaidOut || 0,
-    });
-
-    // Update shift with refund totals
+    // Update shift with recalculated totals
     const updatedShiftData = {
       totalRefunds,
       totalCashRefunds,
+      totalCashSales,
+      totalCardSales,
+      totalBankTransferSales,
+      totalCryptoSales,
+      totalOtherSales,
     };
 
-    // Calculate expected cash using correct formula:
-    // Expected Cash = Starting Cash + Cash Sales - Cash Refunds + Paid In - Paid Out
+    // Calculate expected cash
     const expectedCash =
       (shift.startingCash || 0) +
-      (shift.totalCashSales || 0) -
+      totalCashSales -
       totalCashRefunds +
       (shift.totalPaidIn || 0) -
       (shift.totalPaidOut || 0);
 
-    // Calculate variance (actual - expected)
-    const actualCash = shift.actualCash || shift.endingCash || 0;
-    const variance = actualCash - expectedCash;
+    // Calculate actualCash from the formula
+    const calculatedActualCash =
+      (shift.startingCash || 0) +
+      totalCashSales -
+      totalCashRefunds +
+      (shift.totalPaidIn || 0) -
+      (shift.totalPaidOut || 0);
+
+    const variance = calculatedActualCash - expectedCash;
 
     const updateData = {
       ...updatedShiftData,
+      actualCash: calculatedActualCash,
       expectedCash,
       variance,
       updatedAt: Timestamp.now(),

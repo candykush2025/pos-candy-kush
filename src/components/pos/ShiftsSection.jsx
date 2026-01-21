@@ -73,31 +73,8 @@ export default function ShiftsSection({ cashier }) {
         shiftsService.getStatistics(cashier.id),
       ]);
 
-      console.log("📊 Loaded shifts before recalculation:", shiftsData.length);
-
-      // Calculate refunds for all shifts (including active ones)
-      const shiftsWithRefunds = await Promise.all(
-        shiftsData.map(async (shift) => {
-          try {
-            console.log(`🔄 Recalculating shift ${shift.id}...`);
-            // Use the recalculateShift method to get updated refund data
-            const updatedShift = await shiftsService.recalculateShift(shift.id);
-            console.log(`✅ Shift ${shift.id} recalculated:`, {
-              totalRefunds: updatedShift.totalRefunds,
-              totalCashRefunds: updatedShift.totalCashRefunds,
-              expectedCash: updatedShift.expectedCash,
-              transactionCount: updatedShift.transactions?.length || 0,
-            });
-            return updatedShift;
-          } catch (error) {
-            console.error(`❌ Error recalculating shift ${shift.id}:`, error);
-            return shift; // Return original shift if recalculation fails
-          }
-        })
-      );
-
-      console.log("✅ All shifts recalculated, updating state");
-      setShifts(shiftsWithRefunds);
+      // Just load the shifts - NO auto-recalculation for faster loading!
+      setShifts(shiftsData);
       setStatistics(stats);
     } catch (error) {
       console.error("Error loading shifts:", error);
@@ -146,7 +123,7 @@ export default function ShiftsSection({ cashier }) {
       const shift = await shiftsService.createShift(
         { startingCash: parseFloat(startingCash) },
         cashier.id,
-        cashier.name
+        cashier.name,
       );
 
       // Update localStorage
@@ -267,7 +244,7 @@ export default function ShiftsSection({ cashier }) {
       toast.success(
         `${
           cashManagementType === "payin" ? "Pay In" : "Pay Out"
-        } recorded successfully!`
+        } recorded successfully!`,
       );
     } catch (error) {
       console.error("Error recording cash movement:", error);
@@ -285,7 +262,7 @@ export default function ShiftsSection({ cashier }) {
 
       // Update the shifts list
       setShifts((prevShifts) =>
-        prevShifts.map((s) => (s.id === updatedShift.id ? updatedShift : s))
+        prevShifts.map((s) => (s.id === updatedShift.id ? updatedShift : s)),
       );
 
       toast.success("Shift recalculated successfully");
@@ -382,18 +359,18 @@ export default function ShiftsSection({ cashier }) {
   const handleCashKeypad = (
     value,
     isClosing = false,
-    isCashManagement = false
+    isCashManagement = false,
   ) => {
     const setter = isCashManagement
       ? setCashManagementAmount
       : isClosing
-      ? setClosingCash
-      : setStartingCash;
+        ? setClosingCash
+        : setStartingCash;
     const currentValue = isCashManagement
       ? cashManagementAmount
       : isClosing
-      ? closingCash
-      : startingCash;
+        ? closingCash
+        : startingCash;
 
     if (value === "backspace") {
       setter((prev) => prev.slice(0, -1));
@@ -547,6 +524,10 @@ export default function ShiftsSection({ cashier }) {
         ) : (
           <div className="space-y-4">
             {shifts.map((shift) => {
+              // Check if this shift contains the problematic order
+              const hasProblematicOrder =
+                shift.transactions?.includes("O-260121-1334-224");
+
               console.log("🔍 Rendering shift:", {
                 id: shift.id,
                 status: shift.status,
@@ -555,7 +536,11 @@ export default function ShiftsSection({ cashier }) {
                 totalRefunds: shift.totalRefunds,
                 totalCashRefunds: shift.totalCashRefunds,
                 totalCashSales: shift.totalCashSales,
+                totalCardSales: shift.totalCardSales,
                 expectedCash: shift.expectedCash,
+                hasProblematicOrder: hasProblematicOrder
+                  ? "⚠️ YES - Contains O-260121-1334-224"
+                  : "no",
               });
 
               const variance = shift.variance || 0;
@@ -572,8 +557,8 @@ export default function ShiftsSection({ cashier }) {
                         ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20"
                         : "border-yellow-200 bg-yellow-50/50 dark:border-yellow-900 dark:bg-yellow-950/20"
                       : isActive
-                      ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30"
-                      : ""
+                        ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30"
+                        : ""
                   }`}
                 >
                   <CardContent className="pt-6">
@@ -670,7 +655,7 @@ export default function ShiftsSection({ cashier }) {
                             <span>
                               Holding:{" "}
                               {formatCurrency(
-                                shift.expectedCash || shift.startingCash || 0
+                                shift.expectedCash || shift.startingCash || 0,
                               )}
                             </span>
                           </div>
@@ -729,7 +714,7 @@ export default function ShiftsSection({ cashier }) {
                             </p>
                             <p className="font-bold text-lg text-blue-600">
                               {formatCurrency(
-                                shift.expectedCash || shift.startingCash || 0
+                                shift.expectedCash || shift.startingCash || 0,
                               )}
                             </p>
                           </div>
@@ -749,7 +734,7 @@ export default function ShiftsSection({ cashier }) {
                             </p>
                             <p className="font-semibold text-base text-gray-900 dark:text-gray-100">
                               {formatCurrency(
-                                shift.grossSales || shift.totalSales || 0
+                                shift.grossSales || shift.totalSales || 0,
                               )}
                             </p>
                           </div>
@@ -784,7 +769,7 @@ export default function ShiftsSection({ cashier }) {
                               {formatCurrency(
                                 (shift.grossSales || shift.totalSales || 0) -
                                   (shift.totalRefunds || 0) -
-                                  (shift.totalDiscounts || 0)
+                                  (shift.totalDiscounts || 0),
                               )}
                             </p>
                           </div>
@@ -814,8 +799,8 @@ export default function ShiftsSection({ cashier }) {
                                     variance === 0
                                       ? "text-green-600"
                                       : isShort
-                                      ? "text-red-600"
-                                      : "text-yellow-600"
+                                        ? "text-red-600"
+                                        : "text-yellow-600"
                                   }`}
                                 >
                                   {shift.variance !== null ? (
@@ -878,7 +863,7 @@ export default function ShiftsSection({ cashier }) {
                                   {new Date(
                                     shift.recalculatedAt?.toDate?.()
                                       ? shift.recalculatedAt.toDate()
-                                      : shift.recalculatedAt
+                                      : shift.recalculatedAt,
                                   ).toLocaleString("en-US", {
                                     month: "short",
                                     day: "numeric",
@@ -894,39 +879,101 @@ export default function ShiftsSection({ cashier }) {
                       </div>
 
                       {/* Sales Summary */}
-                      <div className="flex flex-wrap items-center gap-6 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Receipt className="h-4 w-4 text-gray-500 dark:text-gray-500" />
-                          <span className="text-gray-400 dark:text-gray-400">
-                            <span className="font-semibold text-gray-100 dark:text-gray-100">
-                              {shift.transactionCount || 0}
-                            </span>{" "}
-                            Transactions
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-gray-500 dark:text-gray-500" />
-                          <span className="text-gray-400 dark:text-gray-400">
-                            Total Sales:{" "}
-                            <span className="font-semibold text-gray-100 dark:text-gray-100">
-                              {formatCurrency(shift.totalSales || 0)}
-                            </span>
-                          </span>
-                        </div>
-                        {shift.totalCardSales > 0 && (
-                          <div className="text-gray-600">
-                            Card:{" "}
-                            <span className="font-medium">
-                              {formatCurrency(shift.totalCardSales)}
+                      <div className="space-y-3">
+                        {/* Top row: Transactions and Total Sales */}
+                        <div className="flex flex-wrap items-center gap-6 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Receipt className="h-4 w-4 text-gray-500 dark:text-gray-500" />
+                            <span className="text-gray-400 dark:text-gray-400">
+                              <span className="font-semibold text-gray-100 dark:text-gray-100">
+                                {shift.transactionCount || 0}
+                              </span>{" "}
+                              Transactions
                             </span>
                           </div>
-                        )}
-                        {shift.totalOtherSales > 0 && (
-                          <div className="text-gray-600">
-                            Other:{" "}
-                            <span className="font-medium">
-                              {formatCurrency(shift.totalOtherSales)}
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="h-4 w-4 text-gray-500 dark:text-gray-500" />
+                            <span className="text-gray-400 dark:text-gray-400">
+                              Total Sales:{" "}
+                              <span className="font-semibold text-gray-100 dark:text-gray-100">
+                                {formatCurrency(shift.totalSales || 0)}
+                              </span>
                             </span>
+                          </div>
+                        </div>
+
+                        {/* Payment Methods Breakdown */}
+                        {(shift.totalCashSales > 0 ||
+                          shift.totalCardSales > 0 ||
+                          shift.totalOtherSales > 0) && (
+                          <div className="flex flex-wrap items-center gap-4 text-sm pl-6 border-l-2 border-gray-200 dark:border-gray-700">
+                            {shift.totalCashSales > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                                  💵
+                                </span>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Cash:{" "}
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {formatCurrency(shift.totalCashSales)}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            {shift.totalCardSales > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                                  💳
+                                </span>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Card:{" "}
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {formatCurrency(shift.totalCardSales)}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            {shift.totalBankTransferSales > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
+                                  🏦
+                                </span>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Bank Transfer:{" "}
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {formatCurrency(
+                                      shift.totalBankTransferSales,
+                                    )}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            {shift.totalCryptoSales > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                                  ₿
+                                </span>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Crypto:{" "}
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {formatCurrency(shift.totalCryptoSales)}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            {shift.totalOtherSales > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                                  💰
+                                </span>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Other:{" "}
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {formatCurrency(shift.totalOtherSales)}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -958,10 +1005,10 @@ export default function ShiftsSection({ cashier }) {
                             >
                               {isShort
                                 ? `You were short ${formatCurrency(
-                                    Math.abs(variance)
+                                    Math.abs(variance),
                                   )} at the end of this shift.`
                                 : `You had ${formatCurrency(
-                                    Math.abs(variance)
+                                    Math.abs(variance),
                                   )} extra at the end of this shift.`}
                             </p>
                           </div>
@@ -1030,7 +1077,7 @@ export default function ShiftsSection({ cashier }) {
                                     </p>
                                     <p className="text-xs text-gray-500 dark:text-gray-400">
                                       {new Date(
-                                        movement.timestamp
+                                        movement.timestamp,
                                       ).toLocaleString("en-US", {
                                         month: "short",
                                         day: "numeric",
@@ -1185,7 +1232,7 @@ export default function ShiftsSection({ cashier }) {
                     {formatCurrency(
                       selectedShift.expectedCash ||
                         selectedShift.startingCash ||
-                        0
+                        0,
                     )}
                   </span>
                 </div>
@@ -1360,7 +1407,7 @@ export default function ShiftsSection({ cashier }) {
                       handleCashKeypad(
                         num === "⌫" ? "backspace" : num.toString(),
                         false,
-                        true
+                        true,
                       )
                     }
                     className="h-14 text-lg"
@@ -1493,7 +1540,7 @@ export default function ShiftsSection({ cashier }) {
                       {formatCurrency(
                         closedShiftData.expectedCash ||
                           closedShiftData.startingCash ||
-                          0
+                          0,
                       )}
                     </span>
                   </div>
@@ -1514,8 +1561,8 @@ export default function ShiftsSection({ cashier }) {
                   closedShiftData.variance === 0
                     ? "bg-green-100 dark:bg-green-900/30"
                     : closedShiftData.variance < 0
-                    ? "bg-red-100 dark:bg-red-900/30"
-                    : "bg-yellow-100 dark:bg-yellow-900/30"
+                      ? "bg-red-100 dark:bg-red-900/30"
+                      : "bg-yellow-100 dark:bg-yellow-900/30"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -1527,8 +1574,8 @@ export default function ShiftsSection({ cashier }) {
                       closedShiftData.variance === 0
                         ? "text-green-600"
                         : closedShiftData.variance < 0
-                        ? "text-red-600"
-                        : "text-yellow-600"
+                          ? "text-red-600"
+                          : "text-yellow-600"
                     }`}
                   >
                     {closedShiftData.variance === 0 ? (
@@ -1555,7 +1602,7 @@ export default function ShiftsSection({ cashier }) {
                       {formatCurrency(
                         closedShiftData.grossSales ||
                           closedShiftData.totalSales ||
-                          0
+                          0,
                       )}
                     </span>
                   </div>
@@ -1589,7 +1636,7 @@ export default function ShiftsSection({ cashier }) {
                           closedShiftData.totalSales ||
                           0) -
                           (closedShiftData.totalRefunds || 0) -
-                          (closedShiftData.totalDiscounts || 0)
+                          (closedShiftData.totalDiscounts || 0),
                       )}
                     </span>
                   </div>
