@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -199,8 +199,8 @@ export default function SalesSection({ cashier }) {
   const searchParams = useSearchParams();
 
   const [products, setProducts] = useState([]);
-  const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [unsyncedOrders, setUnsyncedOrders] = useState(0);
   const [hasActiveShift, setHasActiveShift] = useState(false);
@@ -236,7 +236,13 @@ export default function SalesSection({ cashier }) {
   const longPressTimer = useRef(null);
   const searchInputRef = useRef(null);
   const searchBlurTimerRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
   const cartScrollRef = useRef(null);
+
+  // Cache refs for expensive helper functions
+  const categoryCache = useRef(new Map());
+  const stockCache = useRef(new Map());
+  const availabilityCache = useRef(new Map());
 
   // Category SLOT colors (for boxes in grid) - key: "categoryName-index-categoryId"
   const [categorySlotColors, setCategorySlotColors] = useState({});
@@ -420,61 +426,28 @@ export default function SalesSection({ cashier }) {
     }
   };
 
-  // State for calculated cashback
-  const [calculatedCashback, setCalculatedCashback] = useState({
-    totalPoints: 0,
-    itemBreakdown: [],
-  });
-
-  // Simple synchronous function to calculate cashback - called on click events
-  const calculateCashbackNow = (
-    currentItems,
-    currentCustomer,
-    currentRules,
-  ) => {
-    console.log("💰 calculateCashbackNow called");
-
-    // Use passed values or current state
-    const itemsToUse = currentItems || items;
-    const customerToUse = currentCustomer || cartCustomer;
-    const rulesToUse = currentRules || cashbackRules;
-
+  // Memoized cashback calculation - no more setTimeout violations
+  const calculatedCashback = useMemo(() => {
     // Skip if no customer or non-member
-    if (!customerToUse || customerToUse.isNoMember === true) {
-      console.log("💰 No member customer");
-      setCalculatedCashback({ totalPoints: 0, itemBreakdown: [] });
+    if (!cartCustomer || cartCustomer.isNoMember === true) {
       return { totalPoints: 0, itemBreakdown: [] };
     }
 
     // Skip if no items
-    if (!itemsToUse?.length) {
-      console.log("💰 No items");
-      setCalculatedCashback({ totalPoints: 0, itemBreakdown: [] });
+    if (!items?.length) {
       return { totalPoints: 0, itemBreakdown: [] };
     }
 
     // Skip if no rules
-    if (!rulesToUse?.length) {
-      console.log("💰 No rules loaded");
-      setCalculatedCashback({ totalPoints: 0, itemBreakdown: [] });
+    if (!cashbackRules?.length) {
       return { totalPoints: 0, itemBreakdown: [] };
     }
-
-    console.log(
-      "💰 Calculating for",
-      customerToUse.name,
-      "-",
-      itemsToUse.length,
-      "items,",
-      rulesToUse.length,
-      "rules",
-    );
 
     const total = getTotal();
     let totalPoints = 0;
     const itemBreakdown = [];
 
-    for (const item of itemsToUse) {
+    for (const item of items) {
       const itemData = {
         productId: item.productId || item.id,
         categoryId: item.categoryId,
@@ -482,15 +455,11 @@ export default function SalesSection({ cashier }) {
         quantity: item.quantity,
       };
 
-      console.log("💰 Item:", item.name, "cat:", item.categoryId);
-
       const result = cashbackRulesService.calculateItemCashback(
         itemData,
-        rulesToUse,
+        cashbackRules,
         total,
       );
-
-      console.log("💰 Points:", result?.points || 0);
 
       if (result && result.points > 0) {
         totalPoints += result.points;
@@ -503,17 +472,8 @@ export default function SalesSection({ cashier }) {
       }
     }
 
-    console.log("💰 ✅ TOTAL:", totalPoints, "points");
-    setCalculatedCashback({ totalPoints, itemBreakdown });
     return { totalPoints, itemBreakdown };
-  };
-
-  // Recalculate cashback automatically when items, customer or rules change
-  useEffect(() => {
-    // Slight debounce to allow store updates to settle
-    const t = setTimeout(() => calculateCashbackNow(), 50);
-    return () => clearTimeout(t);
-  }, [items, cartCustomer, cashbackRules]);
+  }, [items, cartCustomer, cashbackRules, getTotal]);
 
   // Check for active shift
   const checkActiveShift = () => {
@@ -608,13 +568,8 @@ export default function SalesSection({ cashier }) {
   const processScannedBarcode = useCallback(
     async (scannedCode) => {
       if (!scannedCode) {
-        console.log("[Barcode Scanner] Empty code, ignoring");
         return;
       }
-
-      console.log("[Barcode Scanner] Processing code:", scannedCode);
-      console.log("[Barcode Scanner] Available products:", products.length);
-      console.log("[Barcode Scanner] Available customers:", customers.length);
 
       // First, check if it's a product barcode
       const matchingProduct = products.find(
@@ -626,14 +581,11 @@ export default function SalesSection({ cashier }) {
         // Add product to cart
         addItem(matchingProduct);
         toast.success(`Added "${matchingProduct.name}" to cart`);
-        console.log("[Barcode Scanner] Product matched:", matchingProduct.name);
-        // Calculate cashback after adding item
-        setTimeout(() => calculateCashbackNow(), 100);
+        // Cashback will auto-update via useMemo
         return;
       }
 
       // Then check if it's a customer/member code
-      console.log("[Barcode Scanner] Not a product, checking customers...");
 
       // Look for customer where memberId, customerId, id, phone or email matches the scanned code
       // PRIORITY: memberId is checked FIRST for QR code scanning
@@ -643,45 +595,23 @@ export default function SalesSection({ cashier }) {
 
         // Check memberId first (most common for QR codes)
         if (customer.memberId?.toLowerCase() === code) {
-          console.log(
-            "[Barcode Scanner] Customer matched by memberId:",
-            customer.name,
-            "memberId:",
-            customer.memberId,
-          );
           return true;
         }
 
         // Then check other fields
         if (customer.customerId?.toLowerCase() === code) {
-          console.log(
-            "[Barcode Scanner] Customer matched by customerId:",
-            customer.name,
-          );
           return true;
         }
 
         if (customer.id?.toLowerCase() === code) {
-          console.log(
-            "[Barcode Scanner] Customer matched by id:",
-            customer.name,
-          );
           return true;
         }
 
         if (customer.phone === codeOriginal) {
-          console.log(
-            "[Barcode Scanner] Customer matched by phone:",
-            customer.name,
-          );
           return true;
         }
 
         if (customer.email?.toLowerCase() === code) {
-          console.log(
-            "[Barcode Scanner] Customer matched by email:",
-            customer.name,
-          );
           return true;
         }
 
@@ -701,10 +631,6 @@ export default function SalesSection({ cashier }) {
                 matchingCustomer.name
               } - membership expired on ${expiryDate.toLocaleDateString()}`,
             );
-            console.log(
-              "[Barcode Scanner] Customer membership expired:",
-              matchingCustomer,
-            );
             return;
           }
         }
@@ -712,30 +638,12 @@ export default function SalesSection({ cashier }) {
         // Set the customer in the cart silently
         setCartCustomer(matchingCustomer);
         // NO toast notification - silent customer selection
-        console.log(
-          "[Barcode Scanner] Customer matched and selected:",
-          matchingCustomer.name,
-        );
-        console.log(
-          "[Barcode Scanner] Customer memberId:",
-          matchingCustomer.memberId,
-        );
-        // Calculate cashback after selecting customer
-        setTimeout(
-          () => calculateCashbackNow(null, matchingCustomer, null),
-          100,
-        );
+        // Cashback will auto-update via useMemo when customer is set
       } else {
-        console.log("[Barcode Scanner] No match found for:", scannedCode);
-        console.log(
-          "[Barcode Scanner] Checked against",
-          customers.length,
-          "customers",
-        );
         // NO toast notification for no match - silent failure
       }
     },
-    [products, customers, addItem, setCartCustomer, calculateCashbackNow],
+    [products, customers, addItem, setCartCustomer],
   );
 
   // Barcode scanner listener
@@ -772,15 +680,6 @@ export default function SalesSection({ cashier }) {
         event.preventDefault();
         const scannedCode = localBuffer.trim();
         if (scannedCode && scannedCode.length >= 3) {
-          console.log("[Barcode Scanner] Scanned code:", scannedCode);
-          console.log(
-            "[Barcode Scanner] Current products count:",
-            products.length,
-          );
-          console.log(
-            "[Barcode Scanner] Current customers count:",
-            customers.length,
-          );
           processScannedBarcode(scannedCode);
         }
         localBuffer = "";
@@ -851,9 +750,6 @@ export default function SalesSection({ cashier }) {
             activeElement.placeholder?.toLowerCase().includes("search"))
         ) {
           activeElement.blur();
-          console.log(
-            "[Auto-blur] Search input blurred after 5 seconds of inactivity",
-          );
         }
       }, 5000);
     };
@@ -905,7 +801,6 @@ export default function SalesSection({ cashier }) {
           });
 
           if (response.ok) {
-            console.log("Cart API cleared due to empty local cart");
           } else {
             console.warn("Failed to clear cart API:", response.status);
           }
@@ -1107,8 +1002,154 @@ export default function SalesSection({ cashier }) {
     }
   };
 
-  // Filter products based on search and category
+  // Debounce search query to prevent excessive filtering
   useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  // Helper functions - defined early to avoid initialization errors
+  const getProductImage = (product) => {
+    if (!product) return null;
+    return (
+      product.imageUrl ||
+      product.image_url ||
+      product.image ||
+      product.thumbnailUrl ||
+      product.thumbnail ||
+      (Array.isArray(product.images) && product.images[0]?.url) ||
+      null
+    );
+  };
+
+  const getProductCategory = (product) => {
+    if (!product) {
+      return null;
+    }
+
+    // If product has categoryId, look up the category name from categoriesData
+    if (product.categoryId && categoriesData.length > 0) {
+      const category = categoriesData.find(
+        (cat) => cat.id === product.categoryId,
+      );
+
+      if (category) {
+        return category.name;
+      }
+    }
+
+    // Fallback to direct category name fields
+    return (
+      product.categoryName ||
+      product.category ||
+      product.categoryLabel ||
+      product.category_name ||
+      null
+    );
+  };
+
+  const getProductColor = (product) => {
+    return product?.color || null;
+  };
+
+  const getColorClasses = (color) => {
+    if (!color) return null;
+
+    const colorMap = {
+      GREY: "bg-gray-400",
+      RED: "bg-red-500",
+      PINK: "bg-pink-500",
+      ORANGE: "bg-orange-500",
+      YELLOW: "bg-yellow-400",
+      GREEN: "bg-green-500",
+      BLUE: "bg-blue-500",
+      PURPLE: "bg-purple-500",
+    };
+
+    return colorMap[color.toUpperCase()] || null;
+  };
+
+  // Memoized helper functions with caching for performance (defined BEFORE filteredProducts to avoid initialization errors)
+  const getProductCategoryMemoized = useCallback(
+    (product) => {
+      if (!product) return null;
+
+      const cacheKey = `${product.id}-${product.categoryId}-${categoriesData.length}`;
+      if (categoryCache.current.has(cacheKey)) {
+        return categoryCache.current.get(cacheKey);
+      }
+
+      let result = null;
+      if (product.categoryId && categoriesData.length > 0) {
+        const category = categoriesData.find(
+          (cat) => cat.id === product.categoryId,
+        );
+        if (category) {
+          result = category.name;
+        }
+      }
+
+      if (!result) {
+        result =
+          product.categoryName ||
+          product.category ||
+          product.categoryLabel ||
+          product.category_name ||
+          null;
+      }
+
+      categoryCache.current.set(cacheKey, result);
+      return result;
+    },
+    [categoriesData],
+  );
+
+  const getProductStockMemoized = useCallback((product) => {
+    if (!product) return 0;
+
+    const cacheKey = `${product.id}-stock-${product.stock}-${product.inStock}`;
+    if (stockCache.current.has(cacheKey)) {
+      return stockCache.current.get(cacheKey);
+    }
+
+    const result = getProductStock(product);
+    stockCache.current.set(cacheKey, result);
+    return result;
+  }, []);
+
+  const isProductAvailableMemoized = useCallback((product) => {
+    if (!product) return false;
+
+    const cacheKey = `${product.id}-avail-${product.availableForSale}`;
+    if (availabilityCache.current.has(cacheKey)) {
+      return availabilityCache.current.get(cacheKey);
+    }
+
+    const result = isProductAvailable(product);
+    availabilityCache.current.set(cacheKey, result);
+    return result;
+  }, []);
+
+  // Clear caches when products or categories change
+  useEffect(() => {
+    categoryCache.current.clear();
+    stockCache.current.clear();
+    availabilityCache.current.clear();
+  }, [products, categoriesData]);
+
+  // Memoized product filtering with pre-computed display data for optimal render performance
+  const filteredProducts = useMemo(() => {
     let filtered = products;
 
     // Filter by category
@@ -1119,9 +1160,9 @@ export default function SalesSection({ cashier }) {
       });
     }
 
-    // Filter by search query
-    if (searchQuery.trim() !== "") {
-      const query = searchQuery.toLowerCase();
+    // Filter by search query (using debounced query)
+    if (debouncedSearchQuery.trim() !== "") {
+      const query = debouncedSearchQuery.toLowerCase();
       filtered = filtered.filter(
         (p) =>
           p.name?.toLowerCase().includes(query) ||
@@ -1130,8 +1171,52 @@ export default function SalesSection({ cashier }) {
       );
     }
 
-    setFilteredProducts(filtered);
-  }, [searchQuery, products, selectedCategory, categoriesData]);
+    // Pre-compute expensive display data to avoid re-calculation during render
+    return filtered.map((product) => {
+      // Use memoized functions for expensive computations
+      // Inline parseBoolean to avoid initialization errors
+      const trackStock =
+        product.trackStock === true ||
+        product.trackStock === "true" ||
+        (product.trackStock !== false &&
+          product.trackStock !== "false" &&
+          product.trackStock !== undefined &&
+          product.trackStock !== null);
+      const availableForSale = isProductAvailableMemoized(product);
+      const stock = getProductStockMemoized(product);
+      const imageUrl = getProductImage(product);
+      const productColor = getProductColor(product);
+      const colorClass = getColorClasses(productColor);
+
+      // Recipe mode calculations
+      const hasStockReductions = product.stockReductions?.length > 0;
+      const reduceOwnStock = product.reduceOwnStock !== false;
+      const isRecipeMode = hasStockReductions && !reduceOwnStock;
+      const isOutOfStock = isRecipeMode ? false : trackStock && stock <= 0;
+      const canSell = availableForSale && !isOutOfStock;
+
+      return {
+        ...product,
+        _displayData: {
+          trackStock,
+          availableForSale,
+          stock,
+          imageUrl,
+          colorClass,
+          isRecipeMode,
+          isOutOfStock,
+          canSell,
+        },
+      };
+    });
+  }, [
+    products,
+    selectedCategory,
+    categoriesData,
+    debouncedSearchQuery,
+    isProductAvailableMemoized,
+    getProductStockMemoized,
+  ]);
 
   const loadProducts = async () => {
     try {
@@ -1141,7 +1226,6 @@ export default function SalesSection({ cashier }) {
       if (!isOnline) {
         const productsData = await dbService.getProducts();
         setProducts(productsData);
-        setFilteredProducts(productsData);
 
         // Try to load categories from IndexedDB as well
         try {
@@ -1202,7 +1286,7 @@ export default function SalesSection({ cashier }) {
       }
 
       setProducts(finalProducts);
-      setFilteredProducts(finalProducts);
+      // filteredProducts will auto-update via useMemo
 
       // Get ALL categories from Firebase (not filtered by user)
       const allCategories = categoriesData.filter(
@@ -1390,7 +1474,7 @@ export default function SalesSection({ cashier }) {
       try {
         const productsData = await dbService.getProducts();
         setProducts(productsData);
-        setFilteredProducts(productsData);
+        // filteredProducts will auto-update via useMemo
         toast.info("Loading products from offline storage");
       } catch (dbError) {
         console.error("Failed to load products:", dbError);
@@ -1473,66 +1557,6 @@ export default function SalesSection({ cashier }) {
 
     // No fallback - if no pointList, customer has 0 points
     return 0;
-  };
-
-  const getProductImage = (product) => {
-    if (!product) return null;
-    return (
-      product.imageUrl ||
-      product.image_url ||
-      product.image ||
-      product.thumbnailUrl ||
-      product.thumbnail ||
-      (Array.isArray(product.images) && product.images[0]?.url) ||
-      null
-    );
-  };
-
-  const getProductCategory = (product) => {
-    if (!product) {
-      return null;
-    }
-
-    // If product has categoryId, look up the category name from categoriesData
-    if (product.categoryId && categoriesData.length > 0) {
-      const category = categoriesData.find(
-        (cat) => cat.id === product.categoryId,
-      );
-
-      if (category) {
-        return category.name;
-      }
-    }
-
-    // Fallback to direct category name fields
-    return (
-      product.categoryName ||
-      product.category ||
-      product.categoryLabel ||
-      product.category_name ||
-      null
-    );
-  };
-
-  const getProductColor = (product) => {
-    return product?.color || null;
-  };
-
-  const getColorClasses = (color) => {
-    if (!color) return null;
-
-    const colorMap = {
-      GREY: "bg-gray-400",
-      RED: "bg-red-500",
-      PINK: "bg-pink-500",
-      ORANGE: "bg-orange-500",
-      YELLOW: "bg-yellow-400",
-      GREEN: "bg-green-500",
-      BLUE: "bg-blue-500",
-      PURPLE: "bg-purple-500",
-    };
-
-    return colorMap[color.toUpperCase()] || null;
   };
 
   const getProductSku = (product) => {
@@ -1654,14 +1678,6 @@ export default function SalesSection({ cashier }) {
     const isSoldByWeight =
       product.soldBy === "weight" || product.soldByWeight === true;
 
-    console.log("🛒 Product click debug:", {
-      productName: product.name,
-      productId: product.id,
-      soldBy: product.soldBy,
-      soldByWeight: product.soldByWeight,
-      isSoldByWeight: isSoldByWeight,
-    });
-
     if (isSoldByWeight) {
       setSelectedWeightProduct(product);
       setWeightInput("");
@@ -1671,8 +1687,7 @@ export default function SalesSection({ cashier }) {
 
     addItem(product, 1);
 
-    // Calculate cashback after adding item
-    setTimeout(() => calculateCashbackNow(), 100);
+    // Cashback will auto-update via useMemo
   };
 
   const handleWeightKeypad = (value) => {
@@ -1724,8 +1739,7 @@ export default function SalesSection({ cashier }) {
     setSelectedWeightProduct(null);
     setWeightInput("");
 
-    // Calculate cashback after adding item
-    setTimeout(() => calculateCashbackNow(), 100);
+    // Cashback will auto-update via useMemo
   };
 
   // Helper to ALWAYS ensure array is exactly 20 slots
@@ -2410,20 +2424,8 @@ export default function SalesSection({ cashier }) {
       const isMember =
         cartCustomer && (cartCustomer.isMember || !cartCustomer.isNoMember);
 
-      console.log("💰 PAYMENT CASHBACK CALC - Customer:", cartCustomer?.name);
-      console.log("💰 PAYMENT CASHBACK CALC - isMember:", isMember);
-      console.log(
-        "💰 PAYMENT CASHBACK CALC - isNoMember:",
-        cartCustomer?.isNoMember,
-      );
-
       if (isMember) {
         const isEligibleForCashback = isCustomerEligibleForPoints(cartCustomer);
-        console.log(
-          "💰 PAYMENT - Eligible for cashback:",
-          isEligibleForCashback,
-        );
-        console.log("💰 PAYMENT - Items to calculate:", items.length);
 
         if (isEligibleForCashback) {
           calculatedCashback = await cashbackRulesService.calculateCartCashback(
@@ -2435,15 +2437,6 @@ export default function SalesSection({ cashier }) {
               name: item.name,
             })),
             cartData.total,
-          );
-
-          console.log(
-            "💰 PAYMENT - Calculated cashback result:",
-            calculatedCashback,
-          );
-          console.log(
-            "💰 PAYMENT - Total points to save:",
-            calculatedCashback.totalPoints,
           );
         }
       }
@@ -2510,16 +2503,6 @@ export default function SalesSection({ cashier }) {
         points_balance: cartCustomer
           ? (() => {
               const currentPoints = getCustomerPoints(cartCustomer);
-              console.log("💾 SAVING TO FIREBASE:");
-              console.log(
-                "   cashback_earned:",
-                calculatedCashback.totalPoints,
-              );
-              console.log("   points_earned:", calculatedCashback.totalPoints);
-              console.log(
-                "   cashback_breakdown:",
-                calculatedCashback.itemBreakdown,
-              );
               return (
                 currentPoints - pointsToUse + calculatedCashback.totalPoints
               );
@@ -2763,22 +2746,11 @@ export default function SalesSection({ cashier }) {
             cartCustomer.expiryDate &&
             !customerApprovalService.isCustomerExpired(cartCustomer.expiryDate);
 
-          console.log("🎯 CUSTOMER POINTS ELIGIBILITY CHECK:");
-          console.log("   Customer:", cartCustomer.name);
-          console.log("   isNoMember:", cartCustomer.isNoMember);
-          console.log("   expiryDate:", cartCustomer.expiryDate);
-          console.log("   isEligibleForPoints:", isEligibleForPoints);
-          console.log(
-            "   calculatedCashback.totalPoints:",
-            calculatedCashback.totalPoints,
-          );
-
           if (isEligibleForPoints) {
             // Record used points if any
             if (pointsToUse > 0) {
               const pointValue = pointUsageRules?.pointValue || 1;
               const valueRedeemed = pointsToUse * pointValue;
-              console.log("📉 Recording USED points:", pointsToUse);
               try {
                 const usedEntry = await customerPointsService.recordUsedPoints(
                   cartCustomer.id,
@@ -2803,18 +2775,7 @@ export default function SalesSection({ cashier }) {
               pointsToUse === 0 || // No points used
               pointUsageRules?.earnCashbackWhenUsingPoints === true; // Or rules allow earning when using points
 
-            console.log("💎 Cashback earn check:");
-            console.log("   shouldEarnCashback:", shouldEarnCashback);
-            console.log(
-              "   calculatedCashback.totalPoints:",
-              calculatedCashback.totalPoints,
-            );
-
             if (shouldEarnCashback && calculatedCashback.totalPoints > 0) {
-              console.log(
-                "📈 Recording EARNED points:",
-                calculatedCashback.totalPoints,
-              );
               try {
                 const earnedEntry =
                   await customerPointsService.recordEarnedPoints(
@@ -2834,10 +2795,6 @@ export default function SalesSection({ cashier }) {
                 console.error("Failed to record earned points:", err);
               }
             }
-          } else {
-            console.log(
-              "❌ Customer NOT eligible for points - points will NOT be recorded to customer",
-            );
           }
         } catch (error) {
           console.error("Error updating customer stats/points:", error);
@@ -3808,25 +3765,17 @@ export default function SalesSection({ cashier }) {
             ) : (
               <div className="grid gap-4 grid-cols-5">
                 {filteredProducts.map((product) => {
-                  const trackStock = parseBoolean(product.trackStock, true);
-                  const availableForSale = isProductAvailable(product);
-                  const stock = getProductStock(product);
-
-                  // Check if product uses recipe mode (doesn't reduce own stock)
-                  const hasStockReductions =
-                    product.stockReductions &&
-                    product.stockReductions.length > 0;
-                  const reduceOwnStock = product.reduceOwnStock !== false;
-                  const isRecipeMode = hasStockReductions && !reduceOwnStock;
-
-                  // Recipe mode products are never "out of stock" based on own stock
-                  const isOutOfStock = isRecipeMode
-                    ? false
-                    : trackStock && stock <= 0;
-                  const canSell = availableForSale && !isOutOfStock;
-                  const imageUrl = getProductImage(product);
-                  const productColor = getProductColor(product);
-                  const colorClass = getColorClasses(productColor);
+                  // Use pre-computed display data for optimal performance
+                  const {
+                    trackStock,
+                    availableForSale,
+                    stock,
+                    imageUrl,
+                    colorClass,
+                    isRecipeMode,
+                    isOutOfStock,
+                    canSell,
+                  } = product._displayData || {};
 
                   const handleCardClick = () => {
                     if (!canSell) return;
@@ -4135,17 +4084,6 @@ export default function SalesSection({ cashier }) {
                 // Find cashback for this item
                 const itemCashback = calculatedCashback.itemBreakdown.find(
                   (cb) => cb.itemId === (item.productId || item.id),
-                );
-
-                console.log(
-                  "[CART DISPLAY] Item:",
-                  item.name,
-                  "productId:",
-                  item.productId || item.id,
-                  "cashback:",
-                  itemCashback,
-                  "breakdown:",
-                  calculatedCashback.itemBreakdown,
                 );
 
                 return (
@@ -4988,11 +4926,7 @@ export default function SalesSection({ cashier }) {
                       }`}
                       onClick={() => {
                         setCartCustomer(customer);
-                        // Calculate cashback after selecting customer
-                        setTimeout(
-                          () => calculateCashbackNow(null, customer, null),
-                          100,
-                        );
+                        // Cashback will auto-update via useMemo when customer is set
                       }}
                     >
                       <div className="flex items-center justify-between">
@@ -5122,11 +5056,7 @@ export default function SalesSection({ cashier }) {
                           toast.success(
                             `Customer ${customer.name} added to cart`,
                           );
-                          // Calculate cashback after selecting customer
-                          setTimeout(
-                            () => calculateCashbackNow(null, customer, null),
-                            100,
-                          );
+                          // Cashback will auto-update via useMemo when customer is set
                         }}
                       >
                         <div className="flex items-start gap-4">

@@ -49,7 +49,7 @@ export const cashbackRulesService = {
   getAll: async () => {
     try {
       const querySnapshot = await getDocsFromServer(
-        collection(db, CASHBACK_RULES_COLLECTION)
+        collection(db, CASHBACK_RULES_COLLECTION),
       );
       return querySnapshot.docs.map((doc) => ({
         id: doc.id,
@@ -108,7 +108,7 @@ export const cashbackRulesService = {
     try {
       const allRules = await cashbackRulesService.getAll();
       return allRules.filter(
-        (rule) => rule.type === "category" && rule.targetId === categoryId
+        (rule) => rule.type === "category" && rule.targetId === categoryId,
       );
     } catch (error) {
       console.error("Error getting cashback rules by category:", error);
@@ -121,7 +121,7 @@ export const cashbackRulesService = {
     try {
       const allRules = await cashbackRulesService.getAll();
       return allRules.filter(
-        (rule) => rule.type === "product" && rule.targetId === productId
+        (rule) => rule.type === "product" && rule.targetId === productId,
       );
     } catch (error) {
       console.error("Error getting cashback rules by product:", error);
@@ -139,59 +139,70 @@ export const cashbackRulesService = {
    */
   calculateItemCashback: (item, allRules, cartTotal) => {
     try {
-      console.log("[Cashback Service] === START CALCULATION ===");
-      console.log("[Cashback Service] Calculating for item:", {
-        item,
-        ruleCount: allRules.length,
-        activeRules: allRules.filter((r) => r.isActive).length,
-      });
+      // Disable verbose logging in production for performance
+      const isDebug = process.env.NODE_ENV === "development" && false; // Set to true to enable debug logs
+
+      if (isDebug) {
+        console.log("[Cashback Service] === START CALCULATION ===");
+        console.log("[Cashback Service] Calculating for item:", {
+          item,
+          ruleCount: allRules.length,
+          activeRules: allRules.filter((r) => r.isActive).length,
+        });
+      }
 
       // First, check for product-specific rule
       const productRule = allRules.find(
         (rule) =>
           rule.type === "product" &&
           rule.targetId === item.productId &&
-          rule.isActive
+          rule.isActive,
       );
 
-      console.log("[Cashback Service] Product rule search:", {
-        found: !!productRule,
-        searchingFor: item.productId,
-        availableProductRules: allRules
-          .filter((r) => r.type === "product" && r.isActive)
-          .map((r) => ({ name: r.name, targetId: r.targetId })),
-      });
+      if (isDebug) {
+        console.log("[Cashback Service] Product rule search:", {
+          found: !!productRule,
+          searchingFor: item.productId,
+          availableProductRules: allRules
+            .filter((r) => r.type === "product" && r.isActive)
+            .map((r) => ({ name: r.name, targetId: r.targetId })),
+        });
+      }
 
       // If no product rule, check for category rule
       const categoryRule = allRules.find(
         (rule) =>
           rule.type === "category" &&
           rule.targetId === item.categoryId &&
-          rule.isActive
+          rule.isActive,
       );
 
-      console.log("[Cashback Service] Category rule search:", {
-        found: !!categoryRule,
-        searchingFor: item.categoryId,
-        availableCategoryRules: allRules
-          .filter((r) => r.type === "category" && r.isActive)
-          .map((r) => ({ name: r.name, targetId: r.targetId })),
-      });
+      if (isDebug) {
+        console.log("[Cashback Service] Category rule search:", {
+          found: !!categoryRule,
+          searchingFor: item.categoryId,
+          availableCategoryRules: allRules
+            .filter((r) => r.type === "category" && r.isActive)
+            .map((r) => ({ name: r.name, targetId: r.targetId })),
+        });
+      }
 
       // Use product rule if available, otherwise category rule
       const applicableRule = productRule || categoryRule;
 
       if (!applicableRule) {
-        console.log("[Cashback Service] No applicable rule found");
+        if (isDebug) console.log("[Cashback Service] No applicable rule found");
         return { points: 0, ruleApplied: null };
       }
 
-      console.log("[Cashback Service] Using rule:", {
-        name: applicableRule.name,
-        type: applicableRule.type,
-        cashbackType: applicableRule.cashbackType,
-        value: applicableRule.cashbackValue,
-      });
+      if (isDebug) {
+        console.log("[Cashback Service] Using rule:", {
+          name: applicableRule.name,
+          type: applicableRule.type,
+          cashbackType: applicableRule.cashbackType,
+          value: applicableRule.cashbackValue,
+        });
+      }
 
       // Check minimum order requirement
       if (
@@ -208,27 +219,33 @@ export const cashbackRulesService = {
       if (applicableRule.cashbackType === "percentage") {
         // Percentage of item total
         points = Math.floor((itemTotal * applicableRule.cashbackValue) / 100);
-        console.log("[Cashback Service] Percentage calculation:", {
-          itemTotal,
-          percentage: applicableRule.cashbackValue,
-          calculated: (itemTotal * applicableRule.cashbackValue) / 100,
-          points,
-        });
+        if (isDebug) {
+          console.log("[Cashback Service] Percentage calculation:", {
+            itemTotal,
+            percentage: applicableRule.cashbackValue,
+            calculated: (itemTotal * applicableRule.cashbackValue) / 100,
+            points,
+          });
+        }
       } else if (applicableRule.cashbackType === "fixed") {
         // Fixed points per item
         points = applicableRule.cashbackValue * item.quantity;
-        console.log("[Cashback Service] Fixed calculation:", {
-          fixedValue: applicableRule.cashbackValue,
-          quantity: item.quantity,
-          points,
-        });
+        if (isDebug) {
+          console.log("[Cashback Service] Fixed calculation:", {
+            fixedValue: applicableRule.cashbackValue,
+            quantity: item.quantity,
+            points,
+          });
+        }
       }
 
-      console.log("[Cashback Service] Final result:", {
-        points,
-        ruleName: applicableRule.name,
-      });
-      console.log("[Cashback Service] === END CALCULATION ===");
+      if (isDebug) {
+        console.log("[Cashback Service] Final result:", {
+          points,
+          ruleName: applicableRule.name,
+        });
+        console.log("[Cashback Service] === END CALCULATION ===");
+      }
       return { points, ruleApplied: applicableRule };
     } catch (error) {
       console.error("[Cashback Service] ERROR:", error);
@@ -315,7 +332,7 @@ export const pointUsageRulesService = {
           ...data,
           updatedAt: serverTimestamp(),
         },
-        { merge: true }
+        { merge: true },
       );
       return "settings";
     } catch (error) {
@@ -431,7 +448,7 @@ export const customerPointsService = {
     points,
     receiptNumber,
     receiptId,
-    itemBreakdown = []
+    itemBreakdown = [],
   ) => {
     const entry = {
       type: "earned",
@@ -459,7 +476,7 @@ export const customerPointsService = {
     points,
     receiptNumber,
     receiptId,
-    valueRedeemed
+    valueRedeemed,
   ) => {
     const entry = {
       type: "used",
@@ -469,7 +486,7 @@ export const customerPointsService = {
       receiptId,
       valueRedeemed,
       reason: `Redeemed ${Math.abs(
-        points
+        points,
       )} points for ${valueRedeemed} in purchase #${receiptNumber}`,
     };
 

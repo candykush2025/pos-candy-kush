@@ -19,18 +19,19 @@ export const metadata = {
   title: "Candy Kush POS",
   description: "Point of Sale System for Candy Kush",
   manifest: "/manifest.json",
-  themeColor: "#22c55e",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Candy Kush POS",
   },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#22c55e",
 };
 
 export default function RootLayout({ children }) {
