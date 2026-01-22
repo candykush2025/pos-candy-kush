@@ -10,6 +10,11 @@ const nextConfig = {
       "lucide-react",
       "@radix-ui/react-select",
       "@radix-ui/react-dialog",
+      "firebase/app",
+      "firebase/firestore",
+      "firebase/auth",
+      "firebase/storage",
+      "@tanstack/react-query",
     ],
   },
 
@@ -21,6 +26,38 @@ const nextConfig = {
         pathname: "/**",
       },
     ],
+  },
+
+  // Optimize Firebase bundle splitting for faster loading
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Split Firebase into separate chunks for better caching
+      config.optimization = config.optimization || {};
+      config.optimization.splitChunks = config.optimization.splitChunks || {};
+      config.optimization.splitChunks.cacheGroups = {
+        ...config.optimization.splitChunks.cacheGroups,
+        firebase: {
+          test: /[\\/]node_modules[\\/](@firebase|firebase)[\\/]/,
+          name: "firebase",
+          chunks: "all",
+          priority: 10,
+        },
+        firestore: {
+          test: /[\\/]node_modules[\\/](@firebase\/firestore|firebase\/firestore)[\\/]/,
+          name: "firestore",
+          chunks: "all",
+          priority: 20,
+        },
+        reactQuery: {
+          test: /[\\/]node_modules[\\/]@tanstack[\\/]react-query[\\/]/,
+          name: "react-query",
+          chunks: "all",
+          priority: 15,
+        },
+      };
+    }
+
+    return config;
   },
 };
 

@@ -18,6 +18,7 @@ const firebaseConfig = {
 let app;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
+  console.log("✅ Firebase initialized successfully");
 } else {
   app = getApps()[0];
 }
@@ -30,5 +31,39 @@ export const storage = getStorage(app);
 // Initialize Analytics (only in browser)
 export const analytics =
   typeof window !== "undefined" && isSupported() ? getAnalytics(app) : null;
+
+// Initialize Performance Monitoring (only in browser)
+let performanceInstance = null;
+if (typeof window !== "undefined") {
+  import("firebase/performance")
+    .then((perfModule) => {
+      performanceInstance = perfModule.getPerformance(app);
+      console.log("✅ Firebase Performance Monitoring initialized");
+    })
+    .catch((err) => {
+      console.warn("Firebase Performance Monitoring not available:", err);
+    });
+}
+
+export const performance = performanceInstance;
+
+/**
+ * Create a performance trace for monitoring
+ * IMPORTANT: This helps track which Firebase operations are slow
+ */
+export const createTrace = (name) => {
+  if (performanceInstance && typeof window !== "undefined") {
+    return import("firebase/performance").then((perfModule) => {
+      return perfModule.trace(performanceInstance, name);
+    });
+  }
+  // Return a no-op trace if performance monitoring is not available
+  return Promise.resolve({
+    start: () => {},
+    stop: () => {},
+    putAttribute: () => {},
+    putMetric: () => {},
+  });
+};
 
 export default app;
