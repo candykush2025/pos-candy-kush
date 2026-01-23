@@ -993,12 +993,16 @@ export async function POST(req) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
 
-  // Authenticate request (require admin for most POST actions)
-  const requireAdmin = !["create-expense", "login"].includes(action);
-  const auth = await authenticateRequest(req, requireAdmin);
-  
-  if (!auth.authorized) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: 401 });
+  // Skip authentication for login endpoint
+  let auth = null;
+  if (action !== "login") {
+    // Authenticate request (require admin for most POST actions)
+    const requireAdmin = !["create-expense"].includes(action);
+    auth = await authenticateRequest(req, requireAdmin);
+    
+    if (!auth.authorized) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 401 });
+    }
   }
 
   try {
