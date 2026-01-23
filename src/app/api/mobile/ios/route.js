@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { jwtUtils } from "@/lib/jwt";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, getDoc, doc, query, where, orderBy, limit } from "firebase/firestore";
 
 // ============================================
-// TEST DATA - NOT CONNECTED TO FIREBASE
+// HYBRID MODE: READ FROM FIREBASE, WRITE TO TEST DATA
+// ============================================
+// GET requests: Read from Firebase (safe, real data)
+// POST/PUT/DELETE requests: Write to in-memory test data only (won't affect Firebase)
 // ============================================
 
-// Mock test data storage (in-memory, resets on server restart)
+// Mock test data storage (in-memory, for write operations only)
 let testData = {
   products: [
     {
@@ -262,6 +267,25 @@ let testData = {
       isActive: true,
       createdAt: new Date().toISOString(),
     },
+    {
+      id: "user_003",
+      email: "testingcashier@candykush.com",
+      name: "Testing Cashier",
+      role: "cashier",
+      permissions: {
+        canChangePrice: false,
+        canChangeStock: false,
+        canAddProduct: false,
+        canEditProduct: false,
+        canDeleteProduct: false,
+        canManageCustomers: true,
+        canCreateExpenses: true,
+        canApproveExpenses: false,
+      },
+      pin: "5678",
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    },
   ],
   shifts: [
     {
@@ -429,44 +453,67 @@ export async function GET(req) {
         const search = searchParams.get("search");
         const availability = searchParams.get("availability");
 
-        let filtered = [...testData.products];
+        try {
+          // Read from Firebase
+          let productsQuery = collection(db, "products");
+          const productsSnapshot = await getDocs(productsQuery);
+          let filtered = productsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (category && category !== "all") {
-          filtered = filtered.filter(p => p.categoryId === category);
+          if (category && category !== "all") {
+            filtered = filtered.filter(p => p.categoryId === category);
+          }
+
+          if (search) {
+            const searchLower = search.toLowerCase();
+            filtered = filtered.filter(p => 
+              p.name?.toLowerCase().includes(searchLower) ||
+              p.description?.toLowerCase().includes(searchLower) ||
+              p.sku?.toLowerCase().includes(searchLower)
+            );
+          }
+
+          if (availability === "available") {
+            filtered = filtered.filter(p => p.isAvailable);
+          } else if (availability === "unavailable") {
+            filtered = filtered.filter(p => !p.isAvailable);
+          }
+
+          return NextResponse.json({ success: true, products: filtered });
+        } catch (error) {
+          console.error("Error fetching products from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch products" }, { status: 500 });
         }
-
-        if (search) {
-          const searchLower = search.toLowerCase();
-          filtered = filtered.filter(p => 
-            p.name.toLowerCase().includes(searchLower) ||
-            p.description?.toLowerCase().includes(searchLower) ||
-            p.sku?.toLowerCase().includes(searchLower)
-          );
-        }
-
-        if (availability === "available") {
-          filtered = filtered.filter(p => p.isAvailable);
-        } else if (availability === "unavailable") {
-          filtered = filtered.filter(p => !p.isAvailable);
-        }
-
-        return NextResponse.json({ success: true, products: filtered });
       }
 
       case "get-product": {
         const id = searchParams.get("id");
-        const product = testData.products.find(p => p.id === id);
         
-        if (!product) {
-          return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 });
-        }
+        try {
+          // Read from Firebase
+          const productDoc = await getDoc(doc(db, "products", id));
+          
+          if (!productDoc.exists()) {
+            return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 });
+          }
 
-        return NextResponse.json({ success: true, product });
+          return NextResponse.json({ success: true, product: { id: productDoc.id, ...productDoc.data() } });
+        } catch (error) {
+          console.error("Error fetching product from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch product" }, { status: 500 });
+        }
       }
 
       // ==================== CATEGORIES ====================
       case "get-categories": {
-        return NextResponse.json({ success: true, categories: testData.categories });
+        try {
+          // Read from Firebase
+          const categoriesSnapshot = await getDocs(collection(db, "categories"));
+          const categories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          return NextResponse.json({ success: true, categories });
+        } catch (error) {
+          console.error("Error fetching categories from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch categories" }, { status: 500 });
+        }
       }
 
       // ==================== CUSTOMERS ====================
@@ -474,66 +521,101 @@ export async function GET(req) {
         const search = searchParams.get("search");
         const source = searchParams.get("source");
 
-        let filtered = [...testData.customers];
+        try {
+          // Read from Firebase
+          const customersSnapshot = await getDocs(collection(db, "customers"));
+          let filtered = customersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (search) {
-          const searchLower = search.toLowerCase();
-          filtered = filtered.filter(c =>
-            c.name.toLowerCase().includes(searchLower) ||
-            c.email?.toLowerCase().includes(searchLower) ||
-            c.phone?.includes(search)
-          );
+          if (search) {
+            const searchLower = search.toLowerCase();
+            filtered = filtered.filter(c =>
+              c.name?.toLowerCase().includes(searchLower) ||
+              c.email?.toLowerCase().includes(searchLower) ||
+              c.phone?.includes(search)
+            );
+          }
+
+          if (source && source !== "all") {
+            filtered = filtered.filter(c => c.source === source);
+          }
+
+          return NextResponse.json({ success: true, customers: filtered });
+        } catch (error) {
+          console.error("Error fetching customers from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch customers" }, { status: 500 });
         }
-
-        if (source && source !== "all") {
-          filtered = filtered.filter(c => c.source === source);
-        }
-
-        return NextResponse.json({ success: true, customers: filtered });
       }
 
       case "get-customer": {
         const id = searchParams.get("id");
-        const customer = testData.customers.find(c => c.id === id);
         
-        if (!customer) {
-          return NextResponse.json({ success: false, error: "Customer not found" }, { status: 404 });
-        }
+        try {
+          // Read from Firebase
+          const customerDoc = await getDoc(doc(db, "customers", id));
+          
+          if (!customerDoc.exists()) {
+            return NextResponse.json({ success: false, error: "Customer not found" }, { status: 404 });
+          }
 
-        return NextResponse.json({ success: true, customer });
+          return NextResponse.json({ success: true, customer: { id: customerDoc.id, ...customerDoc.data() } });
+        } catch (error) {
+          console.error("Error fetching customer from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch customer" }, { status: 500 });
+        }
       }
 
       case "get-customer-history": {
         const id = searchParams.get("id");
-        const customer = testData.customers.find(c => c.id === id);
         
-        if (!customer) {
-          return NextResponse.json({ success: false, error: "Customer not found" }, { status: 404 });
+        try {
+          // Read customer from Firebase
+          const customerDoc = await getDoc(doc(db, "customers", id));
+          
+          if (!customerDoc.exists()) {
+            return NextResponse.json({ success: false, error: "Customer not found" }, { status: 404 });
+          }
+
+          const customerData = customerDoc.data();
+
+          // Get purchases from Firebase
+          const receiptsQuery = query(collection(db, "receipts"), where("customerId", "==", id));
+          const receiptsSnapshot = await getDocs(receiptsQuery);
+          const purchases = receiptsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+          return NextResponse.json({ 
+            success: true, 
+            purchases,
+            totalSpent: customerData.totalSpent || 0,
+            orderCount: customerData.orderCount || 0,
+          });
+        } catch (error) {
+          console.error("Error fetching customer history from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch customer history" }, { status: 500 });
         }
-
-        const purchases = testData.receipts.filter(r => r.customerId === id);
-
-        return NextResponse.json({ 
-          success: true, 
-          purchases,
-          totalSpent: customer.totalSpent,
-          orderCount: customer.orderCount,
-        });
       }
 
       case "get-customer-points": {
         const id = searchParams.get("id");
-        const customer = testData.customers.find(c => c.id === id);
         
-        if (!customer) {
-          return NextResponse.json({ success: false, error: "Customer not found" }, { status: 404 });
-        }
+        try {
+          // Read from Firebase
+          const customerDoc = await getDoc(doc(db, "customers", id));
+          
+          if (!customerDoc.exists()) {
+            return NextResponse.json({ success: false, error: "Customer not found" }, { status: 404 });
+          }
 
-        return NextResponse.json({ 
-          success: true, 
-          points: customer.points,
-          pointList: customer.pointList || [],
-        });
+          const customerData = customerDoc.data();
+
+          return NextResponse.json({ 
+            success: true, 
+            points: customerData.points || 0,
+            pointList: customerData.pointList || [],
+          });
+        } catch (error) {
+          console.error("Error fetching customer points from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch customer points" }, { status: 500 });
+        }
       }
 
       // ==================== RECEIPTS/ORDERS ====================
@@ -543,37 +625,51 @@ export async function GET(req) {
         const minAmount = parseFloat(searchParams.get("minAmount") || "0");
         const maxAmount = parseFloat(searchParams.get("maxAmount") || "999999");
 
-        let filtered = [...testData.receipts];
+        try {
+          // Read from Firebase
+          const receiptsSnapshot = await getDocs(collection(db, "receipts"));
+          let filtered = receiptsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Filter by amount
-        filtered = filtered.filter(r => r.total >= minAmount && r.total <= maxAmount);
+          // Filter by amount
+          filtered = filtered.filter(r => (r.total || 0) >= minAmount && (r.total || 0) <= maxAmount);
 
-        // Filter by payment type
-        if (paymentType && paymentType !== "all") {
-          filtered = filtered.filter(r => 
-            r.payments.some(p => p.type === paymentType)
-          );
+          // Filter by payment type
+          if (paymentType && paymentType !== "all") {
+            filtered = filtered.filter(r => 
+              r.payments?.some(p => p.type === paymentType)
+            );
+          }
+
+          const totalRevenue = filtered.reduce((sum, r) => sum + (r.total || 0), 0);
+
+          return NextResponse.json({ 
+            success: true, 
+            receipts: filtered,
+            totalReceipts: filtered.length,
+            totalRevenue,
+          });
+        } catch (error) {
+          console.error("Error fetching receipts from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch receipts" }, { status: 500 });
         }
-
-        const totalRevenue = filtered.reduce((sum, r) => sum + r.total, 0);
-
-        return NextResponse.json({ 
-          success: true, 
-          receipts: filtered,
-          totalReceipts: filtered.length,
-          totalRevenue,
-        });
       }
 
       case "get-receipt": {
         const id = searchParams.get("id");
-        const receipt = testData.receipts.find(r => r.id === id);
         
-        if (!receipt) {
-          return NextResponse.json({ success: false, error: "Receipt not found" }, { status: 404 });
-        }
+        try {
+          // Read from Firebase
+          const receiptDoc = await getDoc(doc(db, "receipts", id));
+          
+          if (!receiptDoc.exists()) {
+            return NextResponse.json({ success: false, error: "Receipt not found" }, { status: 404 });
+          }
 
-        return NextResponse.json({ success: true, receipt });
+          return NextResponse.json({ success: true, receipt: { id: receiptDoc.id, ...receiptDoc.data() } });
+        } catch (error) {
+          console.error("Error fetching receipt from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch receipt" }, { status: 500 });
+        }
       }
 
       // ==================== EXPENSES ====================
@@ -600,12 +696,19 @@ export async function GET(req) {
 
       // ==================== USERS ====================
       case "get-users": {
-        // Remove sensitive data
-        const safeUsers = testData.users.map(u => {
-          const { pin, ...safe } = u;
-          return safe;
-        });
-        return NextResponse.json({ success: true, users: safeUsers });
+        try {
+          // Read from Firebase
+          const usersSnapshot = await getDocs(collection(db, "users"));
+          const safeUsers = usersSnapshot.docs.map(doc => {
+            const data = doc.data();
+            const { pin, password, ...safe } = data;
+            return { id: doc.id, ...safe };
+          });
+          return NextResponse.json({ success: true, users: safeUsers });
+        } catch (error) {
+          console.error("Error fetching users from Firebase:", error);
+          return NextResponse.json({ success: false, error: "Failed to fetch users" }, { status: 500 });
+        }
       }
 
       // ==================== SHIFTS ====================
@@ -701,11 +804,27 @@ export async function GET(req) {
 
       // ==================== SETTINGS ====================
       case "get-settings": {
-        return NextResponse.json({ success: true, settings: testData.settings });
+        try {
+          // Read from Firebase
+          const settingsDoc = await getDoc(doc(db, "settings", "general"));
+          const settings = settingsDoc.exists() ? settingsDoc.data() : testData.settings;
+          return NextResponse.json({ success: true, settings });
+        } catch (error) {
+          console.error("Error fetching settings from Firebase:", error);
+          return NextResponse.json({ success: true, settings: testData.settings });
+        }
       }
 
       case "get-exchange-rates": {
-        return NextResponse.json({ success: true, ...testData.exchangeRates });
+        try {
+          // Read from Firebase
+          const ratesDoc = await getDoc(doc(db, "settings", "exchangeRates"));
+          const rates = ratesDoc.exists() ? ratesDoc.data() : testData.exchangeRates;
+          return NextResponse.json({ success: true, ...rates });
+        } catch (error) {
+          console.error("Error fetching exchange rates from Firebase:", error);
+          return NextResponse.json({ success: true, ...testData.exchangeRates });
+        }
       }
 
       // ==================== ANALYTICS ====================
