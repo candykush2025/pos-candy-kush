@@ -28,6 +28,18 @@ let testResults = {
 };
 
 let authToken = null;
+let adminToken = null;
+
+// Test credentials
+const CASHIER_CREDS = {
+  email: 'testingcashier@candykush.com',
+  password: 'testing123'
+};
+
+const ADMIN_CREDS = {
+  email: 'admin@test.com',
+  password: 'any'
+};
 
 // Helper function to make API requests
 async function apiRequest(action, method = 'GET', body = null) {
@@ -137,6 +149,15 @@ async function testAuthentication() {
   }
   
   console.log(`${colors.blue}User:${colors.reset}`, JSON.stringify(data?.user, null, 2));
+  
+  // Also login as admin for write operations
+  console.log(`\n${colors.yellow}Logging in as admin for write operations...${colors.reset}`);
+  const adminLogin = await apiRequest('login', 'POST', ADMIN_CREDS);
+  
+  if (adminLogin.data?.token) {
+    adminToken = adminLogin.data.token;
+    console.log(`${colors.green}✓ Admin token saved for write operations${colors.reset}`);
+  }
 }
 
 // Test 3: Products
@@ -174,7 +195,10 @@ async function testProducts() {
     console.log(`${colors.blue}Sample Product:${colors.reset}`, JSON.stringify(product, null, 2));
   }
   
-  // Test create product
+  // Test create product (switch to admin token)
+  const originalToken = authToken;
+  authToken = adminToken;
+  
   const createResponse = await apiRequest('create-product', 'POST', {
     name: 'Test Product from Script',
     description: 'Created by test script',
@@ -211,6 +235,9 @@ async function testProducts() {
   if (createResponse.data?.productId) {
     console.log(`${colors.green}✓ Created product with ID: ${createResponse.data.productId}${colors.reset}`);
   }
+  
+  // Restore original token
+  authToken = originalToken;
 }
 
 // Test 4: Categories
@@ -268,12 +295,14 @@ async function testCustomers() {
     const pointsResponse = await apiRequest(`get-customer-points&id=${customer.id}`);
     logTest(
       'Get customer points endpoint responds',
-      pointsResponse.status === 200
+      pointsResponse.status === 200,
+      pointsResponse.status !== 200 ? `Status: ${pointsResponse.status}, Error: ${pointsResponse.data?.error}` : ''
     );
     
     logTest(
       'Get customer points returns points data',
-      typeof pointsResponse.data?.points === 'number'
+      typeof pointsResponse.data?.points === 'number',
+      typeof pointsResponse.data?.points !== 'number' ? `Points value: ${JSON.stringify(pointsResponse.data?.points)}` : ''
     );
   }
 }

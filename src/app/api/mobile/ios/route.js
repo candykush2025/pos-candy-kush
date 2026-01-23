@@ -606,11 +606,15 @@ export async function GET(req) {
           }
 
           const customerData = customerDoc.data();
+          
+          // Ensure points is always a number
+          const points = typeof customerData.points === 'number' ? customerData.points : 0;
+          const pointList = Array.isArray(customerData.pointList) ? customerData.pointList : [];
 
           return NextResponse.json({ 
             success: true, 
-            points: customerData.points || 0,
-            pointList: customerData.pointList || [],
+            points,
+            pointList,
           });
         } catch (error) {
           console.error("Error fetching customer points from Firebase:", error);
