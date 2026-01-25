@@ -44,30 +44,7 @@ export async function GET(request) {
   const requestId = crypto.randomUUID();
 
   try {
-    // Check for migration access in production
-    const isProduction = process.env.NODE_ENV === "production";
     const { searchParams } = new URL(request.url);
-    const headers = request.headers;
-
-    // Allow access in production only with migration key
-    const migrationKey = searchParams.get("migration_key") || headers.get("x-migration-key");
-    const allowedMigrationKey = process.env.RECEIPTS_MIGRATION_KEY;
-
-    if (isProduction && (!migrationKey || migrationKey !== allowedMigrationKey)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Debug endpoint disabled in production. Use migration_key parameter for data migration.",
-          debug: {
-            requestId,
-            timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV,
-            requiresMigrationKey: true,
-          },
-        },
-        { status: 403 }
-      );
-    }
 
     // Parse query parameters
     const startDate = searchParams.get("startDate");
