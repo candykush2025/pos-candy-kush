@@ -8,9 +8,34 @@ This document provides comprehensive instructions for integrating with the Recei
 
 **URL:** `GET /api/debug/receipts-checker`
 
-**Environment:** Debug endpoint (disabled in production)
+**Environment:** Debug endpoint (disabled in production unless migration key is provided)
 
-**Authentication:** None required (debug endpoint)
+**Authentication:** None required in development, migration key required in production
+
+## Production Access (Migration Mode)
+
+In production environments, the endpoint requires a migration key for security:
+
+### Using Query Parameter:
+```
+GET /api/debug/receipts-checker?migration_key=YOUR_MIGRATION_KEY&limit=10
+```
+
+### Using Header:
+```
+GET /api/debug/receipts-checker
+Header: x-migration-key: YOUR_MIGRATION_KEY
+```
+
+### Setting the Migration Key:
+Add to your environment variables:
+```bash
+RECEIPTS_MIGRATION_KEY=your-secure-migration-key-here
+```
+
+**Security Note:** Choose a strong, unique migration key and rotate it after migration is complete.
+
+## Request Parameters
 
 ## Request Parameters
 
@@ -173,8 +198,9 @@ const axios = require("axios");
 const fs = require("fs");
 
 class ReceiptsChecker {
-  constructor(baseUrl = "https://your-pos-domain.com") {
+  constructor(baseUrl = "https://your-pos-domain.com", migrationKey = null) {
     this.baseUrl = baseUrl;
+    this.migrationKey = migrationKey;
     this.endpoint = "/api/debug/receipts-checker";
   }
 
@@ -200,6 +226,11 @@ class ReceiptsChecker {
       includePayments: includePayments.toString(),
       includeItems: includeItems.toString(),
     });
+
+    // Add migration key for production access
+    if (this.migrationKey) {
+      params.append("migration_key", this.migrationKey);
+    }
 
     if (startDate) params.append("startDate", startDate);
     if (endDate) params.append("endDate", endDate);
@@ -568,7 +599,7 @@ class ReceiptsChecker {
 
 // Compare receipts without importing
 async function compareReceipts() {
-  const checker = new ReceiptsChecker("https://your-old-pos-domain.com");
+  const checker = new ReceiptsChecker("https://your-old-pos-domain.com", "your-migration-key");
 
   const result = await checker.runMigration({
     startDate: "2024-01-01",
@@ -581,7 +612,7 @@ async function compareReceipts() {
 
 // Import receipts
 async function importReceipts() {
-  const checker = new ReceiptsChecker("https://your-old-pos-domain.com");
+  const checker = new ReceiptsChecker("https://your-old-pos-domain.com", "your-migration-key");
 
   const result = await checker.runMigration({
     startDate: "2024-01-01",
@@ -617,8 +648,9 @@ from typing import List, Dict, Any
 import time
 
 class ReceiptsChecker:
-    def __init__(self, base_url: str = 'https://your-pos-domain.com'):
+    def __init__(self, base_url: str = 'https://your-pos-domain.com', migration_key: str = None):
         self.base_url = base_url.rstrip('/')
+        self.migration_key = migration_key
         self.endpoint = '/api/debug/receipts-checker'
 
     def fetch_receipts(self, **params) -> Dict[str, Any]:
@@ -633,6 +665,10 @@ class ReceiptsChecker:
         params.setdefault('format', 'full')
         params.setdefault('includePayments', 'true')
         params.setdefault('includeItems', 'true')
+
+        # Add migration key for production access
+        if self.migration_key:
+            params.setdefault('migration_key', self.migration_key)
 
         try:
             print(f"Fetching receipts from: {url}")
@@ -932,7 +968,7 @@ class ReceiptsChecker:
 # Usage examples:
 
 def compare_receipts():
-    checker = ReceiptsChecker('https://your-old-pos-domain.com')
+    checker = ReceiptsChecker('https://your-old-pos-domain.com', 'your-migration-key')
 
     result = checker.run_migration(
         start_date='2024-01-01',
@@ -943,7 +979,7 @@ def compare_receipts():
     print("Comparison completed")
 
 def import_receipts():
-    checker = ReceiptsChecker('https://your-old-pos-domain.com')
+    checker = ReceiptsChecker('https://your-old-pos-domain.com', 'your-migration-key')
 
     result = checker.run_migration(
         start_date='2024-01-01',
