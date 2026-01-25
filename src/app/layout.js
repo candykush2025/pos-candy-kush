@@ -3,6 +3,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthInitializer } from "@/components/AuthInitializer";
+import { ISYSyncInitializer } from "@/components/ISYSyncInitializer";
 import { QueryProvider } from "@/components/QueryProvider";
 import { OptimizedQueryProvider } from "@/components/OptimizedQueryProvider";
 
@@ -58,6 +59,7 @@ export default function RootLayout({ children }) {
           <QueryProvider>
             <ThemeProvider>
               <AuthInitializer>{children}</AuthInitializer>
+              <ISYSyncInitializer />
               <Toaster />
             </ThemeProvider>
           </QueryProvider>

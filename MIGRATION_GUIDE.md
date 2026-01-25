@@ -11,6 +11,7 @@ This guide shows you how to update your existing components to use the new optim
 ### Example 1: Loading Products
 
 #### ❌ BEFORE (Old Method)
+
 ```javascript
 import { useEffect, useState } from "react";
 import { productsService } from "@/lib/firebase/firestore";
@@ -39,7 +40,7 @@ function ProductsList() {
 
   return (
     <div>
-      {products.map(product => (
+      {products.map((product) => (
         <div key={product.id}>{product.name}</div>
       ))}
     </div>
@@ -48,6 +49,7 @@ function ProductsList() {
 ```
 
 #### ✅ AFTER (Optimized)
+
 ```javascript
 import { useProducts } from "@/hooks/useFirebaseServices";
 
@@ -60,7 +62,7 @@ function ProductsList() {
 
   return (
     <div>
-      {products.map(product => (
+      {products.map((product) => (
         <div key={product.id}>{product.name}</div>
       ))}
     </div>
@@ -69,6 +71,7 @@ function ProductsList() {
 ```
 
 **Benefits:**
+
 - ✅ Simpler code (no useState, no useEffect)
 - ✅ Always gets fresh data from server
 - ✅ Better error handling
@@ -80,9 +83,14 @@ function ProductsList() {
 ### Example 2: Loading Multiple Collections
 
 #### ❌ BEFORE (Old Method)
+
 ```javascript
 import { useEffect, useState } from "react";
-import { productsService, customersService, categoriesService } from "@/lib/firebase/firestore";
+import {
+  productsService,
+  customersService,
+  categoriesService,
+} from "@/lib/firebase/firestore";
 
 function Dashboard() {
   const [products, setProducts] = useState([]);
@@ -98,7 +106,7 @@ function Dashboard() {
         const productsData = await productsService.getAll();
         const customersData = await customersService.getAll();
         const categoriesData = await categoriesService.getAll();
-        
+
         setProducts(productsData);
         setCustomers(customersData);
         setCategories(categoriesData);
@@ -119,8 +127,13 @@ function Dashboard() {
 ```
 
 #### ✅ AFTER (Optimized)
+
 ```javascript
-import { useProducts, useCustomers, useCategories } from "@/hooks/useFirebaseServices";
+import {
+  useProducts,
+  useCustomers,
+  useCategories,
+} from "@/hooks/useFirebaseServices";
 
 function Dashboard() {
   // All load in PARALLEL - much faster!
@@ -137,6 +150,7 @@ function Dashboard() {
 ```
 
 **Benefits:**
+
 - ✅ Loads in parallel (much faster!)
 - ✅ Always gets fresh data
 - ✅ Independent loading states
@@ -147,6 +161,7 @@ function Dashboard() {
 ### Example 3: Creating/Updating Data
 
 #### ❌ BEFORE (Old Method)
+
 ```javascript
 import { useState } from "react";
 import { productsService } from "@/lib/firebase/firestore";
@@ -172,6 +187,7 @@ function CreateProduct() {
 ```
 
 #### ✅ AFTER (Optimized)
+
 ```javascript
 import { useCreateProduct } from "@/hooks/useFirebaseServices";
 
@@ -198,6 +214,7 @@ function CreateProduct() {
 ```
 
 **Benefits:**
+
 - ✅ Automatic refresh of related data
 - ✅ Built-in loading states
 - ✅ No page reload needed
@@ -208,6 +225,7 @@ function CreateProduct() {
 ### Example 4: Manual Refresh
 
 #### ❌ BEFORE (Old Method)
+
 ```javascript
 function ProductsList() {
   const [products, setProducts] = useState([]);
@@ -231,6 +249,7 @@ function ProductsList() {
 ```
 
 #### ✅ AFTER (Optimized)
+
 ```javascript
 import { useProducts } from "@/hooks/useFirebaseServices";
 
@@ -249,6 +268,7 @@ function ProductsList() {
 ```
 
 **Benefits:**
+
 - ✅ Built-in refetch function
 - ✅ Loading state included
 - ✅ Simpler code
@@ -258,6 +278,7 @@ function ProductsList() {
 ### Example 5: Conditional Loading
 
 #### ❌ BEFORE (Old Method)
+
 ```javascript
 function CustomerDetails({ customerId }) {
   const [customer, setCustomer] = useState(null);
@@ -278,6 +299,7 @@ function CustomerDetails({ customerId }) {
 ```
 
 #### ✅ AFTER (Optimized)
+
 ```javascript
 import { useQuery } from "@tanstack/react-query";
 import { customersService } from "@/lib/firebase/firestore";
@@ -299,6 +321,7 @@ function CustomerDetails({ customerId }) {
 ```
 
 **Benefits:**
+
 - ✅ Conditional fetching
 - ✅ Always fresh data
 - ✅ Automatic refetch when customerId changes
@@ -325,6 +348,7 @@ For each component that loads Firebase data:
 All hooks ALWAYS fetch fresh data from server (no cache):
 
 ### Query Hooks
+
 - `useProducts(options)` - Get all products
 - `useCustomers(options)` - Get all customers
 - `useCategories(options)` - Get all categories
@@ -334,11 +358,13 @@ All hooks ALWAYS fetch fresh data from server (no cache):
 - `useActiveShift(userId)` - Get active shift
 
 ### Mutation Hooks
+
 - `useCreateProduct()` - Create product (auto-refresh)
 - `useUpdateProduct()` - Update product (auto-refresh)
 - `useDeleteProduct()` - Delete product (auto-refresh)
 
 ### Utility Hooks
+
 - `useRefreshAll()` - Force refresh all data
 - `useFreshData()` - Access all refresh utilities
 
@@ -347,12 +373,14 @@ All hooks ALWAYS fetch fresh data from server (no cache):
 ## 🚨 Important Notes
 
 ### ✅ DO:
+
 - Use the new hooks for all Firebase data loading
 - Let React Query handle loading states
 - Use mutation hooks for create/update/delete
 - Trust that data is always fresh
 
 ### ❌ DON'T:
+
 - Don't use `useState` for Firebase data
 - Don't use `useEffect` for data loading
 - Don't manually manage loading states
@@ -376,15 +404,19 @@ If something doesn't work:
 Common issues and solutions:
 
 ### Issue: Data not updating after mutation
+
 **Solution:** Make sure you're using mutation hooks (`useCreateProduct`, etc.) which automatically trigger refetch.
 
 ### Issue: Getting old cached data
+
 **Solution:** Check that `staleTime: 0` and `gcTime: 0` are set in query client config.
 
 ### Issue: Too many requests
+
 **Solution:** That's actually good! It means you're always getting fresh data. The requests are optimized and fast.
 
 ### Issue: Component re-renders too much
+
 **Solution:** Use React Query's `isFetching` vs `isLoading` to differentiate initial load from background refresh.
 
 ---

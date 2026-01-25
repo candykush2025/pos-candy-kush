@@ -150,14 +150,18 @@ gcTime: 0,                 // ✅ No old data kept
 const querySnapshot = await getDocs(q);
 
 // New way (always from server)
-const querySnapshot = await getDocsFromServer(q);  // ✅ BYPASS CACHE
+const querySnapshot = await getDocsFromServer(q); // ✅ BYPASS CACHE
 ```
 
 ### 3. Lazy Loading
 
 ```javascript
 // Old way (load everything upfront)
-import { productsService, customersService, categoriesService } from "@/lib/firebase/firestore";
+import {
+  productsService,
+  customersService,
+  categoriesService,
+} from "@/lib/firebase/firestore";
 
 // New way (load only when needed)
 const loadProductsService = async () => {
@@ -374,6 +378,7 @@ AFTER:   🟢 ALWAYS fresh from server (0ms stale)
 When everything is working correctly, you'll see:
 
 ### 1. Console Logs
+
 ```
 ✅ Firebase initialized successfully
 🚀 Optimized Query Provider initialized
@@ -383,6 +388,7 @@ When everything is working correctly, you'll see:
 ```
 
 ### 2. Network Tab
+
 ```
 Request: products
 Method: POST
@@ -392,6 +398,7 @@ Time: 243ms
 ```
 
 ### 3. React Query DevTools
+
 ```
 Query: ["products"]
 Status: ✅ success
@@ -423,7 +430,8 @@ Data Updated: Just now
 
 ---
 
-**Documentation:** 
+**Documentation:**
+
 - Full guide: `FIREBASE_OPTIMIZATION_COMPLETE.md`
 - Migration: `MIGRATION_GUIDE.md`
 - Status: `OPTIMIZATION_STATUS.md`

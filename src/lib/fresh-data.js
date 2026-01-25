@@ -26,7 +26,7 @@ export const refreshAllData = async () => {
 
     const endTime = performance.now();
     console.log(
-      `✅ All data refreshed from server in ${(endTime - startTime).toFixed(2)}ms`
+      `✅ All data refreshed from server in ${(endTime - startTime).toFixed(2)}ms`,
     );
   } catch (error) {
     console.error("❌ Failed to refresh all data:", error);
@@ -93,7 +93,7 @@ export const getCacheStats = () => {
     totalQueries: queries.length,
     activeQueries: queries.filter((q) => q.state.status === "success").length,
     stalQueries: queries.filter(
-      (q) => q.state.status === "success" && q.isStale()
+      (q) => q.state.status === "success" && q.isStale(),
     ).length,
     errorQueries: queries.filter((q) => q.state.status === "error").length,
     queries: queries.map((q) => ({
@@ -135,7 +135,11 @@ export const startQueryMonitoring = () => {
         console.log("✅ Query updated:", event.query.queryKey);
       }
       if (event.action.type === "error") {
-        console.error("❌ Query error:", event.query.queryKey, event.action.error);
+        console.error(
+          "❌ Query error:",
+          event.query.queryKey,
+          event.action.error,
+        );
       }
       if (event.action.type === "fetch") {
         console.log("🔄 Query fetching:", event.query.queryKey);

@@ -25,13 +25,13 @@ export function OptimizedQueryProvider({ children }) {
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
       if (event.type === "updated" && event.action.type === "success") {
         console.log(
-          `✅ Query "${event.query.queryKey.join("-")}" updated successfully`
+          `✅ Query "${event.query.queryKey.join("-")}" updated successfully`,
         );
       }
       if (event.type === "updated" && event.action.type === "error") {
         console.error(
           `❌ Query "${event.query.queryKey.join("-")}" failed:`,
-          event.action.error
+          event.action.error,
         );
       }
     });

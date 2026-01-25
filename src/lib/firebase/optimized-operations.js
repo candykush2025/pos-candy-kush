@@ -14,7 +14,7 @@ import { performanceTracker } from "@/lib/performance/measure";
 export async function getDocumentsWithPerformance(
   getDocumentsFn,
   collectionName,
-  options = {}
+  options = {},
 ) {
   const traceName = `firestore_get_${collectionName}`;
   const tracePromise = createTrace(traceName);
@@ -45,7 +45,7 @@ export async function getDocumentsWithPerformance(
     trace.stop();
 
     console.log(
-      `🔥 Fetched ${results?.length || 0} documents from ${collectionName} in ${duration.toFixed(2)}ms (SERVER)`
+      `🔥 Fetched ${results?.length || 0} documents from ${collectionName} in ${duration.toFixed(2)}ms (SERVER)`,
     );
 
     return results;
@@ -63,7 +63,7 @@ export async function getDocumentsWithPerformance(
 export async function getDocumentWithPerformance(
   getDocumentFn,
   collectionName,
-  id
+  id,
 ) {
   const traceName = `firestore_get_doc_${collectionName}`;
   const tracePromise = createTrace(traceName);
@@ -89,7 +89,7 @@ export async function getDocumentWithPerformance(
     trace.stop();
 
     console.log(
-      `🔥 Fetched document from ${collectionName} in ${duration.toFixed(2)}ms (SERVER)`
+      `🔥 Fetched document from ${collectionName} in ${duration.toFixed(2)}ms (SERVER)`,
     );
 
     return result;
@@ -119,7 +119,7 @@ export async function batchLoadCollections(loaders) {
           console.error(`❌ Failed to load ${name}:`, error);
           return { name, data: null, success: false, error };
         }
-      })
+      }),
     );
 
     const endTime = performance.now();
@@ -129,7 +129,7 @@ export async function batchLoadCollections(loaders) {
     const failed = results.filter((r) => !r.success).length;
 
     console.log(
-      `✅ Batch load completed in ${duration.toFixed(2)}ms (${successful} successful, ${failed} failed)`
+      `✅ Batch load completed in ${duration.toFixed(2)}ms (${successful} successful, ${failed} failed)`,
     );
 
     return results;
@@ -150,9 +150,8 @@ export async function preloadCriticalData() {
 
   try {
     // Dynamically import Firebase services
-    const { productsService, categoriesService } = await import(
-      "@/lib/firebase/firestore"
-    );
+    const { productsService, categoriesService } =
+      await import("@/lib/firebase/firestore");
 
     // Load critical data in parallel
     const results = await batchLoadCollections([
@@ -168,7 +167,7 @@ export async function preloadCriticalData() {
 
     const endTime = performance.now();
     console.log(
-      `✅ Critical data preloaded in ${(endTime - startTime).toFixed(2)}ms`
+      `✅ Critical data preloaded in ${(endTime - startTime).toFixed(2)}ms`,
     );
 
     return results;

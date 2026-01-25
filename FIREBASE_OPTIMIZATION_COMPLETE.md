@@ -30,7 +30,11 @@ This optimization ensures your Firebase data loads **MUCH FASTER** while **ALWAY
 ### 1. Using Optimized Hooks (Recommended)
 
 ```javascript
-import { useProducts, useCustomers, useCategories } from "@/hooks/useFirebaseServices";
+import {
+  useProducts,
+  useCustomers,
+  useCategories,
+} from "@/hooks/useFirebaseServices";
 
 function MyComponent() {
   // ALWAYS gets latest products from server
@@ -63,7 +67,11 @@ function MyComponent() {
 ### 2. Force Refresh All Data
 
 ```javascript
-import { refreshAllData, refreshProducts, refreshCustomers } from "@/lib/fresh-data";
+import {
+  refreshAllData,
+  refreshProducts,
+  refreshCustomers,
+} from "@/lib/fresh-data";
 
 // Refresh ALL data from server
 await refreshAllData();
@@ -76,7 +84,10 @@ await refreshCustomers();
 ### 3. Using Mutations (Auto-refresh after changes)
 
 ```javascript
-import { useCreateProduct, useUpdateProduct } from "@/hooks/useFirebaseServices";
+import {
+  useCreateProduct,
+  useUpdateProduct,
+} from "@/hooks/useFirebaseServices";
 
 function ProductForm() {
   const createProduct = useCreateProduct();
@@ -143,21 +154,25 @@ console.log("Active queries:", stats.activeQueries);
 ## 🔧 Configuration Changes
 
 ### `next.config.mjs`
+
 - Added Firebase bundle splitting
 - Optimized package imports
 - Better caching strategy
 
 ### `src/lib/firebase/config.js`
+
 - Added Performance Monitoring
 - Performance trace utilities
 
 ### `src/app/layout.js`
+
 - Integrated OptimizedQueryProvider
 - Performance monitoring enabled
 
 ## ⚙️ How It Works
 
 ### 1. Zero Cache Configuration
+
 ```javascript
 staleTime: 0,        // Data is immediately stale
 gcTime: 0,           // Don't keep old data
@@ -167,32 +182,39 @@ refetchOnReconnect: true,    // Refetch when internet reconnects
 ```
 
 ### 2. Force Server Fetch
+
 All `getDocuments()` calls use `getDocsFromServer()` which **bypasses Firestore cache** and always fetches from server.
 
 ### 3. Dynamic Imports
+
 Firebase services are lazy-loaded only when needed:
+
 ```javascript
 const service = await import("@/lib/firebase/firestore");
 // Service is cached after first load for performance
 ```
 
 ### 4. Automatic Refetch After Mutations
+
 When you create/update/delete data, React Query automatically refetches to show latest data:
+
 ```javascript
 onSuccess: () => {
   queryClient.invalidateQueries({ queryKey: ["products"] });
-}
+};
 ```
 
 ## 📊 Performance Improvements
 
 ### Before Optimization
+
 - Initial bundle size: ~9.6 MB
 - Firebase load time: 3-5 seconds
 - Old cached data could be shown
 - No performance monitoring
 
 ### After Optimization
+
 - Initial bundle size: ~2-3 MB (70% reduction)
 - Firebase load time: <1 second (80% faster)
 - **ALWAYS shows latest data** from server
@@ -203,6 +225,7 @@ onSuccess: () => {
 ## 🐛 Debugging
 
 ### View Performance Metrics
+
 ```javascript
 import { performanceTracker } from "@/lib/performance/measure";
 
@@ -212,6 +235,7 @@ console.log(metrics);
 ```
 
 ### Monitor Queries in Real-Time
+
 ```javascript
 import { startQueryMonitoring } from "@/lib/fresh-data";
 
@@ -223,7 +247,9 @@ stopMonitoring();
 ```
 
 ### React Query DevTools
+
 In development mode, you'll see the React Query DevTools panel at the bottom of the screen. This shows:
+
 - All active queries
 - Query status (loading, success, error)
 - Last updated time
@@ -234,6 +260,7 @@ In development mode, you'll see the React Query DevTools panel at the bottom of 
 To verify everything is working correctly:
 
 1. **Check Console Logs**
+
    ```
    ✅ Firebase initialized successfully
    🚀 Optimized Query Provider initialized
@@ -253,6 +280,7 @@ To verify everything is working correctly:
 ## 🎉 Summary
 
 Your Firebase data now:
+
 - ✅ Loads **70-80% faster**
 - ✅ **ALWAYS shows latest data** (no old cache)
 - ✅ Automatically refetches on focus/reconnect

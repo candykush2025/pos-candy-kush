@@ -1,12 +1,16 @@
 "use client";
 
-import { useProducts, useCustomers, useCategories } from "@/hooks/useFirebaseServices";
+import {
+  useProducts,
+  useCustomers,
+  useCategories,
+} from "@/hooks/useFirebaseServices";
 import { refreshAllData, logCacheStats } from "@/lib/fresh-data";
 import { useState } from "react";
 
 /**
  * Example Component: Optimized Data Loading
- * 
+ *
  * This component demonstrates:
  * 1. Using optimized hooks that ALWAYS fetch latest data
  * 2. Manual refresh capabilities
@@ -63,7 +67,8 @@ export default function OptimizedDataExample() {
   };
 
   const isLoading = productsLoading || customersLoading || categoriesLoading;
-  const isFetching = productsFetching || customersFetching || categoriesFetching;
+  const isFetching =
+    productsFetching || customersFetching || categoriesFetching;
 
   return (
     <div className="p-6 space-y-6">
@@ -104,7 +109,10 @@ export default function OptimizedDataExample() {
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">
-            Products {productsFetching && <span className="text-sm text-gray-500">(updating...)</span>}
+            Products{" "}
+            {productsFetching && (
+              <span className="text-sm text-gray-500">(updating...)</span>
+            )}
           </h2>
           <button
             onClick={() => refetchProducts()}
@@ -113,7 +121,7 @@ export default function OptimizedDataExample() {
             🔄 Refresh
           </button>
         </div>
-        
+
         {productsError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             ❌ Error loading products: {productsError.message}
@@ -136,7 +144,10 @@ export default function OptimizedDataExample() {
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">
-            Customers {customersFetching && <span className="text-sm text-gray-500">(updating...)</span>}
+            Customers{" "}
+            {customersFetching && (
+              <span className="text-sm text-gray-500">(updating...)</span>
+            )}
           </h2>
           <button
             onClick={() => refetchCustomers()}
@@ -168,7 +179,10 @@ export default function OptimizedDataExample() {
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">
-            Categories {categoriesFetching && <span className="text-sm text-gray-500">(updating...)</span>}
+            Categories{" "}
+            {categoriesFetching && (
+              <span className="text-sm text-gray-500">(updating...)</span>
+            )}
           </h2>
           <button
             onClick={() => refetchCategories()}
@@ -200,11 +214,26 @@ export default function OptimizedDataExample() {
       <div className="bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 p-6 rounded-lg">
         <h3 className="font-semibold mb-2">💡 How This Works</h3>
         <ul className="space-y-2 text-sm">
-          <li>✅ <strong>Always Fresh Data:</strong> Every query fetches from Firebase server (no old cache)</li>
-          <li>✅ <strong>Auto Refresh:</strong> Data refreshes when you refocus the window</li>
-          <li>✅ <strong>Network Aware:</strong> Automatically refetches when internet reconnects</li>
-          <li>✅ <strong>Fast Loading:</strong> Optimized with bundle splitting and lazy loading</li>
-          <li>✅ <strong>Performance Tracking:</strong> Check console for timing metrics</li>
+          <li>
+            ✅ <strong>Always Fresh Data:</strong> Every query fetches from
+            Firebase server (no old cache)
+          </li>
+          <li>
+            ✅ <strong>Auto Refresh:</strong> Data refreshes when you refocus
+            the window
+          </li>
+          <li>
+            ✅ <strong>Network Aware:</strong> Automatically refetches when
+            internet reconnects
+          </li>
+          <li>
+            ✅ <strong>Fast Loading:</strong> Optimized with bundle splitting
+            and lazy loading
+          </li>
+          <li>
+            ✅ <strong>Performance Tracking:</strong> Check console for timing
+            metrics
+          </li>
         </ul>
       </div>
 
@@ -214,7 +243,9 @@ export default function OptimizedDataExample() {
         <ul className="space-y-2 text-sm">
           <li>• Open browser console to see detailed performance metrics</li>
           <li>• Click "Show Stats" to see React Query cache statistics</li>
-          <li>• Each section can be refreshed individually for faster updates</li>
+          <li>
+            • Each section can be refreshed individually for faster updates
+          </li>
           <li>• Data loads in parallel for maximum speed</li>
         </ul>
       </div>

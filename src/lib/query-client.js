@@ -14,7 +14,7 @@ export const queryClient = new QueryClient({
       refetchOnMount: true, // Always refetch when component mounts
       refetchOnWindowFocus: true, // Refetch when window regains focus
       refetchOnReconnect: true, // Refetch when reconnecting to internet
-      
+
       // Retry configuration for reliability
       retry: (failureCount, error) => {
         // Don't retry on 4xx errors (client errors)

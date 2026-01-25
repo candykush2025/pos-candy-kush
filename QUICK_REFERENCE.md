@@ -13,10 +13,10 @@ import { useProducts } from "@/hooks/useFirebaseServices";
 // 2. Use in component
 function MyComponent() {
   const { data: products, isLoading, error, refetch } = useProducts();
-  
+
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>Error: {error.message}</div>;
-  
+
   return (
     <div>
       <button onClick={() => refetch()}>Refresh</button>
@@ -33,20 +33,20 @@ function MyComponent() {
 ```javascript
 // QUERY HOOKS (Read Data - Always Fresh)
 import {
-  useProducts,         // All products
-  useCustomers,        // All customers
-  useCategories,       // All categories
-  useCashbackRules,    // Cashback rules
-  usePointUsageRules,  // Point rules
-  useDiscounts,        // Discounts
-  useActiveShift,      // Active shift
+  useProducts, // All products
+  useCustomers, // All customers
+  useCategories, // All categories
+  useCashbackRules, // Cashback rules
+  usePointUsageRules, // Point rules
+  useDiscounts, // Discounts
+  useActiveShift, // Active shift
 } from "@/hooks/useFirebaseServices";
 
 // MUTATION HOOKS (Write Data - Auto-refresh)
 import {
-  useCreateProduct,    // Create + auto-refresh
-  useUpdateProduct,    // Update + auto-refresh
-  useDeleteProduct,    // Delete + auto-refresh
+  useCreateProduct, // Create + auto-refresh
+  useUpdateProduct, // Update + auto-refresh
+  useDeleteProduct, // Delete + auto-refresh
 } from "@/hooks/useFirebaseServices";
 
 // UTILITY HOOKS
@@ -59,26 +59,30 @@ import { useFreshData } from "@/lib/fresh-data";
 ## 💡 Common Patterns
 
 ### Pattern 1: Simple Data Loading
+
 ```javascript
 const { data, isLoading, error } = useProducts();
 ```
 
 ### Pattern 2: With Options
+
 ```javascript
-const { data } = useProducts({ 
-  where: ["category", "==", "electronics"] 
+const { data } = useProducts({
+  where: ["category", "==", "electronics"],
 });
 ```
 
 ### Pattern 3: Manual Refresh
+
 ```javascript
 const { data, refetch, isFetching } = useProducts();
 <button onClick={() => refetch()} disabled={isFetching}>
   Refresh
-</button>
+</button>;
 ```
 
 ### Pattern 4: Create with Auto-refresh
+
 ```javascript
 const createProduct = useCreateProduct();
 
@@ -89,6 +93,7 @@ const handleCreate = async (data) => {
 ```
 
 ### Pattern 5: Multiple Collections
+
 ```javascript
 const { data: products } = useProducts();
 const { data: customers } = useCustomers();
@@ -101,21 +106,21 @@ const { data: categories } = useCategories();
 ## 🔧 Utility Functions
 
 ```javascript
-import { 
-  refreshAllData,      // Refresh everything
-  refreshProducts,     // Refresh products only
-  refreshCustomers,    // Refresh customers only
-  logCacheStats,       // Show cache statistics
-  getCacheStats,       // Get cache stats
-  clearAllCache,       // Clear all cache
+import {
+  refreshAllData, // Refresh everything
+  refreshProducts, // Refresh products only
+  refreshCustomers, // Refresh customers only
+  logCacheStats, // Show cache statistics
+  getCacheStats, // Get cache stats
+  clearAllCache, // Clear all cache
 } from "@/lib/fresh-data";
 
 // Usage
-await refreshAllData();           // Refresh everything
-await refreshProducts();          // Refresh products
-logCacheStats();                  // Console log stats
-const stats = getCacheStats();    // Get stats object
-clearAllCache();                  // Clear cache
+await refreshAllData(); // Refresh everything
+await refreshProducts(); // Refresh products
+logCacheStats(); // Console log stats
+const stats = getCacheStats(); // Get stats object
+clearAllCache(); // Clear cache
 ```
 
 ---
@@ -145,6 +150,7 @@ await refreshAllData();
 ## ✅ What You Get
 
 ### Returns from useProducts()
+
 ```javascript
 {
   data,              // Products array (always fresh)
@@ -159,6 +165,7 @@ await refreshAllData();
 ```
 
 ### Returns from useCreateProduct()
+
 ```javascript
 {
   mutate,            // Fire and forget
@@ -175,22 +182,23 @@ await refreshAllData();
 
 ## 🎨 Hook Properties Quick Reference
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `data` | Array/Object | Your data (always fresh) |
-| `isLoading` | Boolean | Initial load (true → false) |
-| `isFetching` | Boolean | Any fetch (includes refetch) |
-| `error` | Error | Error object if failed |
-| `refetch` | Function | Manual refresh function |
-| `isPending` | Boolean | Mutation in progress |
-| `isSuccess` | Boolean | Operation succeeded |
-| `isError` | Boolean | Operation failed |
+| Property     | Type         | Description                  |
+| ------------ | ------------ | ---------------------------- |
+| `data`       | Array/Object | Your data (always fresh)     |
+| `isLoading`  | Boolean      | Initial load (true → false)  |
+| `isFetching` | Boolean      | Any fetch (includes refetch) |
+| `error`      | Error        | Error object if failed       |
+| `refetch`    | Function     | Manual refresh function      |
+| `isPending`  | Boolean      | Mutation in progress         |
+| `isSuccess`  | Boolean      | Operation succeeded          |
+| `isError`    | Boolean      | Operation failed             |
 
 ---
 
 ## 🚨 Common Mistakes to Avoid
 
 ### ❌ DON'T DO THIS:
+
 ```javascript
 // DON'T use useState for Firebase data
 const [products, setProducts] = useState([]);
@@ -208,6 +216,7 @@ const [loading, setLoading] = useState(true);
 ```
 
 ### ✅ DO THIS INSTEAD:
+
 ```javascript
 // Use hooks
 const { data: products, isLoading, refetch } = useProducts();
@@ -231,7 +240,7 @@ const { data: customers } = useCustomers();
 
 // ✅ Use conditional loading
 const { data } = useCustomer(customerId, {
-  enabled: !!customerId  // Only fetch if ID exists
+  enabled: !!customerId, // Only fetch if ID exists
 });
 
 // ✅ Check console for performance logs
@@ -306,25 +315,27 @@ src/
 
 ## 🆘 Quick Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| Data not loading | Check console for errors |
+| Problem          | Solution                      |
+| ---------------- | ----------------------------- |
+| Data not loading | Check console for errors      |
 | Old data showing | Use new hooks (not useEffect) |
-| Too slow | Check bundle size in build |
-| Errors | Check Firebase config |
-| Not refreshing | Check staleTime: 0 in config |
+| Too slow         | Check bundle size in build    |
+| Errors           | Check Firebase config         |
+| Not refreshing   | Check staleTime: 0 in config  |
 
 ---
 
 ## 🎉 Success Checklist
 
 Console should show:
+
 - ✅ "✅ Firebase initialized successfully"
-- ✅ "🚀 Optimized Query Provider initialized"  
+- ✅ "🚀 Optimized Query Provider initialized"
 - ✅ "⚡ Load Products took XXms"
 - ✅ "🔥 Fetched XX documents from products in XXms (SERVER)"
 
 Network tab should show:
+
 - ✅ Requests go to Firebase server
 - ✅ No "from cache" messages
 - ✅ Fast response times (<1s)

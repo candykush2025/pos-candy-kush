@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { measureAsyncPerformance, performanceTracker } from "@/lib/performance/measure";
+import {
+  measureAsyncPerformance,
+  performanceTracker,
+} from "@/lib/performance/measure";
 
 /**
  * Firebase Service Hooks with Dynamic Imports

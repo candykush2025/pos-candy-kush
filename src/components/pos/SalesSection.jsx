@@ -49,6 +49,7 @@ import {
   LOG_ACTIONS,
   LOG_CATEGORIES,
 } from "@/lib/services/activityLogService";
+import { duplicateOrderToISY } from "@/lib/services/orderDuplicationService";
 import { dbService } from "@/lib/db/dbService";
 import db from "@/lib/db/index";
 import { Button } from "@/components/ui/button";
@@ -2573,6 +2574,31 @@ export default function SalesSection({ cashier }) {
           firebaseSaved = true;
           receiptData.syncStatus = "synced";
           receiptData.syncedAt = now.toISOString();
+
+          // 🔄 DUPLICATE TO ISY API - Send receipt to new server (Silent - No UI)
+          try {
+            const duplicationResult = await duplicateOrderToISY(
+              receiptData,
+              cashier,
+            );
+
+            if (duplicationResult.success) {
+              console.log("✅ Order successfully duplicated to ISY API:", {
+                orderNumber: receiptData.orderNumber,
+                isyOrderId: duplicationResult.isyOrderId,
+                duration: `${duplicationResult.duration}ms`,
+              });
+            } else {
+              console.warn(
+                "⚠️ Failed to duplicate order to ISY API:",
+                duplicationResult.error,
+              );
+              // Logged to Firebase syncReceipts collection for developer review
+            }
+          } catch (duplicationError) {
+            console.error("❌ ISY API duplication error:", duplicationError);
+            // Don't fail the checkout if ISY duplication fails
+          }
         } catch (error) {
           console.error("❌ Failed to save to Firebase:", error);
           // Mark as pending for sync later

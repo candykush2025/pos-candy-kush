@@ -77,12 +77,12 @@ export const createPerformanceMarker = (name) => {
           performance.measure(measureName, markStart, markEnd);
           const measure = performance.getEntriesByName(measureName)[0];
           console.log(`⚡ ${name} took ${measure.duration.toFixed(2)}ms`);
-          
+
           // Clean up marks
           performance.clearMarks(markStart);
           performance.clearMarks(markEnd);
           performance.clearMeasures(measureName);
-          
+
           return measure.duration;
         } catch (error) {
           console.error("Performance measurement error:", error);
@@ -113,7 +113,7 @@ export class FirebasePerformanceTracker {
       metric.resultCount = resultCount;
 
       console.log(
-        `🔥 Firebase Query "${queryName}": ${metric.duration.toFixed(2)}ms (${resultCount} documents)`
+        `🔥 Firebase Query "${queryName}": ${metric.duration.toFixed(2)}ms (${resultCount} documents)`,
       );
 
       return metric.duration;
