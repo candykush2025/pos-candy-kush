@@ -26,9 +26,7 @@ import {
   triggerISYSync,
   cleanupCompletedSyncTasks,
 } from "@/lib/services/isySyncService";
-import {
-  isISYApiConfigured,
-} from "@/lib/services/orderDuplicationService";
+import { isISYApiConfigured } from "@/lib/services/orderDuplicationService";
 
 export default function ISYSyncManagementPage() {
   const [stats, setStats] = useState({
@@ -132,7 +130,11 @@ export default function ISYSyncManagementPage() {
         <CardContent className="space-y-4">
           <div>
             <label className="text-sm font-medium">API URL</label>
-            <Input value={process.env.NEXT_PUBLIC_ISY_API_URL || "Not configured"} disabled className="mt-1" />
+            <Input
+              value={process.env.NEXT_PUBLIC_ISY_API_URL || "Not configured"}
+              disabled
+              className="mt-1"
+            />
           </div>
 
           <div>
