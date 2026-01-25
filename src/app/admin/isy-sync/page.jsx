@@ -27,8 +27,6 @@ import {
   cleanupCompletedSyncTasks,
 } from "@/lib/services/isySyncService";
 import {
-  setISYApiToken,
-  clearISYApiToken,
   isISYApiConfigured,
 } from "@/lib/services/orderDuplicationService";
 
@@ -42,8 +40,6 @@ export default function ISYSyncManagementPage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
-  const [token, setToken] = useState("");
-  const [apiUrl, setApiUrl] = useState("");
 
   const loadStats = async () => {
     setLoading(true);
@@ -51,7 +47,6 @@ export default function ISYSyncManagementPage() {
       const syncStats = await getISYSyncStats();
       setStats(syncStats);
       setIsConfigured(isISYApiConfigured());
-      setApiUrl(process.env.NEXT_PUBLIC_ISY_API_URL || "Not configured");
     } catch (error) {
       console.error("Error loading stats:", error);
       toast.error("Failed to load sync statistics");
@@ -101,36 +96,6 @@ export default function ISYSyncManagementPage() {
     }
   };
 
-  const handleSetToken = () => {
-    if (!token.trim()) {
-      toast.error("Please enter a valid token");
-      return;
-    }
-
-    try {
-      setISYApiToken(token.trim());
-      setIsConfigured(true);
-      setToken("");
-      toast.success("API token saved successfully");
-      loadStats();
-    } catch (error) {
-      console.error("Error setting token:", error);
-      toast.error("Failed to save API token");
-    }
-  };
-
-  const handleClearToken = () => {
-    try {
-      clearISYApiToken();
-      setIsConfigured(false);
-      toast.success("API token cleared");
-      loadStats();
-    } catch (error) {
-      console.error("Error clearing token:", error);
-      toast.error("Failed to clear API token");
-    }
-  };
-
   const getStatusColor = (type) => {
     switch (type) {
       case "completed":
@@ -167,54 +132,28 @@ export default function ISYSyncManagementPage() {
         <CardContent className="space-y-4">
           <div>
             <label className="text-sm font-medium">API URL</label>
-            <Input value={apiUrl} disabled className="mt-1" />
+            <Input value={process.env.NEXT_PUBLIC_ISY_API_URL || "Not configured"} disabled className="mt-1" />
           </div>
 
           <div>
             <label className="text-sm font-medium">Authentication Status</label>
             <div className="mt-2 flex items-center gap-2">
               {isConfigured ? (
-                <>
-                  <Badge className={getStatusColor("completed")}>
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    Configured
-                  </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClearToken}
-                  >
-                    Clear Token
-                  </Button>
-                </>
+                <Badge className={getStatusColor("completed")}>
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Automatic JWT Authentication
+                </Badge>
               ) : (
-                <>
-                  <Badge className={getStatusColor("failed")}>
-                    <AlertCircle className="w-3 h-3 mr-1" />
-                    Not Configured
-                  </Badge>
-                </>
+                <Badge className={getStatusColor("failed")}>
+                  <AlertCircle className="w-3 h-3 mr-1" />
+                  Configuration Missing
+                </Badge>
               )}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              JWT tokens are managed automatically using environment credentials
+            </p>
           </div>
-
-          {!isConfigured && (
-            <div>
-              <label className="text-sm font-medium">JWT Token</label>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  type="password"
-                  placeholder="Enter JWT token from ISY API"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                />
-                <Button onClick={handleSetToken}>Save Token</Button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Obtain this token from your ISY API administrator
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
