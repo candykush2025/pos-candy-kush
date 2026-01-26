@@ -210,38 +210,47 @@ export async function GET(request) {
 /**
  * Format receipt for summary view (minimal data for quick comparison)
  */
+/**
+ * Format receipt for summary view (minimal data for quick comparison)
+ * Aligned with POS_RECEIPT_API_SPECIFICATION.md
+ */
 function formatReceiptSummary(receipt, includePayments, includeItems) {
+  // Helper to safely convert Firestore timestamp
+  const toISOString = (timestamp) => {
+    if (!timestamp) return null;
+    if (timestamp.toDate) return timestamp.toDate().toISOString();
+    if (typeof timestamp === 'string') return timestamp;
+    return new Date(timestamp).toISOString();
+  };
+
   const baseReceipt = {
     id: receipt.id,
-    receiptNumber:
-      receipt.receiptNumber || receipt.receipt_number || receipt.number,
-    createdAt: receipt.createdAt?.toDate?.()
-      ? receipt.createdAt.toDate().toISOString()
-      : receipt.createdAt,
-    total: receipt.total || receipt.totalMoney || receipt.total_money || 0,
-    customerId: receipt.customerId || receipt.customer_id,
-    cashierId: receipt.cashierId || receipt.cashier_id,
+    orderNumber: receipt.orderNumber || receipt.receiptNumber || receipt.receipt_number || receipt.number,
+    created_at: toISOString(receipt.created_at || receipt.createdAt),
+    total_money: receipt.total_money || receipt.totalMoney || receipt.total || 0,
+    customerId: receipt.customerId || receipt.customer_id || null,
+    cashierId: receipt.cashierId || receipt.cashier_id || null,
     status: receipt.status || "completed",
   };
 
   if (includePayments) {
     baseReceipt.payments = (receipt.payments || []).map((payment) => ({
-      type: payment.payment_type || payment.type,
-      amount: payment.money_amount || payment.amount || payment.paid_money || 0,
-      payment_type_name: payment.payment_type_name || payment.name,
+      payment_type_id: payment.payment_type_id || payment.paymentTypeId || payment.id,
+      name: payment.name || payment.payment_type_name || payment.type,
+      type: payment.type || payment.payment_type || "CASH",
+      money_amount: payment.money_amount || payment.amount || payment.paid_money || 0,
     }));
   }
 
   if (includeItems) {
-    baseReceipt.items = (receipt.items || receipt.lineItems || []).map(
-      (item) => ({
-        productId: item.productId || item.product_id || item.id,
-        name: item.name || item.product_name,
-        quantity: item.quantity || item.qty || 1,
-        price: item.price || item.unit_price || 0,
-        total: item.total || item.quantity * item.price || 0,
-      }),
-    );
+    baseReceipt.line_items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
+      id: item.id,
+      item_id: item.item_id || item.productId || item.product_id,
+      item_name: item.item_name || item.name || item.product_name,
+      quantity: item.quantity || item.qty || 1,
+      price: item.price || item.unit_price || 0,
+      total_money: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
+    }));
   }
 
   return baseReceipt;
@@ -249,40 +258,83 @@ function formatReceiptSummary(receipt, includePayments, includeItems) {
 
 /**
  * Format receipt for full view (complete data for detailed comparison)
+ * Aligned with POS_RECEIPT_API_SPECIFICATION.md
  */
 function formatReceiptFull(receipt, includePayments, includeItems) {
+  // Helper to safely convert Firestore timestamp
+  const toISOString = (timestamp) => {
+    if (!timestamp) return null;
+    if (timestamp.toDate) return timestamp.toDate().toISOString();
+    if (typeof timestamp === 'string') return timestamp;
+    return new Date(timestamp).toISOString();
+  };
+
   const fullReceipt = {
+    // === IDENTIFIERS ===
     id: receipt.id,
     _firestoreId: receipt._firestoreId,
     _dataId: receipt._dataId,
+    orderNumber: receipt.orderNumber || receipt.receiptNumber || receipt.receipt_number || receipt.number,
+    deviceId: receipt.deviceId || receipt.device_id || null,
 
-    // Basic info
-    receiptNumber:
-      receipt.receiptNumber || receipt.receipt_number || receipt.number,
-    createdAt: receipt.createdAt?.toDate?.()
-      ? receipt.createdAt.toDate().toISOString()
-      : receipt.createdAt,
-    updatedAt: receipt.updatedAt?.toDate?.()
-      ? receipt.updatedAt.toDate().toISOString()
-      : receipt.updatedAt,
+    // === TIMESTAMPS ===
+    created_at: toISOString(receipt.created_at || receipt.createdAt),
+    receipt_date: toISOString(receipt.receipt_date || receipt.receiptDate || receipt.created_at || receipt.createdAt),
+    updated_at: toISOString(receipt.updated_at || receipt.updatedAt),
 
-    // Financial data
-    total: receipt.total || receipt.totalMoney || receipt.total_money || 0,
+    // === CUSTOMER INFORMATION ===
+    customerId: receipt.customerId || receipt.customer_id || null,
+    customerName: receipt.customerName || receipt.customer_name || null,
+    customer: receipt.customer || {
+      id: receipt.customerId || receipt.customer_id || null,
+      customerId: receipt.customerId || receipt.customer_id || null,
+      name: receipt.customerName || receipt.customer_name || "",
+      lastName: receipt.customer?.lastName || null,
+      fullName: receipt.customerName || receipt.customer_name || "",
+      email: receipt.customer?.email || null,
+      phone: receipt.customer?.phone || null,
+      isNoMember: receipt.customer?.isNoMember ?? !receipt.customerId,
+      currentPoints: receipt.customer?.currentPoints || 0
+    },
+
+    // === PRICING ===
     subtotal: receipt.subtotal || receipt.sub_total || 0,
-    tax: receipt.tax || receipt.tax_amount || 0,
-    discount: receipt.discount || receipt.discount_amount || 0,
+    total_discount: receipt.total_discount || receipt.totalDiscount || receipt.discount || 0,
+    total_tax: receipt.total_tax || receipt.totalTax || receipt.tax || 0,
+    total_money: receipt.total_money || receipt.totalMoney || receipt.total || 0,
+    tip: receipt.tip || 0,
+    surcharge: receipt.surcharge || 0,
 
-    // Customer and cashier info
-    customerId: receipt.customerId || receipt.customer_id,
-    customerName: receipt.customerName || receipt.customer_name,
-    cashierId: receipt.cashierId || receipt.cashier_id,
-    cashierName: receipt.cashierName || receipt.cashier_name,
+    // === PAYMENT INFORMATION ===
+    paymentMethod: receipt.paymentMethod || receipt.payment_method || "cash",
+    paymentTypeName: receipt.paymentTypeName || receipt.payment_type_name || null,
+    cashReceived: receipt.cashReceived || receipt.cash_received || null,
+    change: receipt.change || 0,
 
-    // Status and metadata
+    // === POINTS & CASHBACK ===
+    points_used: receipt.points_used || receipt.pointsUsed || 0,
+    points_discount: receipt.points_discount || receipt.pointsDiscount || 0,
+    points_earned: receipt.points_earned || receipt.pointsEarned || 0,
+    points_deducted: receipt.points_deducted || receipt.pointsDeducted || 0,
+    points_balance: receipt.points_balance || receipt.pointsBalance || 0,
+    cashback_earned: receipt.cashback_earned || receipt.cashbackEarned || 0,
+    cashback_breakdown: receipt.cashback_breakdown || receipt.cashbackBreakdown || [],
+
+    // === EMPLOYEE INFORMATION ===
+    cashierId: receipt.cashierId || receipt.cashier_id || null,
+    cashierName: receipt.cashierName || receipt.cashier_name || "",
+    userId: receipt.userId || receipt.user_id || receipt.cashierId || receipt.cashier_id || null,
+
+    // === STATUS & METADATA ===
     status: receipt.status || "completed",
-    notes: receipt.notes || receipt.note,
-    tableNumber: receipt.tableNumber || receipt.table_number,
-    orderType: receipt.orderType || receipt.order_type,
+    receipt_type: receipt.receipt_type || receipt.receiptType || "SALE",
+    source: receipt.source || "POS System",
+    cancelled_at: toISOString(receipt.cancelled_at || receipt.cancelledAt),
+    fromThisDevice: receipt.fromThisDevice ?? true,
+
+    // === SYNC STATUS ===
+    syncStatus: receipt.syncStatus || receipt.sync_status || "synced",
+    syncedAt: toISOString(receipt.syncedAt || receipt.synced_at),
 
     // Raw data for debugging
     rawData: receipt,
@@ -290,11 +342,11 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
 
   if (includePayments) {
     fullReceipt.payments = (receipt.payments || []).map((payment) => ({
-      id: payment.id,
-      payment_type: payment.payment_type || payment.type,
-      payment_type_name: payment.payment_type_name || payment.name,
-      money_amount:
-        payment.money_amount || payment.amount || payment.paid_money || 0,
+      payment_type_id: payment.payment_type_id || payment.paymentTypeId || payment.id,
+      name: payment.name || payment.payment_type_name || payment.type,
+      type: payment.type || payment.payment_type || "CASH",
+      money_amount: payment.money_amount || payment.amount || payment.paid_money || 0,
+      paid_at: toISOString(payment.paid_at || payment.paidAt || receipt.created_at || receipt.createdAt),
       paid_money: payment.paid_money || payment.money_amount || 0,
       change: payment.change || 0,
       rawData: payment,
@@ -302,20 +354,34 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
   }
 
   if (includeItems) {
-    fullReceipt.items = (receipt.items || receipt.lineItems || []).map(
-      (item) => ({
-        id: item.id,
-        productId: item.productId || item.product_id,
-        name: item.name || item.product_name,
-        quantity: item.quantity || item.qty || 1,
-        price: item.price || item.unit_price || 0,
-        total: item.total || item.quantity * item.price || 0,
-        discount: item.discount || 0,
-        tax: item.tax || 0,
-        category: item.category || item.category_name,
-        rawData: item,
-      }),
-    );
+    fullReceipt.line_items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
+      id: item.id || item.cart_id,
+      item_id: item.item_id || item.productId || item.product_id,
+      variant_id: item.variant_id || item.variantId || null,
+      item_name: item.item_name || item.name || item.product_name,
+      variant_name: item.variant_name || item.variantName || null,
+      sku: item.sku || null,
+      quantity: item.quantity || item.qty || 1,
+      price: item.price || item.unit_price || 0,
+      gross_total_money: item.gross_total_money || item.grossTotal || (item.quantity || 1) * (item.price || 0),
+      total_money: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
+      cost: item.cost || 0,
+      total_discount: item.total_discount || item.discount || 0,
+      categoryId: item.categoryId || item.category_id || null,
+      categoryName: item.categoryName || item.category_name || item.category || null,
+      rawData: item,
+    }));
+  }
+
+  // === DISCOUNTS ===
+  if (receipt.discounts) {
+    fullReceipt.discounts = receipt.discounts.map((discount) => ({
+      id: discount.id,
+      name: discount.name,
+      type: discount.type,
+      value: discount.value,
+      amount: discount.amount,
+    }));
   }
 
   return fullReceipt;
