@@ -5,7 +5,7 @@ import { receiptsService } from "@/lib/firebase/firestore";
  * DEBUG ENDPOINT: Receipts Checker API
  *
  * This endpoint allows checking receipts against a new server for data migration/validation.
- * It provides receipts data in a standardized format for comparison and import.
+ * It provides receipts data in V2 Schema format (camelCase) as per POS_RECEIPT_API_SPECIFICATION.md
  *
  * USAGE:
  * GET /api/debug/receipts-checker
@@ -20,11 +20,11 @@ import { receiptsService } from "@/lib/firebase/firestore";
  * - includePayments: Whether to include payment details (default: true)
  * - includeItems: Whether to include item details (default: true)
  *
- * Response Format:
+ * Response Format (V2 Schema - CamelCase):
  * {
  *   "success": true,
  *   "data": {
- *     "receipts": [...],
+ *     "receipts": [...],  // All fields in camelCase format
  *     "total": 150,
  *     "returned": 100,
  *     "hasMore": true
@@ -209,10 +209,7 @@ export async function GET(request) {
 
 /**
  * Format receipt for summary view (minimal data for quick comparison)
- */
-/**
- * Format receipt for summary view (minimal data for quick comparison)
- * Aligned with POS_RECEIPT_API_SPECIFICATION.md
+ * V2 Schema - CamelCase format as per POS_RECEIPT_API_SPECIFICATION.md
  */
 function formatReceiptSummary(receipt, includePayments, includeItems) {
   // Helper to safely convert Firestore timestamp
@@ -226,30 +223,29 @@ function formatReceiptSummary(receipt, includePayments, includeItems) {
   const baseReceipt = {
     id: receipt.id,
     orderNumber: receipt.orderNumber || receipt.receiptNumber || receipt.receipt_number || receipt.number,
-    created_at: toISOString(receipt.created_at || receipt.createdAt),
-    total_money: receipt.total_money || receipt.totalMoney || receipt.total || 0,
+    createdAt: toISOString(receipt.created_at || receipt.createdAt),
+    totalAmount: receipt.totalAmount || receipt.total_money || receipt.totalMoney || receipt.total || 0,
     customerId: receipt.customerId || receipt.customer_id || null,
     cashierId: receipt.cashierId || receipt.cashier_id || null,
     status: receipt.status || "completed",
   };
 
   if (includePayments) {
-    baseReceipt.payments = (receipt.payments || []).map((payment) => ({
-      payment_type_id: payment.payment_type_id || payment.paymentTypeId || payment.id,
-      name: payment.name || payment.payment_type_name || payment.type,
-      type: payment.type || payment.payment_type || "CASH",
-      money_amount: payment.money_amount || payment.amount || payment.paid_money || 0,
-    }));
+    baseReceipt.payment = {
+      method: receipt.paymentMethod || receipt.payment_method || "cash",
+      amount: receipt.totalAmount || receipt.total_money || receipt.totalMoney || receipt.total || 0,
+      changeDue: receipt.change || 0,
+      transactionId: receipt.transactionId || ""
+    };
   }
 
   if (includeItems) {
-    baseReceipt.line_items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
-      id: item.id,
-      item_id: item.item_id || item.productId || item.product_id,
-      item_name: item.item_name || item.name || item.product_name,
+    baseReceipt.items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
+      productId: item.item_id || item.productId || item.product_id,
+      name: item.item_name || item.name || item.product_name,
       quantity: item.quantity || item.qty || 1,
       price: item.price || item.unit_price || 0,
-      total_money: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
+      total: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
     }));
   }
 
@@ -278,9 +274,9 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
     deviceId: receipt.deviceId || receipt.device_id || null,
 
     // === TIMESTAMPS ===
-    created_at: toISOString(receipt.created_at || receipt.createdAt),
-    receipt_date: toISOString(receipt.receipt_date || receipt.receiptDate || receipt.created_at || receipt.createdAt),
-    updated_at: toISOString(receipt.updated_at || receipt.updatedAt),
+    createdAt: toISOString(receipt.created_at || receipt.createdAt),
+    receiptDate: toISOString(receipt.receipt_date || receipt.receiptDate || receipt.created_at || receipt.createdAt),
+    updatedAt: toISOString(receipt.updated_at || receipt.updatedAt),
 
     // === CUSTOMER INFORMATION ===
     customerId: receipt.customerId || receipt.customer_id || null,
@@ -299,9 +295,9 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
 
     // === PRICING ===
     subtotal: receipt.subtotal || receipt.sub_total || 0,
-    total_discount: receipt.total_discount || receipt.totalDiscount || receipt.discount || 0,
-    total_tax: receipt.total_tax || receipt.totalTax || receipt.tax || 0,
-    total_money: receipt.total_money || receipt.totalMoney || receipt.total || 0,
+    discountAmount: receipt.total_discount || receipt.totalDiscount || receipt.discount || 0,
+    taxAmount: receipt.total_tax || receipt.totalTax || receipt.tax || 0,
+    totalAmount: receipt.total_money || receipt.totalMoney || receipt.total || 0,
     tip: receipt.tip || 0,
     surcharge: receipt.surcharge || 0,
 
@@ -312,13 +308,13 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
     change: receipt.change || 0,
 
     // === POINTS & CASHBACK ===
-    points_used: receipt.points_used || receipt.pointsUsed || 0,
-    points_discount: receipt.points_discount || receipt.pointsDiscount || 0,
-    points_earned: receipt.points_earned || receipt.pointsEarned || 0,
-    points_deducted: receipt.points_deducted || receipt.pointsDeducted || 0,
-    points_balance: receipt.points_balance || receipt.pointsBalance || 0,
-    cashback_earned: receipt.cashback_earned || receipt.cashbackEarned || 0,
-    cashback_breakdown: receipt.cashback_breakdown || receipt.cashbackBreakdown || [],
+    pointsUsed: receipt.points_used || receipt.pointsUsed || 0,
+    pointsDiscount: receipt.points_discount || receipt.pointsDiscount || 0,
+    pointsEarned: receipt.points_earned || receipt.pointsEarned || 0,
+    pointsDeducted: receipt.points_deducted || receipt.pointsDeducted || 0,
+    pointsBalance: receipt.points_balance || receipt.pointsBalance || 0,
+    cashbackEarned: receipt.cashback_earned || receipt.cashbackEarned || 0,
+    cashbackBreakdown: receipt.cashback_breakdown || receipt.cashbackBreakdown || [],
 
     // === EMPLOYEE INFORMATION ===
     cashierId: receipt.cashierId || receipt.cashier_id || null,
@@ -327,9 +323,9 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
 
     // === STATUS & METADATA ===
     status: receipt.status || "completed",
-    receipt_type: receipt.receipt_type || receipt.receiptType || "SALE",
+    receiptType: receipt.receipt_type || receipt.receiptType || "SALE",
     source: receipt.source || "POS System",
-    cancelled_at: toISOString(receipt.cancelled_at || receipt.cancelledAt),
+    cancelledAt: toISOString(receipt.cancelled_at || receipt.cancelledAt),
     fromThisDevice: receipt.fromThisDevice ?? true,
 
     // === SYNC STATUS ===
@@ -341,32 +337,30 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
   };
 
   if (includePayments) {
-    fullReceipt.payments = (receipt.payments || []).map((payment) => ({
-      payment_type_id: payment.payment_type_id || payment.paymentTypeId || payment.id,
-      name: payment.name || payment.payment_type_name || payment.type,
-      type: payment.type || payment.payment_type || "CASH",
-      money_amount: payment.money_amount || payment.amount || payment.paid_money || 0,
-      paid_at: toISOString(payment.paid_at || payment.paidAt || receipt.created_at || receipt.createdAt),
-      paid_money: payment.paid_money || payment.money_amount || 0,
-      change: payment.change || 0,
-      rawData: payment,
-    }));
+    fullReceipt.payment = {
+      method: receipt.paymentMethod || receipt.payment_method || "cash",
+      amount: receipt.total_money || receipt.totalMoney || receipt.total || 0,
+      changeDue: receipt.change || 0,
+      cashReceived: receipt.cashReceived || receipt.cash_received || null,
+      transactionId: receipt.transactionId || "",
+      paidAt: toISOString(receipt.created_at || receipt.createdAt)
+    };
   }
 
   if (includeItems) {
-    fullReceipt.line_items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
+    fullReceipt.items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
       id: item.id || item.cart_id,
-      item_id: item.item_id || item.productId || item.product_id,
-      variant_id: item.variant_id || item.variantId || null,
-      item_name: item.item_name || item.name || item.product_name,
-      variant_name: item.variant_name || item.variantName || null,
+      productId: item.item_id || item.productId || item.product_id,
+      variantId: item.variant_id || item.variantId || null,
+      name: item.item_name || item.name || item.product_name,
+      variantName: item.variant_name || item.variantName || null,
       sku: item.sku || null,
       quantity: item.quantity || item.qty || 1,
       price: item.price || item.unit_price || 0,
-      gross_total_money: item.gross_total_money || item.grossTotal || (item.quantity || 1) * (item.price || 0),
-      total_money: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
+      grossTotal: item.gross_total_money || item.grossTotal || (item.quantity || 1) * (item.price || 0),
+      total: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
       cost: item.cost || 0,
-      total_discount: item.total_discount || item.discount || 0,
+      discountAmount: item.total_discount || item.discount || 0,
       categoryId: item.categoryId || item.category_id || null,
       categoryName: item.categoryName || item.category_name || item.category || null,
       rawData: item,

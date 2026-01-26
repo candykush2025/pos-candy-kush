@@ -4,6 +4,12 @@
 
 This document specifies the data structure and required fields that the POS (Point of Sale) system must send when creating receipts via the API. This ensures compatibility with the order duplication system and maintains consistent data across all platforms.
 
+**Version**: V2 Schema (CamelCase Fields)
+
+- Order items are stored in `items` array (not `line_items`)
+- All field names use camelCase convention (no snake_case)
+- Standardized field names eliminate mixed naming formats
+
 ## API Endpoint
 
 ```
@@ -11,6 +17,12 @@ POST /pos/v1/orders
 Content-Type: application/json
 Authorization: Bearer <jwt_token>
 ```
+
+**Schema Version**: V2 (CamelCase)
+
+- All field names must use camelCase (e.g., `createdAt`, `totalAmount`, `pointsUsed`)
+- Items array contains camelCase fields only
+- No legacy snake_case formats accepted
 
 ## Authentication
 
@@ -106,6 +118,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 The POS API uses semantic versioning with the `/pos/v1/` prefix. All endpoints are versioned to ensure backward compatibility.
 
 - **Current Version**: `v1`
+- **Schema Version**: `V2` (CamelCase fields, standardized `items` array)
 - **Base URL**: `https://api.isy.software/pos/v1/`
 - **Version Changes**: Will be communicated in advance with migration guides
 
@@ -174,9 +187,9 @@ All responses follow a consistent JSON structure:
   "deviceId": "string", // Required: Device identifier for tracking
 
   // === TIMESTAMPS ===
-  "created_at": "string", // Required: ISO8601 timestamp (e.g., "2026-01-24T10:30:00.000Z")
-  "receipt_date": "string", // Required: ISO8601 timestamp (same as created_at)
-  "updated_at": "string", // Required: ISO8601 timestamp
+  "createdAt": "string", // Required: ISO8601 timestamp (e.g., "2026-01-24T10:30:00.000Z")
+  "receiptDate": "string", // Required: ISO8601 timestamp (same as createdAt)
+  "updatedAt": "string", // Required: ISO8601 timestamp
 
   // === CUSTOMER INFORMATION ===
   "customerId": "string|null", // Customer ID if applicable
@@ -194,30 +207,26 @@ All responses follow a consistent JSON structure:
   },
 
   // === ORDER ITEMS ===
-  "line_items": [
+  "items": [
     {
-      "id": "string", // Cart item ID
-      "item_id": "string", // Required: Product ID
-      "variant_id": "string|null", // Product variant ID
-      "item_name": "string", // Required: Product name
-      "variant_name": "string|null",
-      "sku": "string|null",
+      "productId": "string", // Required: Product ID
+      "variantId": "string", // Product variant ID (optional)
+      "sku": "string", // Product SKU
+      "name": "string", // Required: Product name
       "quantity": "number", // Required: Must be > 0
       "price": "number", // Required: Unit price
-      "gross_total_money": "number", // Line total before discounts
-      "total_money": "number", // Required: Line total after discounts
-      "cost": "number", // Product cost
-      "total_discount": "number", // Line discount amount
-      "categoryId": "string|null", // Product category ID
-      "categoryName": "string|null" // Product category name
+      "discount": "number", // Line discount amount
+      "tax": "number", // Line tax amount
+      "total": "number", // Required: Line total after discounts and tax
+      "cost": "number" // Product cost
     }
   ],
 
   // === PRICING ===
   "subtotal": "number", // Required: Pre-tax subtotal
-  "total_discount": "number", // Total discount amount
-  "total_tax": "number", // Tax amount
-  "total_money": "number", // Required: Final total
+  "discountAmount": "number", // Total discount amount
+  "taxAmount": "number", // Tax amount
+  "totalAmount": "number", // Required: Final total
   "tip": "number", // Tip amount (0 if none)
   "surcharge": "number", // Surcharge amount (0 if none)
 
@@ -226,24 +235,21 @@ All responses follow a consistent JSON structure:
   "paymentTypeName": "string", // Human readable payment type
   "cashReceived": "number|null", // Cash received (required for cash payments)
   "change": "number", // Change given (0 if none)
-  "payments": [
-    {
-      "payment_type_id": "string", // Payment type ID
-      "name": "string", // Payment type name
-      "type": "string", // 'CASH', 'CARD', 'CUSTOM'
-      "money_amount": "number", // Payment amount
-      "paid_at": "string" // ISO8601 timestamp
-    }
-  ],
+  "payment": {
+    "method": "string",
+    "amount": "number",
+    "changeDue": "number",
+    "transactionId": "string"
+  },
 
   // === POINTS & CASHBACK ===
-  "points_used": "number", // Points redeemed (0 if none)
-  "points_discount": "number", // Value of points used (0 if none)
-  "points_earned": "number", // Points earned from this order
-  "points_deducted": "number", // Points used (same as points_used)
-  "points_balance": "number", // Customer's point balance after transaction
-  "cashback_earned": "number", // New cashback system points earned
-  "cashback_breakdown": "array", // Itemized cashback earnings
+  "pointsUsed": "number", // Points redeemed (0 if none)
+  "pointsDiscount": "number", // Value of points used (0 if none)
+  "pointsEarned": "number", // Points earned from this order
+  "pointsDeducted": "number", // Points used (same as pointsUsed)
+  "pointsBalance": "number", // Customer's point balance after transaction
+  "cashbackEarned": "number", // New cashback system points earned
+  "cashbackBreakdown": "array", // Itemized cashback earnings
 
   // === EMPLOYEE INFORMATION ===
   "cashierId": "string|null", // Cashier user ID
@@ -252,9 +258,9 @@ All responses follow a consistent JSON structure:
 
   // === STATUS & METADATA ===
   "status": "string", // Required: 'completed', 'cancelled', etc.
-  "receipt_type": "string", // Required: 'SALE'
+  "receiptType": "string", // Required: 'SALE'
   "source": "string", // Required: 'POS System'
-  "cancelled_at": "string|null", // ISO8601 timestamp if cancelled
+  "cancelledAt": "string|null", // ISO8601 timestamp if cancelled
   "fromThisDevice": "boolean", // Required: true
 
   // === DISCOUNTS ===
@@ -280,19 +286,19 @@ All responses follow a consistent JSON structure:
 
 - `orderNumber` (string)
 - `deviceId` (string)
-- `created_at` (ISO8601 string)
-- `receipt_date` (ISO8601 string)
-- `updated_at` (ISO8601 string)
-- `total_money` (number)
+- `createdAt` (ISO8601 string)
+- `receiptDate` (ISO8601 string)
+- `updatedAt` (ISO8601 string)
+- `totalAmount` (number)
 - `subtotal` (number)
 - `paymentMethod` (string)
 - `cashierName` (string)
 - `status` (string)
-- `receipt_type` (string)
+- `receiptType` (string)
 - `source` (string)
 - `fromThisDevice` (boolean)
 - `syncStatus` (string)
-- `line_items` (array with at least 1 item)
+- `items` (array with at least 1 item)
 
 ### Conditionally Required Fields:
 
@@ -308,7 +314,7 @@ All responses follow a consistent JSON structure:
 
 #### For Cancelled Orders:
 
-- `cancelled_at` (ISO8601 string)
+- `cancelledAt` (ISO8601 string)
 
 ## Data Type Requirements
 
@@ -331,7 +337,7 @@ All responses follow a consistent JSON structure:
 
 ### Array Fields:
 
-- `line_items`: Must contain at least one item
+- `items`: Must contain at least one item
 - `payments`: Must contain at least one payment method
 - `discounts`: Can be empty array if no discounts applied
 
@@ -339,11 +345,11 @@ All responses follow a consistent JSON structure:
 
 ### Business Logic Validation:
 
-1. **Total Calculation**: `total_money` must equal `subtotal + total_tax - total_discount - points_discount + tip + surcharge`
-2. **Line Item Totals**: Sum of `line_items[].total_money` should equal `subtotal`
-3. **Payment Totals**: Sum of `payments[].money_amount` should equal `total_money`
-4. **Points Balance**: `points_balance` should equal `customer.currentPoints - points_used + points_earned`
-5. **Cash Transactions**: `change` should equal `cashReceived - total_money` (for cash payments)
+1. **Total Calculation**: `totalAmount` must equal `subtotal + taxAmount - discountAmount - pointsDiscount + tip + surcharge`
+2. **Line Item Totals**: Sum of `items[].total` should equal `subtotal`
+3. **Payment Totals**: Sum of `payments[].money_amount` should equal `totalAmount`
+4. **Points Balance**: `pointsBalance` should equal `customer.currentPoints - pointsUsed + pointsEarned`
+5. **Cash Transactions**: `change` should equal `cashReceived - totalAmount` (for cash payments)
 
 ### Data Integrity Validation:
 
@@ -371,9 +377,9 @@ curl -X POST https://api.isy.software/pos/v1/orders \
 {
   "orderNumber": "POS-20260124-001",
   "deviceId": "device-uuid-123",
-  "created_at": "2026-01-24T10:30:00.000Z",
-  "receipt_date": "2026-01-24T10:30:00.000Z",
-  "updated_at": "2026-01-24T10:30:00.000Z",
+  "createdAt": "2026-01-24T10:30:00.000Z",
+  "receiptDate": "2026-01-24T10:30:00.000Z",
+  "updatedAt": "2026-01-24T10:30:00.000Z",
   "customerId": null,
   "customerName": null,
   "customer": {
@@ -387,57 +393,50 @@ curl -X POST https://api.isy.software/pos/v1/orders \
     "isNoMember": true,
     "currentPoints": 0
   },
-  "line_items": [
+  "items": [
     {
-      "id": "cart-item-1",
-      "item_id": "prod-456",
-      "variant_id": null,
-      "item_name": "Premium Cannabis Flower",
-      "variant_name": null,
+      "productId": "prod-456",
+      "variantId": null,
       "sku": "PREM-001",
+      "name": "Premium Cannabis Flower",
       "quantity": 2,
       "price": 21.0,
-      "gross_total_money": 42.0,
-      "total_money": 42.0,
-      "cost": 15.0,
-      "total_discount": 0,
-      "categoryId": "cat-flower",
-      "categoryName": "Flower"
+      "discount": 0,
+      "tax": 3.36,
+      "total": 42.0,
+      "cost": 15.0
     }
   ],
   "subtotal": 42.0,
-  "total_discount": 0,
-  "total_tax": 3.36,
-  "total_money": 45.36,
+  "discountAmount": 0,
+  "taxAmount": 3.36,
+  "totalAmount": 45.36,
   "tip": 0,
   "surcharge": 0,
   "paymentMethod": "cash",
   "paymentTypeName": "Cash",
   "cashReceived": 50.0,
   "change": 4.64,
-  "payments": [
-    {
-      "payment_type_id": "cash",
-      "name": "Cash",
-      "type": "CASH",
-      "money_amount": 45.36,
-      "paid_at": "2026-01-24T10:30:00.000Z"
-    }
-  ],
-  "points_used": 0,
-  "points_discount": 0,
-  "points_earned": 0,
-  "points_deducted": 0,
-  "points_balance": 0,
-  "cashback_earned": 0,
-  "cashback_breakdown": [],
+  "payment": {
+    "method": "cash",
+    "amount": 45.36,
+    "changeDue": 4.64,
+    "transactionId": ""
+  },
+  "pointsUsed": 0,
+  "pointsDiscount": 0,
+  "pointsEarned": 0,
+  "pointsDeducted": 0,
+  "pointsBalance": 0,
+  "cashbackEarned": 0,
+  "cashbackBreakdown": [],
   "cashierId": "user-123",
   "cashierName": "John Doe",
   "userId": "user-123",
   "status": "completed",
-  "receipt_type": "SALE",
+  "receiptType": "SALE",
   "source": "POS System",
-  "cancelled_at": null,
+  "cancelledAt": null,
   "fromThisDevice": true,
   "discounts": [],
   "syncStatus": "synced",
@@ -451,9 +450,9 @@ curl -X POST https://api.isy.software/pos/v1/orders \
 {
   "orderNumber": "POS-20260124-002",
   "deviceId": "device-uuid-123",
-  "created_at": "2026-01-24T11:15:00.000Z",
-  "receipt_date": "2026-01-24T11:15:00.000Z",
-  "updated_at": "2026-01-24T11:15:00.000Z",
+  "createdAt": "2026-01-24T11:15:00.000Z",
+  "receiptDate": "2026-01-24T11:15:00.000Z",
+  "updatedAt": "2026-01-24T11:15:00.000Z",
   "customerId": "cust-789",
   "customerName": "Jane Smith",
   "customer": {
@@ -467,53 +466,46 @@ curl -X POST https://api.isy.software/pos/v1/orders \
     "isNoMember": false,
     "currentPoints": 150
   },
-  "line_items": [
+  "items": [
     {
-      "id": "cart-item-2",
-      "item_id": "prod-999",
-      "variant_id": null,
-      "item_name": "CBD Oil 500mg",
-      "variant_name": null,
+      "productId": "prod-999",
+      "variantId": null,
       "sku": "CBD-500",
+      "name": "CBD Oil 500mg",
       "quantity": 1,
       "price": 35.0,
-      "gross_total_money": 35.0,
-      "total_money": 35.0,
-      "cost": 20.0,
-      "total_discount": 0,
-      "categoryId": "cat-oil",
-      "categoryName": "Oil"
+      "discount": 0,
+      "tax": 2.8,
+      "total": 35.0,
+      "cost": 20.0
     }
   ],
   "subtotal": 35.0,
-  "total_discount": 0,
-  "total_tax": 2.8,
-  "total_money": 37.8,
+  "discountAmount": 0,
+  "taxAmount": 2.8,
+  "totalAmount": 37.8,
   "tip": 0,
   "surcharge": 0,
   "paymentMethod": "card",
   "paymentTypeName": "Card",
   "cashReceived": null,
   "change": 0,
-  "payments": [
+  "payment": {
+    "method": "card",
+    "amount": 37.8,
+    "changeDue": 0,
+    "transactionId": "txn-12345"
+  },
+  "pointsUsed": 0,
+  "pointsDiscount": 0,
+  "pointsEarned": 37,
+  "pointsDeducted": 0,
+  "pointsBalance": 187,
+  "cashbackEarned": 37,
+  "cashbackBreakdown": [
     {
-      "payment_type_id": "card",
-      "name": "Card",
-      "type": "CARD",
-      "money_amount": 37.8,
-      "paid_at": "2026-01-24T11:15:00.000Z"
-    }
-  ],
-  "points_used": 0,
-  "points_discount": 0,
-  "points_earned": 37,
-  "points_deducted": 0,
-  "points_balance": 187,
-  "cashback_earned": 37,
-  "cashback_breakdown": [
-    {
-      "item_id": "prod-999",
-      "points_earned": 37,
+      "productId": "prod-999",
+      "pointsEarned": 37,
       "rate": 1.0
     }
   ],
@@ -521,9 +513,9 @@ curl -X POST https://api.isy.software/pos/v1/orders \
   "cashierName": "John Doe",
   "userId": "user-123",
   "status": "completed",
-  "receipt_type": "SALE",
+  "receiptType": "SALE",
   "source": "POS System",
-  "cancelled_at": null,
+  "cancelledAt": null,
   "fromThisDevice": true,
   "discounts": [],
   "syncStatus": "synced",
@@ -541,8 +533,8 @@ curl -X POST https://api.isy.software/pos/v1/orders \
   "error": "Validation failed",
   "details": [
     "orderNumber is required",
-    "total_money must be a positive number",
-    "line_items must contain at least one item"
+    "totalAmount must be a positive number",
+    "items must contain at least one item"
   ]
 }
 ```
@@ -563,14 +555,17 @@ curl -X POST https://api.isy.software/pos/v1/orders \
 
 ## Implementation Notes
 
-1. **Order Number Generation**: Use consistent format across all POS devices
-2. **Device ID**: Generate unique identifier per device/installation
-3. **Timestamp Synchronization**: Ensure device clocks are synchronized
-4. **Customer Data**: Always include complete customer object structure
-5. **Points Calculation**: Implement proper points earning/redemption logic
-6. **Data Consistency**: Validate all monetary calculations before sending
-7. **Error Handling**: Implement retry logic for network failures
-8. **Offline Support**: Queue receipts when offline, sync when connected
+1. **V2 Schema Requirement**: All order creation requests must use V2 schema with `items` array and camelCase field names only
+2. **CamelCase Fields**: All field names must be camelCase (e.g., `createdAt`, `totalAmount`, `pointsUsed`, `receiptType`)
+3. **No Legacy Support**: API no longer accepts `line_items` or any snake_case field formats
+4. **Order Number Generation**: Use consistent format across all POS devices
+5. **Device ID**: Generate unique identifier per device/installation
+6. **Timestamp Synchronization**: Ensure device clocks are synchronized
+7. **Customer Data**: Always include complete customer object structure
+8. **Points Calculation**: Implement proper points earning/redemption logic
+9. **Data Consistency**: Validate all monetary calculations before sending
+10. **Error Handling**: Implement retry logic for network failures
+11. **Offline Support**: Queue receipts when offline, sync when connected
 
 ### JWT Authentication Implementation
 
