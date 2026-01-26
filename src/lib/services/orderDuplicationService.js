@@ -172,6 +172,13 @@ const transformReceiptData = (receiptData, cashier) => {
  * Duplicate order to ISY API and log to Firebase
  */
 export const duplicateOrderToISY = async (receiptData, cashier) => {
+  console.log("[ISY SYNC] 🚀 Starting order duplication:", {
+    orderNumber: receiptData.orderNumber,
+    receiptId: receiptData.id,
+    cashier: cashier?.name,
+    timestamp: new Date().toISOString()
+  });
+
   const startTime = Date.now();
   let syncLog = {
     orderNumber: receiptData.orderNumber,
@@ -288,21 +295,47 @@ export const duplicateOrderToISY = async (receiptData, cashier) => {
  */
 const logSyncToFirebase = async (syncLog) => {
   try {
+    console.log("[SYNC LOG] Attempting to log sync to Firebase:", {
+      orderNumber: syncLog.orderNumber,
+      status: syncLog.status,
+      timestamp: new Date().toISOString()
+    });
+
     const { addDoc, collection, serverTimestamp } =
       await import("firebase/firestore");
     const { db } = await import("@/lib/firebase");
 
-    const docRef = await addDoc(collection(db, "syncReceipts"), {
+    if (!db) {
+      console.error("[SYNC LOG] Firebase db is not initialized");
+      return null;
+    }
+
+    const logData = {
       ...syncLog,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    console.log("[SYNC LOG] Creating document in syncReceipts collection...");
+
+    const docRef = await addDoc(collection(db, "syncReceipts"), logData);
 
     syncLog.id = docRef.id;
 
+    console.log("[SYNC LOG] ✅ Successfully logged to Firebase:", {
+      docId: docRef.id,
+      orderNumber: syncLog.orderNumber,
+      status: syncLog.status
+    });
+
     return docRef.id;
   } catch (error) {
-    console.error("Failed to log sync to Firebase:", error);
+    console.error("[SYNC LOG] ❌ Failed to log sync to Firebase:", error);
+    console.error("[SYNC LOG] Error details:", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     return null;
   }
 };

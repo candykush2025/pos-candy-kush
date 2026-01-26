@@ -57,6 +57,11 @@ export default function SyncDebugPage() {
   const loadSyncLogs = async () => {
     setLoading(true);
     try {
+      console.log("[DEBUG SYNC] Loading sync logs from Firebase...", {
+        filter,
+        timestamp: new Date().toISOString()
+      });
+
       let q = query(
         collection(db, "syncReceipts"),
         orderBy("createdAt", "desc"),
@@ -64,6 +69,7 @@ export default function SyncDebugPage() {
       );
 
       if (filter !== "all") {
+        console.log("[DEBUG SYNC] Applying filter:", filter);
         q = query(
           collection(db, "syncReceipts"),
           where("status", "==", filter),
@@ -72,29 +78,55 @@ export default function SyncDebugPage() {
         );
       }
 
+      console.log("[DEBUG SYNC] Executing Firestore query...");
       const snapshot = await getDocs(q);
-      const logs = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt:
-          doc.data().createdAt?.toDate?.() || new Date(doc.data().attemptedAt),
-      }));
+      console.log("[DEBUG SYNC] Query complete. Documents found:", snapshot.size);
 
+      const logs = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        console.log("[DEBUG SYNC] Processing document:", {
+          id: doc.id,
+          orderNumber: data.orderNumber,
+          status: data.status
+        });
+        return {
+          id: doc.id,
+          ...data,
+          createdAt:
+            data.createdAt?.toDate?.() || new Date(data.attemptedAt),
+        };
+      });
+
+      console.log("[DEBUG SYNC] Processed logs:", logs.length);
       setSyncLogs(logs);
 
       // Calculate stats
+      console.log("[DEBUG SYNC] Calculating stats...");
       const allSnapshot = await getDocs(collection(db, "syncReceipts"));
       const allLogs = allSnapshot.docs.map((d) => d.data());
 
-      setStats({
+      const statsData = {
         total: allLogs.length,
         success: allLogs.filter((l) => l.status === "success").length,
         failed: allLogs.filter((l) => l.status === "failed").length,
         pending: allLogs.filter((l) => l.status === "pending").length,
-      });
+      };
+
+      console.log("[DEBUG SYNC] Stats calculated:", statsData);
+      setStats(statsData);
+
+      if (logs.length === 0) {
+        console.warn("[DEBUG SYNC] ⚠️ No sync logs found in Firebase!");
+        toast.info("No sync logs found. Logs will appear here after orders are synced.");
+      }
     } catch (error) {
-      console.error("Error loading sync logs:", error);
-      toast.error("Failed to load sync logs");
+      console.error("[DEBUG SYNC] ❌ Error loading sync logs:", error);
+      console.error("[DEBUG SYNC] Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      toast.error(`Failed to load sync logs: ${error.message}`);
     } finally {
       setLoading(false);
     }
