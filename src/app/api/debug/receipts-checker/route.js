@@ -14,6 +14,7 @@ import { receiptsService } from "@/lib/firebase/firestore";
  * - startDate: ISO date string (YYYY-MM-DD) - Start date for receipt filtering
  * - endDate: ISO date string (YYYY-MM-DD) - End date for receipt filtering
  * - receiptIds: Comma-separated list of receipt IDs to fetch specific receipts
+ * - receiptNumber: Single receipt number/order number to fetch one specific receipt
  * - limit: Maximum number of receipts to return (default: 100, max: 1000)
  * - offset: Number of receipts to skip (for pagination)
  * - format: Response format - 'full' (default) or 'summary'
@@ -53,6 +54,7 @@ export async function GET(request) {
       .get("receiptIds")
       ?.split(",")
       .filter((id) => id.trim());
+    const receiptNumber = searchParams.get("receiptNumber")?.trim();
     const limit = Math.min(parseInt(searchParams.get("limit")) || 100, 1000);
     const offset = parseInt(searchParams.get("offset")) || 0;
     const format = searchParams.get("format") || "full";
@@ -68,6 +70,7 @@ export async function GET(request) {
         startDate,
         endDate,
         receiptIds: receiptIds || [],
+        receiptNumber,
         limit,
         offset,
         format,
@@ -85,7 +88,38 @@ export async function GET(request) {
     let totalCount = 0;
 
     // Fetch receipts based on parameters
-    if (receiptIds && receiptIds.length > 0) {
+    if (receiptNumber) {
+      // Fetch single receipt by receipt number
+      console.log(
+        `[DEBUG RECEIPTS CHECKER] Fetching receipt by number: ${receiptNumber}`,
+      );
+
+      // Query receipts to find the one with matching receipt number
+      // We'll fetch a reasonable number and filter
+      const queryOptions = {
+        orderBy: ["createdAt", "desc"],
+        limit: 1000, // Search through up to 1000 recent receipts
+      };
+
+      const allReceipts = await receiptsService.getAll(queryOptions);
+      const matchingReceipt = allReceipts.find((receipt) =>
+        (receipt.orderNumber || receipt.receiptNumber || receipt.receipt_number || receipt.number) === receiptNumber
+      );
+
+      if (matchingReceipt) {
+        receipts = [matchingReceipt];
+        totalCount = 1;
+        console.log(
+          `[DEBUG RECEIPTS CHECKER] Found receipt with number: ${receiptNumber}`,
+        );
+      } else {
+        receipts = [];
+        totalCount = 0;
+        console.log(
+          `[DEBUG RECEIPTS CHECKER] No receipt found with number: ${receiptNumber}`,
+        );
+      }
+    } else if (receiptIds && receiptIds.length > 0) {
       // Fetch specific receipts by IDs
       console.log(
         `[DEBUG RECEIPTS CHECKER] Fetching ${receiptIds.length} specific receipts`,
@@ -136,9 +170,19 @@ export async function GET(request) {
       totalCount = receipts.length;
     }
 
-    // Apply pagination
-    const paginatedReceipts = receipts.slice(offset, offset + limit);
-    const hasMore = offset + limit < totalCount;
+    // Apply pagination (skip for single receipt lookups)
+    let paginatedReceipts;
+    let hasMore;
+
+    if (receiptNumber) {
+      // No pagination for single receipt lookup
+      paginatedReceipts = receipts;
+      hasMore = false;
+    } else {
+      // Apply pagination for bulk queries
+      paginatedReceipts = receipts.slice(offset, offset + limit);
+      hasMore = offset + limit < totalCount;
+    }
 
     console.log(
       `[DEBUG RECEIPTS CHECKER] Retrieved ${receipts.length} total receipts, returning ${paginatedReceipts.length} (offset: ${offset}, limit: ${limit})`,
