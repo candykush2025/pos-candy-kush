@@ -17,18 +17,22 @@ This document provides comprehensive instructions for integrating with the Recei
 In production environments, the endpoint requires a migration key for security:
 
 ### Using Query Parameter:
+
 ```
 GET /api/debug/receipts-checker?migration_key=YOUR_MIGRATION_KEY&limit=10
 ```
 
 ### Using Header:
+
 ```
 GET /api/debug/receipts-checker
 Header: x-migration-key: YOUR_MIGRATION_KEY
 ```
 
 ### Setting the Migration Key:
+
 Add to your environment variables:
+
 ```bash
 RECEIPTS_MIGRATION_KEY=your-secure-migration-key-here
 ```
@@ -599,7 +603,10 @@ class ReceiptsChecker {
 
 // Compare receipts without importing
 async function compareReceipts() {
-  const checker = new ReceiptsChecker("https://your-old-pos-domain.com", "your-migration-key");
+  const checker = new ReceiptsChecker(
+    "https://your-old-pos-domain.com",
+    "your-migration-key",
+  );
 
   const result = await checker.runMigration({
     startDate: "2024-01-01",
@@ -612,7 +619,10 @@ async function compareReceipts() {
 
 // Import receipts
 async function importReceipts() {
-  const checker = new ReceiptsChecker("https://your-old-pos-domain.com", "your-migration-key");
+  const checker = new ReceiptsChecker(
+    "https://your-old-pos-domain.com",
+    "your-migration-key",
+  );
 
   const result = await checker.runMigration({
     startDate: "2024-01-01",

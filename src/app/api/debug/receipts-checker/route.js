@@ -102,8 +102,12 @@ export async function GET(request) {
       };
 
       const allReceipts = await receiptsService.getAll(queryOptions);
-      const matchingReceipt = allReceipts.find((receipt) =>
-        (receipt.orderNumber || receipt.receiptNumber || receipt.receipt_number || receipt.number) === receiptNumber
+      const matchingReceipt = allReceipts.find(
+        (receipt) =>
+          (receipt.orderNumber ||
+            receipt.receiptNumber ||
+            receipt.receipt_number ||
+            receipt.number) === receiptNumber,
       );
 
       if (matchingReceipt) {
@@ -260,15 +264,24 @@ function formatReceiptSummary(receipt, includePayments, includeItems) {
   const toISOString = (timestamp) => {
     if (!timestamp) return null;
     if (timestamp.toDate) return timestamp.toDate().toISOString();
-    if (typeof timestamp === 'string') return timestamp;
+    if (typeof timestamp === "string") return timestamp;
     return new Date(timestamp).toISOString();
   };
 
   const baseReceipt = {
     id: receipt.id,
-    orderNumber: receipt.orderNumber || receipt.receiptNumber || receipt.receipt_number || receipt.number,
+    orderNumber:
+      receipt.orderNumber ||
+      receipt.receiptNumber ||
+      receipt.receipt_number ||
+      receipt.number,
     createdAt: toISOString(receipt.created_at || receipt.createdAt),
-    totalAmount: receipt.totalAmount || receipt.total_money || receipt.totalMoney || receipt.total || 0,
+    totalAmount:
+      receipt.totalAmount ||
+      receipt.total_money ||
+      receipt.totalMoney ||
+      receipt.total ||
+      0,
     customerId: receipt.customerId || receipt.customer_id || null,
     cashierId: receipt.cashierId || receipt.cashier_id || null,
     status: receipt.status || "completed",
@@ -277,19 +290,33 @@ function formatReceiptSummary(receipt, includePayments, includeItems) {
   if (includePayments) {
     baseReceipt.payment = {
       method: receipt.paymentMethod || receipt.payment_method || "cash",
-      amount: receipt.totalAmount || receipt.total_money || receipt.totalMoney || receipt.total || 0,
+      amount:
+        receipt.totalAmount ||
+        receipt.total_money ||
+        receipt.totalMoney ||
+        receipt.total ||
+        0,
       changeDue: receipt.change || 0,
-      transactionId: receipt.transactionId || ""
+      transactionId: receipt.transactionId || "",
     };
   }
 
   if (includeItems) {
-    baseReceipt.items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
+    baseReceipt.items = (
+      receipt.line_items ||
+      receipt.lineItems ||
+      receipt.items ||
+      []
+    ).map((item) => ({
       productId: item.item_id || item.productId || item.product_id,
       name: item.item_name || item.name || item.product_name,
       quantity: item.quantity || item.qty || 1,
       price: item.price || item.unit_price || 0,
-      total: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
+      total:
+        item.total_money ||
+        item.total ||
+        item.totalMoney ||
+        (item.quantity || 1) * (item.price || 0),
     }));
   }
 
@@ -305,7 +332,7 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
   const toISOString = (timestamp) => {
     if (!timestamp) return null;
     if (timestamp.toDate) return timestamp.toDate().toISOString();
-    if (typeof timestamp === 'string') return timestamp;
+    if (typeof timestamp === "string") return timestamp;
     return new Date(timestamp).toISOString();
   };
 
@@ -314,12 +341,21 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
     id: receipt.id,
     _firestoreId: receipt._firestoreId,
     _dataId: receipt._dataId,
-    orderNumber: receipt.orderNumber || receipt.receiptNumber || receipt.receipt_number || receipt.number,
+    orderNumber:
+      receipt.orderNumber ||
+      receipt.receiptNumber ||
+      receipt.receipt_number ||
+      receipt.number,
     deviceId: receipt.deviceId || receipt.device_id || null,
 
     // === TIMESTAMPS ===
     createdAt: toISOString(receipt.created_at || receipt.createdAt),
-    receiptDate: toISOString(receipt.receipt_date || receipt.receiptDate || receipt.created_at || receipt.createdAt),
+    receiptDate: toISOString(
+      receipt.receipt_date ||
+        receipt.receiptDate ||
+        receipt.created_at ||
+        receipt.createdAt,
+    ),
     updatedAt: toISOString(receipt.updated_at || receipt.updatedAt),
 
     // === CUSTOMER INFORMATION ===
@@ -334,20 +370,23 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
       email: receipt.customer?.email || null,
       phone: receipt.customer?.phone || null,
       isNoMember: receipt.customer?.isNoMember ?? !receipt.customerId,
-      currentPoints: receipt.customer?.currentPoints || 0
+      currentPoints: receipt.customer?.currentPoints || 0,
     },
 
     // === PRICING ===
     subtotal: receipt.subtotal || receipt.sub_total || 0,
-    discountAmount: receipt.total_discount || receipt.totalDiscount || receipt.discount || 0,
+    discountAmount:
+      receipt.total_discount || receipt.totalDiscount || receipt.discount || 0,
     taxAmount: receipt.total_tax || receipt.totalTax || receipt.tax || 0,
-    totalAmount: receipt.total_money || receipt.totalMoney || receipt.total || 0,
+    totalAmount:
+      receipt.total_money || receipt.totalMoney || receipt.total || 0,
     tip: receipt.tip || 0,
     surcharge: receipt.surcharge || 0,
 
     // === PAYMENT INFORMATION ===
     paymentMethod: receipt.paymentMethod || receipt.payment_method || "cash",
-    paymentTypeName: receipt.paymentTypeName || receipt.payment_type_name || null,
+    paymentTypeName:
+      receipt.paymentTypeName || receipt.payment_type_name || null,
     cashReceived: receipt.cashReceived || receipt.cash_received || null,
     change: receipt.change || 0,
 
@@ -358,12 +397,18 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
     pointsDeducted: receipt.points_deducted || receipt.pointsDeducted || 0,
     pointsBalance: receipt.points_balance || receipt.pointsBalance || 0,
     cashbackEarned: receipt.cashback_earned || receipt.cashbackEarned || 0,
-    cashbackBreakdown: receipt.cashback_breakdown || receipt.cashbackBreakdown || [],
+    cashbackBreakdown:
+      receipt.cashback_breakdown || receipt.cashbackBreakdown || [],
 
     // === EMPLOYEE INFORMATION ===
     cashierId: receipt.cashierId || receipt.cashier_id || null,
     cashierName: receipt.cashierName || receipt.cashier_name || "",
-    userId: receipt.userId || receipt.user_id || receipt.cashierId || receipt.cashier_id || null,
+    userId:
+      receipt.userId ||
+      receipt.user_id ||
+      receipt.cashierId ||
+      receipt.cashier_id ||
+      null,
 
     // === STATUS & METADATA ===
     status: receipt.status || "completed",
@@ -387,12 +432,17 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
       changeDue: receipt.change || 0,
       cashReceived: receipt.cashReceived || receipt.cash_received || null,
       transactionId: receipt.transactionId || "",
-      paidAt: toISOString(receipt.created_at || receipt.createdAt)
+      paidAt: toISOString(receipt.created_at || receipt.createdAt),
     };
   }
 
   if (includeItems) {
-    fullReceipt.items = (receipt.line_items || receipt.lineItems || receipt.items || []).map((item) => ({
+    fullReceipt.items = (
+      receipt.line_items ||
+      receipt.lineItems ||
+      receipt.items ||
+      []
+    ).map((item) => ({
       id: item.id || item.cart_id,
       productId: item.item_id || item.productId || item.product_id,
       variantId: item.variant_id || item.variantId || null,
@@ -401,12 +451,20 @@ function formatReceiptFull(receipt, includePayments, includeItems) {
       sku: item.sku || null,
       quantity: item.quantity || item.qty || 1,
       price: item.price || item.unit_price || 0,
-      grossTotal: item.gross_total_money || item.grossTotal || (item.quantity || 1) * (item.price || 0),
-      total: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
+      grossTotal:
+        item.gross_total_money ||
+        item.grossTotal ||
+        (item.quantity || 1) * (item.price || 0),
+      total:
+        item.total_money ||
+        item.total ||
+        item.totalMoney ||
+        (item.quantity || 1) * (item.price || 0),
       cost: item.cost || 0,
       discountAmount: item.total_discount || item.discount || 0,
       categoryId: item.categoryId || item.category_id || null,
-      categoryName: item.categoryName || item.category_name || item.category || null,
+      categoryName:
+        item.categoryName || item.category_name || item.category || null,
       rawData: item,
     }));
   }

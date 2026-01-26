@@ -59,7 +59,7 @@ export default function SyncDebugPage() {
     try {
       console.log("[DEBUG SYNC] Loading sync logs from Firebase...", {
         filter,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       let q = query(
@@ -80,20 +80,22 @@ export default function SyncDebugPage() {
 
       console.log("[DEBUG SYNC] Executing Firestore query...");
       const snapshot = await getDocs(q);
-      console.log("[DEBUG SYNC] Query complete. Documents found:", snapshot.size);
+      console.log(
+        "[DEBUG SYNC] Query complete. Documents found:",
+        snapshot.size,
+      );
 
       const logs = snapshot.docs.map((doc) => {
         const data = doc.data();
         console.log("[DEBUG SYNC] Processing document:", {
           id: doc.id,
           orderNumber: data.orderNumber,
-          status: data.status
+          status: data.status,
         });
         return {
           id: doc.id,
           ...data,
-          createdAt:
-            data.createdAt?.toDate?.() || new Date(data.attemptedAt),
+          createdAt: data.createdAt?.toDate?.() || new Date(data.attemptedAt),
         };
       });
 
@@ -117,14 +119,16 @@ export default function SyncDebugPage() {
 
       if (logs.length === 0) {
         console.warn("[DEBUG SYNC] ⚠️ No sync logs found in Firebase!");
-        toast.info("No sync logs found. Logs will appear here after orders are synced.");
+        toast.info(
+          "No sync logs found. Logs will appear here after orders are synced.",
+        );
       }
     } catch (error) {
       console.error("[DEBUG SYNC] ❌ Error loading sync logs:", error);
       console.error("[DEBUG SYNC] Error details:", {
         name: error.name,
         message: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
       toast.error(`Failed to load sync logs: ${error.message}`);
     } finally {

@@ -73,98 +73,97 @@ const getAuthToken = async () => {
 };
 
 /**
- * Transform POS receipt data to ISY API format
+ * Transform POS receipt data to ISY API V2 format (CamelCase)
  */
 const transformReceiptData = (receiptData, cashier) => {
   return {
-    // Order identification
-    orderNumber: receiptData.orderNumber,
-    receipt_number: receiptData.receipt_number || receiptData.orderNumber,
+    // === IDENTIFIERS ===
+    orderNumber: receiptData.orderNumber || receiptData.receipt_number || receiptData.number,
     deviceId: receiptData.deviceId,
 
-    // Timestamps
-    created_at: receiptData.created_at,
-    receipt_date: receiptData.receipt_date,
-    updated_at: receiptData.updated_at,
+    // === TIMESTAMPS ===
+    createdAt: receiptData.createdAt || receiptData.created_at,
+    receiptDate: receiptData.receiptDate || receiptData.receipt_date || receiptData.createdAt || receiptData.created_at,
+    updatedAt: receiptData.updatedAt || receiptData.updated_at,
 
-    // Customer information
-    customerId: receiptData.customerId,
-    customerName: receiptData.customerName,
+    // === CUSTOMER INFORMATION ===
+    customerId: receiptData.customerId || receiptData.customer_id || null,
+    customerName: receiptData.customerName || receiptData.customer_name || null,
     customer: receiptData.customer
       ? {
           id: receiptData.customer.id,
-          customerId: receiptData.customer.customerId,
+          customerId: receiptData.customer.customerId || receiptData.customer.customer_id,
           name: receiptData.customer.name,
-          lastName: receiptData.customer.lastName,
-          fullName: receiptData.customer.fullName,
-          email: receiptData.customer.email,
-          phone: receiptData.customer.phone,
-          isNoMember: receiptData.customer.isNoMember,
-          currentPoints: receiptData.customer.currentPoints,
+          lastName: receiptData.customer.lastName || null,
+          fullName: receiptData.customer.fullName || receiptData.customer.name,
+          email: receiptData.customer.email || null,
+          phone: receiptData.customer.phone || null,
+          isNoMember: receiptData.customer.isNoMember ?? !receiptData.customerId,
+          currentPoints: receiptData.customer.currentPoints || 0,
         }
       : null,
 
-    // Order items
-    line_items: (receiptData.line_items || []).map((item) => ({
-      id: item.id,
-      item_id: item.item_id || item.productId,
-      variant_id: item.variant_id || item.variantId,
-      item_name: item.item_name || item.name,
-      variant_name: item.variant_name,
-      sku: item.sku,
-      quantity: item.quantity,
-      price: item.price,
-      gross_total_money: item.gross_total_money || item.total,
-      total_money: item.total_money || item.total,
+    // === ORDER ITEMS ===
+    items: (receiptData.line_items || receiptData.lineItems || receiptData.items || []).map((item) => ({
+      productId: item.item_id || item.productId || item.product_id,
+      variantId: item.variant_id || item.variantId || null,
+      sku: item.sku || null,
+      name: item.item_name || item.name || item.product_name,
+      quantity: item.quantity || item.qty || 1,
+      price: item.price || item.unit_price || 0,
+      discount: item.total_discount || item.discount || 0,
+      tax: item.tax || 0,
+      total: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
       cost: item.cost || 0,
-      cost_total: item.cost_total || (item.cost || 0) * item.quantity,
-      total_discount: item.total_discount || 0,
-      categoryId: item.categoryId,
-      categoryName: item.categoryName,
     })),
 
-    // Pricing
-    subtotal: receiptData.subtotal,
-    total_discount: receiptData.total_discount,
-    total_tax: receiptData.total_tax || 0,
-    total_money: receiptData.total_money,
+    // === PRICING ===
+    subtotal: receiptData.subtotal || receiptData.sub_total || 0,
+    discountAmount: receiptData.total_discount || receiptData.totalDiscount || receiptData.discount || 0,
+    taxAmount: receiptData.total_tax || receiptData.totalTax || receiptData.tax || 0,
+    totalAmount: receiptData.totalAmount || receiptData.total_money || receiptData.totalMoney || receiptData.total || 0,
     tip: receiptData.tip || 0,
     surcharge: receiptData.surcharge || 0,
 
-    // Payment information
-    paymentMethod: receiptData.paymentMethod,
-    paymentTypeName: receiptData.paymentTypeName,
-    cashReceived: receiptData.cashReceived,
+    // === PAYMENT INFORMATION ===
+    paymentMethod: receiptData.paymentMethod || receiptData.payment_method || "cash",
+    paymentTypeName: receiptData.paymentTypeName || receiptData.payment_type_name || null,
+    cashReceived: receiptData.cashReceived || receiptData.cash_received || null,
     change: receiptData.change || 0,
-    payments: receiptData.payments || [],
+    payment: {
+      method: receiptData.paymentMethod || receiptData.payment_method || "cash",
+      amount: receiptData.totalAmount || receiptData.total_money || receiptData.totalMoney || receiptData.total || 0,
+      changeDue: receiptData.change || 0,
+      transactionId: receiptData.transactionId || "",
+    },
 
-    // Points & Cashback
-    points_used: receiptData.points_used || 0,
-    points_discount: receiptData.points_discount || 0,
-    points_earned: receiptData.points_earned || 0,
-    points_deducted: receiptData.points_deducted || 0,
-    points_balance: receiptData.points_balance || 0,
-    cashback_earned: receiptData.cashback_earned || 0,
-    cashback_breakdown: receiptData.cashback_breakdown || [],
+    // === POINTS & CASHBACK ===
+    pointsUsed: receiptData.points_used || receiptData.pointsUsed || 0,
+    pointsDiscount: receiptData.points_discount || receiptData.pointsDiscount || 0,
+    pointsEarned: receiptData.points_earned || receiptData.pointsEarned || 0,
+    pointsDeducted: receiptData.points_deducted || receiptData.pointsDeducted || 0,
+    pointsBalance: receiptData.points_balance || receiptData.pointsBalance || 0,
+    cashbackEarned: receiptData.cashback_earned || receiptData.cashbackEarned || 0,
+    cashbackBreakdown: receiptData.cashback_breakdown || receiptData.cashbackBreakdown || [],
 
-    // Employee information
-    cashierId: receiptData.cashierId || cashier?.id,
-    cashierName: receiptData.cashierName || cashier?.name,
-    userId: receiptData.userId || cashier?.id,
+    // === EMPLOYEE INFORMATION ===
+    cashierId: receiptData.cashierId || receiptData.cashier_id || cashier?.id || null,
+    cashierName: receiptData.cashierName || receiptData.cashier_name || cashier?.name || "",
+    userId: receiptData.userId || receiptData.user_id || receiptData.cashierId || receiptData.cashier_id || cashier?.id || null,
 
-    // Status & Metadata
+    // === STATUS & METADATA ===
     status: receiptData.status || "completed",
-    receipt_type: receiptData.receipt_type || "SALE",
+    receiptType: receiptData.receipt_type || receiptData.receiptType || "SALE",
     source: receiptData.source || "POS System",
-    cancelled_at: receiptData.cancelled_at,
+    cancelledAt: receiptData.cancelled_at || receiptData.cancelledAt || null,
+    fromThisDevice: receiptData.fromThisDevice ?? true,
 
-    // Discounts
+    // === DISCOUNTS ===
     discounts: receiptData.discounts || [],
 
-    // Sync status
+    // === SYNC STATUS ===
     syncStatus: "synced",
     syncedAt: new Date().toISOString(),
-    fromThisDevice: receiptData.fromThisDevice,
   };
 };
 
@@ -176,7 +175,7 @@ export const duplicateOrderToISY = async (receiptData, cashier) => {
     orderNumber: receiptData.orderNumber,
     receiptId: receiptData.id,
     cashier: cashier?.name,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 
   const startTime = Date.now();
@@ -298,7 +297,7 @@ const logSyncToFirebase = async (syncLog) => {
     console.log("[SYNC LOG] Attempting to log sync to Firebase:", {
       orderNumber: syncLog.orderNumber,
       status: syncLog.status,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const { addDoc, collection, serverTimestamp } =
@@ -325,7 +324,7 @@ const logSyncToFirebase = async (syncLog) => {
     console.log("[SYNC LOG] ✅ Successfully logged to Firebase:", {
       docId: docRef.id,
       orderNumber: syncLog.orderNumber,
-      status: syncLog.status
+      status: syncLog.status,
     });
 
     return docRef.id;
@@ -334,7 +333,7 @@ const logSyncToFirebase = async (syncLog) => {
     console.error("[SYNC LOG] Error details:", {
       name: error.name,
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
     return null;
   }
