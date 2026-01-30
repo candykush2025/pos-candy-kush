@@ -78,12 +78,19 @@ const getAuthToken = async () => {
 const transformReceiptData = (receiptData, cashier) => {
   return {
     // === IDENTIFIERS ===
-    orderNumber: receiptData.orderNumber || receiptData.receipt_number || receiptData.number,
+    orderNumber:
+      receiptData.orderNumber ||
+      receiptData.receipt_number ||
+      receiptData.number,
     deviceId: receiptData.deviceId,
 
     // === TIMESTAMPS ===
     createdAt: receiptData.createdAt || receiptData.created_at,
-    receiptDate: receiptData.receiptDate || receiptData.receipt_date || receiptData.createdAt || receiptData.created_at,
+    receiptDate:
+      receiptData.receiptDate ||
+      receiptData.receipt_date ||
+      receiptData.createdAt ||
+      receiptData.created_at,
     updatedAt: receiptData.updatedAt || receiptData.updated_at,
 
     // === CUSTOMER INFORMATION ===
@@ -92,19 +99,26 @@ const transformReceiptData = (receiptData, cashier) => {
     customer: receiptData.customer
       ? {
           id: receiptData.customer.id,
-          customerId: receiptData.customer.customerId || receiptData.customer.customer_id,
+          customerId:
+            receiptData.customer.customerId || receiptData.customer.customer_id,
           name: receiptData.customer.name,
           lastName: receiptData.customer.lastName || null,
           fullName: receiptData.customer.fullName || receiptData.customer.name,
           email: receiptData.customer.email || null,
           phone: receiptData.customer.phone || null,
-          isNoMember: receiptData.customer.isNoMember ?? !receiptData.customerId,
+          isNoMember:
+            receiptData.customer.isNoMember ?? !receiptData.customerId,
           currentPoints: receiptData.customer.currentPoints || 0,
         }
       : null,
 
     // === ORDER ITEMS ===
-    items: (receiptData.line_items || receiptData.lineItems || receiptData.items || []).map((item) => ({
+    items: (
+      receiptData.line_items ||
+      receiptData.lineItems ||
+      receiptData.items ||
+      []
+    ).map((item) => ({
       productId: item.item_id || item.productId || item.product_id,
       variantId: item.variant_id || item.variantId || null,
       sku: item.sku || null,
@@ -113,43 +127,79 @@ const transformReceiptData = (receiptData, cashier) => {
       price: item.price || item.unit_price || 0,
       discount: item.total_discount || item.discount || 0,
       tax: item.tax || 0,
-      total: item.total_money || item.total || item.totalMoney || (item.quantity || 1) * (item.price || 0),
+      total:
+        item.total_money ||
+        item.total ||
+        item.totalMoney ||
+        (item.quantity || 1) * (item.price || 0),
       cost: item.cost || 0,
     })),
 
     // === PRICING ===
     subtotal: receiptData.subtotal || receiptData.sub_total || 0,
-    discountAmount: receiptData.total_discount || receiptData.totalDiscount || receiptData.discount || 0,
-    taxAmount: receiptData.total_tax || receiptData.totalTax || receiptData.tax || 0,
-    totalAmount: receiptData.totalAmount || receiptData.total_money || receiptData.totalMoney || receiptData.total || 0,
+    discountAmount:
+      receiptData.total_discount ||
+      receiptData.totalDiscount ||
+      receiptData.discount ||
+      0,
+    taxAmount:
+      receiptData.total_tax || receiptData.totalTax || receiptData.tax || 0,
+    totalAmount:
+      receiptData.totalAmount ||
+      receiptData.total_money ||
+      receiptData.totalMoney ||
+      receiptData.total ||
+      0,
     tip: receiptData.tip || 0,
     surcharge: receiptData.surcharge || 0,
 
     // === PAYMENT INFORMATION ===
-    paymentMethod: receiptData.paymentMethod || receiptData.payment_method || "cash",
-    paymentTypeName: receiptData.paymentTypeName || receiptData.payment_type_name || null,
+    paymentMethod:
+      receiptData.paymentMethod || receiptData.payment_method || "cash",
+    paymentTypeName:
+      receiptData.paymentTypeName || receiptData.payment_type_name || null,
     cashReceived: receiptData.cashReceived || receiptData.cash_received || null,
     change: receiptData.change || 0,
     payment: {
       method: receiptData.paymentMethod || receiptData.payment_method || "cash",
-      amount: receiptData.totalAmount || receiptData.total_money || receiptData.totalMoney || receiptData.total || 0,
+      amount:
+        receiptData.totalAmount ||
+        receiptData.total_money ||
+        receiptData.totalMoney ||
+        receiptData.total ||
+        0,
       changeDue: receiptData.change || 0,
       transactionId: receiptData.transactionId || "",
     },
 
     // === POINTS & CASHBACK ===
     pointsUsed: receiptData.points_used || receiptData.pointsUsed || 0,
-    pointsDiscount: receiptData.points_discount || receiptData.pointsDiscount || 0,
+    pointsDiscount:
+      receiptData.points_discount || receiptData.pointsDiscount || 0,
     pointsEarned: receiptData.points_earned || receiptData.pointsEarned || 0,
-    pointsDeducted: receiptData.points_deducted || receiptData.pointsDeducted || 0,
+    pointsDeducted:
+      receiptData.points_deducted || receiptData.pointsDeducted || 0,
     pointsBalance: receiptData.points_balance || receiptData.pointsBalance || 0,
-    cashbackEarned: receiptData.cashback_earned || receiptData.cashbackEarned || 0,
-    cashbackBreakdown: receiptData.cashback_breakdown || receiptData.cashbackBreakdown || [],
+    cashbackEarned:
+      receiptData.cashback_earned || receiptData.cashbackEarned || 0,
+    cashbackBreakdown:
+      receiptData.cashback_breakdown || receiptData.cashbackBreakdown || [],
 
     // === EMPLOYEE INFORMATION ===
-    cashierId: receiptData.cashierId || receiptData.cashier_id || cashier?.id || null,
-    cashierName: receiptData.cashierName || receiptData.cashier_name || cashier?.name || "",
-    userId: receiptData.userId || receiptData.user_id || receiptData.cashierId || receiptData.cashier_id || cashier?.id || null,
+    cashierId:
+      receiptData.cashierId || receiptData.cashier_id || cashier?.id || null,
+    cashierName:
+      receiptData.cashierName ||
+      receiptData.cashier_name ||
+      cashier?.name ||
+      "",
+    userId:
+      receiptData.userId ||
+      receiptData.user_id ||
+      receiptData.cashierId ||
+      receiptData.cashier_id ||
+      cashier?.id ||
+      null,
 
     // === STATUS & METADATA ===
     status: receiptData.status || "completed",

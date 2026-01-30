@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# database extractor output
+/scripts/database-extractor/product-data-complete.json
+/scripts/database-extractor/pos-image/

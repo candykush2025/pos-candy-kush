@@ -19,6 +19,10 @@
  * - POST /api/mobile?action=create-expense-category - Create a new expense category
  * - POST /api/mobile?action=edit-expense-category - Update an expense category
  * - POST /api/mobile?action=delete-expense-category - Delete an expense category
+ * - POST /api/mobile?action=create-invoice - Create a new invoice (supports payment_method: cash, card, bank_transfer, check, other)
+ * - POST /api/mobile?action=edit-invoice - Edit an existing invoice (supports payment_method)
+ * - GET /api/mobile?action=get-invoices - Get all invoices (returns payment_method for each)
+ * - GET /api/mobile?action=get-invoice&id={invoiceId} - Get single invoice (returns payment_method)
  *
  * Authentication: All endpoints except login require JWT token in Authorization header
  * Filter Parameters (for all sales endpoints):
@@ -91,7 +95,7 @@ function getDateRange(period, startDate, endDate) {
     case "custom":
       if (!startDate || !endDate) {
         throw new Error(
-          "start_date and end_date are required for custom period"
+          "start_date and end_date are required for custom period",
         );
       }
       return {
@@ -210,20 +214,20 @@ async function getSalesSummary(receipts, dateRange) {
     const dayReceipts = dayData.receipts;
     const salesReceipts = dayReceipts.filter((r) => r.receiptType !== "REFUND");
     const refundReceipts = dayReceipts.filter(
-      (r) => r.receiptType === "REFUND"
+      (r) => r.receiptType === "REFUND",
     );
 
     const grossSales = salesReceipts.reduce(
       (sum, r) => sum + getReceiptTotal(r),
-      0
+      0,
     );
     const refunds = refundReceipts.reduce(
       (sum, r) => sum + Math.abs(getReceiptTotal(r)),
-      0
+      0,
     );
     const discounts = dayReceipts.reduce(
       (sum, r) => sum + getReceiptDiscount(r),
-      0
+      0,
     );
     const taxes = dayReceipts.reduce((sum, r) => sum + getReceiptTax(r), 0);
     const netSales = grossSales - refunds - discounts;
@@ -299,7 +303,7 @@ async function getSalesSummary(receipts, dateRange) {
             total: item.line_total || item.lineTotal || item.total_money || 0,
             cost: item.cost || item.item_cost || 0,
             discount: item.discount || item.line_discount || 0,
-          })
+          }),
         ),
       })),
     };
@@ -335,7 +339,7 @@ async function getSalesByItem(receipts, products, dateRange) {
   // Calculate for each day
   const dailyData = groupedByDay.map((dayData) => {
     const dayReceipts = dayData.receipts.filter(
-      (r) => r.receiptType !== "REFUND"
+      (r) => r.receiptType !== "REFUND",
     );
     const itemSalesMap = new Map();
 
@@ -400,14 +404,14 @@ async function getSalesByItem(receipts, products, dateRange) {
       discounts: Math.round(item.discounts * 100) / 100,
       gross_profit:
         Math.round(
-          (item.gross_sales - item.discounts - item.cost_of_goods) * 100
+          (item.gross_sales - item.discounts - item.cost_of_goods) * 100,
         ) / 100,
       profit_margin:
         item.gross_sales > 0
           ? Math.round(
               ((item.gross_sales - item.discounts - item.cost_of_goods) /
                 item.gross_sales) *
-                10000
+                10000,
             ) / 100
           : 0,
       average_price:
@@ -462,7 +466,7 @@ async function getSalesByCategory(receipts, products, categories, dateRange) {
   // Calculate for each day
   const dailyData = groupedByDay.map((dayData) => {
     const dayReceipts = dayData.receipts.filter(
-      (r) => r.receiptType !== "REFUND"
+      (r) => r.receiptType !== "REFUND",
     );
     const categorySalesMap = new Map();
 
@@ -519,7 +523,7 @@ async function getSalesByCategory(receipts, products, categories, dateRange) {
     // Calculate totals for percentages
     const totalRevenue = Array.from(categorySalesMap.values()).reduce(
       (sum, cat) => sum + cat.gross_sales,
-      0
+      0,
     );
 
     // Convert to array and add percentages
@@ -531,7 +535,7 @@ async function getSalesByCategory(receipts, products, categories, dateRange) {
       discounts: Math.round(cat.discounts * 100) / 100,
       gross_profit:
         Math.round(
-          (cat.gross_sales - cat.discounts - cat.cost_of_goods) * 100
+          (cat.gross_sales - cat.discounts - cat.cost_of_goods) * 100,
         ) / 100,
       percentage_of_sales:
         totalRevenue > 0
@@ -601,7 +605,7 @@ async function getSalesByEmployee(receipts, users, dateRange) {
       const discount = getReceiptDiscount(receipt);
       const itemCount = (receipt.lineItems || receipt.line_items || []).reduce(
         (sum, item) => sum + (item.quantity || 1),
-        0
+        0,
       );
 
       if (employeeSalesMap.has(employeeId)) {
@@ -688,7 +692,7 @@ async function getStock(products, categories = null) {
       if (resolvedCost === 0) {
         try {
           const history = await stockHistoryService.getProductHistory(
-            product.id
+            product.id,
           );
           // Find the most recent cost entry in stock history
           const costEntry = history
@@ -697,7 +701,7 @@ async function getStock(products, categories = null) {
 
           if (costEntry) {
             const costMatch = costEntry.notes.match(
-              /cost:\s*\$?(\d+(?:\.\d{2})?)/i
+              /cost:\s*\$?(\d+(?:\.\d{2})?)/i,
             );
             if (costMatch) {
               resolvedCost = parseFloat(costMatch[1]);
@@ -707,13 +711,13 @@ async function getStock(products, categories = null) {
           // If stock history lookup fails, keep cost as 0
           console.log(
             `Could not resolve cost for product ${product.id}:`,
-            error.message
+            error.message,
           );
         }
       }
 
       return { ...product, resolvedCost };
-    })
+    }),
   );
 
   const stockItems = productsWithResolvedCosts.map((product) => {
@@ -779,7 +783,7 @@ async function getStock(products, categories = null) {
       cost: product.resolvedCost || primaryVariant.cost || 0,
       stock_value:
         Math.round(
-          totalStock * (product.resolvedCost || primaryVariant.cost || 0) * 100
+          totalStock * (product.resolvedCost || primaryVariant.cost || 0) * 100,
         ) / 100,
       variants: variants.map((v) => ({
         variant_id: v.variant_id || v.id,
@@ -810,7 +814,7 @@ async function getStock(products, categories = null) {
     out_of_stock_count: stockItems.filter((s) => s.is_out_of_stock).length,
     low_stock_count: stockItems.filter((s) => s.is_low_stock).length,
     in_stock_count: stockItems.filter(
-      (s) => !s.is_out_of_stock && !s.is_low_stock
+      (s) => !s.is_out_of_stock && !s.is_low_stock,
     ).length,
     total_stock_value:
       Math.round(stockItems.reduce((sum, s) => sum + s.stock_value, 0) * 100) /
@@ -866,7 +870,7 @@ async function getStockHistory(limit = 1000) {
     const products = Object.values(productHistory).map((product) => ({
       ...product,
       movements: product.movements.sort(
-        (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
       ),
     }));
 
@@ -909,7 +913,7 @@ async function getItems() {
       "📂 First 5 categories:",
       Array.from(categoryMap.entries())
         .slice(0, 5)
-        .map(([id, info]) => `${id}: ${info.name}`)
+        .map(([id, info]) => `${id}: ${info.name}`),
     );
 
     // Transform products to include category information
@@ -943,14 +947,14 @@ async function getItems() {
             // Get recent stock movements to find last cost
             const stockHistory = await stockHistoryService.getProductHistory(
               product.id,
-              10
+              10,
             );
 
             // Look for the most recent movement with cost information in notes
             for (const movement of stockHistory) {
               if (movement.notes && movement.notes.includes("Cost:")) {
                 const costMatch = movement.notes.match(
-                  /Cost:\s*฿?(\d+(?:\.\d+)?)/
+                  /Cost:\s*฿?(\d+(?:\.\d+)?)/,
                 );
                 if (costMatch && costMatch[1]) {
                   const parsedCost = parseFloat(costMatch[1]);
@@ -965,7 +969,7 @@ async function getItems() {
             // If stock history lookup fails, keep cost as 0
             console.warn(
               `Could not get cost from stock history for product ${product.id}:`,
-              error
+              error,
             );
           }
         }
@@ -1060,7 +1064,7 @@ async function getItems() {
             ? product.updatedAt.toDate().toISOString()
             : product.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -1272,14 +1276,14 @@ async function createPurchase(purchaseData) {
     const validPaymentMethods = ["cash", "card", "bank_transfer", "other"];
     if (payment_method && !validPaymentMethods.includes(payment_method)) {
       throw new Error(
-        "Payment method must be 'cash', 'card', 'bank_transfer', or 'other'"
+        "Payment method must be 'cash', 'card', 'bank_transfer', or 'other'",
       );
     }
 
     // If payment status is unpaid, payment_due_date is required
     if (payment_status === "unpaid" && !payment_due_date) {
       throw new Error(
-        "Payment due date is required when payment status is unpaid"
+        "Payment due date is required when payment status is unpaid",
       );
     }
 
@@ -1376,14 +1380,14 @@ async function editPurchase(purchaseData) {
       !validPaymentMethods.includes(payment_method)
     ) {
       throw new Error(
-        "Payment method must be 'cash', 'card', 'bank_transfer', or 'other'"
+        "Payment method must be 'cash', 'card', 'bank_transfer', or 'other'",
       );
     }
 
     // If payment status is unpaid, payment_due_date is required
     if (payment_status === "unpaid" && !payment_due_date) {
       throw new Error(
-        "Payment due date is required when payment status is unpaid"
+        "Payment due date is required when payment status is unpaid",
       );
     }
 
@@ -1750,14 +1754,14 @@ async function getExpenses(filters = {}) {
     // Filter by status if provided
     if (filters.status) {
       filteredExpenses = filteredExpenses.filter(
-        (expense) => expense.status === filters.status
+        (expense) => expense.status === filters.status,
       );
     }
 
     // Filter by category if provided
     if (filters.category) {
       filteredExpenses = filteredExpenses.filter(
-        (expense) => expense.category === filters.category
+        (expense) => expense.category === filters.category,
       );
     }
 
@@ -1766,21 +1770,21 @@ async function getExpenses(filters = {}) {
       const userId = filters.employeeId || filters.userId;
       filteredExpenses = filteredExpenses.filter(
         (expense) =>
-          expense.employeeId === userId || expense.createdBy === userId
+          expense.employeeId === userId || expense.createdBy === userId,
       );
     }
 
     // NEW: Filter by source (POS or BackOffice)
     if (filters.source) {
       filteredExpenses = filteredExpenses.filter(
-        (expense) => expense.source === filters.source
+        (expense) => expense.source === filters.source,
       );
     }
 
     // NEW: Filter by currency
     if (filters.currency) {
       filteredExpenses = filteredExpenses.filter(
-        (expense) => (expense.currency || "USD") === filters.currency
+        (expense) => (expense.currency || "USD") === filters.currency,
       );
     }
 
@@ -1788,7 +1792,7 @@ async function getExpenses(filters = {}) {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filteredExpenses = filteredExpenses.filter((expense) =>
-        (expense.description || "").toLowerCase().includes(searchLower)
+        (expense.description || "").toLowerCase().includes(searchLower),
       );
     }
 
@@ -1813,14 +1817,15 @@ async function getExpenses(filters = {}) {
     // Calculate total (only approved expenses) - backward compatibility
     const totalExpense = formattedExpenses
       .filter(
-        (expense) => expense.status === "approved" && expense.currency === "USD"
+        (expense) =>
+          expense.status === "approved" && expense.currency === "USD",
       )
       .reduce((sum, expense) => sum + expense.amount, 0);
 
     // Calculate pending total - backward compatibility
     const pendingTotal = formattedExpenses
       .filter(
-        (expense) => expense.status === "pending" && expense.currency === "USD"
+        (expense) => expense.status === "pending" && expense.currency === "USD",
       )
       .reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -2311,7 +2316,7 @@ async function createExpenseCategory(categoryData) {
     // Check for duplicate category names
     const existingCategories = await expenseCategoriesService.getAll();
     const duplicate = existingCategories.find(
-      (cat) => cat.name.toLowerCase() === name.trim().toLowerCase()
+      (cat) => cat.name.toLowerCase() === name.trim().toLowerCase(),
     );
 
     if (duplicate) {
@@ -2351,9 +2356,8 @@ async function editExpenseCategory(categoryData) {
     }
 
     // Check if category exists
-    const existingCategory = await expenseCategoriesService.get(
-      categoryIdToUse
-    );
+    const existingCategory =
+      await expenseCategoriesService.get(categoryIdToUse);
     if (!existingCategory) {
       throw new Error("Category not found");
     }
@@ -2365,7 +2369,7 @@ async function editExpenseCategory(categoryData) {
         (cat) =>
           cat.id !== categoryIdToUse &&
           cat.name.toLowerCase() === name.trim().toLowerCase() &&
-          cat.active !== false // Only check active categories
+          cat.active !== false, // Only check active categories
       );
 
       if (duplicate) {
@@ -2698,6 +2702,7 @@ async function getInvoices() {
           ? invoice.createdAt.toDate().toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0]),
       due_date: invoice.due_date,
+      payment_method: invoice.payment_method || null,
       customer_name:
         invoice.customer_name || invoice.customerName || "Unknown Customer",
       items: (invoice.items || []).map((item) => ({
@@ -2711,7 +2716,7 @@ async function getInvoices() {
         invoice.total ||
         (invoice.items || []).reduce(
           (sum, item) => sum + (item.total || item.quantity * item.price || 0),
-          0
+          0,
         ),
       status: invoice.status || "pending", // Add status field
       payment_status: invoice.payment_status || invoice.status || "pending", // Add payment_status
@@ -2752,6 +2757,7 @@ async function getInvoiceById(invoiceId) {
           ? invoice.createdAt.toDate().toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0]),
       due_date: invoice.due_date,
+      payment_method: invoice.payment_method || null,
       customer_name:
         invoice.customer_name || invoice.customerName || "Unknown Customer",
       items: (invoice.items || []).map((item) => ({
@@ -2765,7 +2771,7 @@ async function getInvoiceById(invoiceId) {
         invoice.total ||
         (invoice.items || []).reduce(
           (sum, item) => sum + (item.total || item.quantity * item.price || 0),
-          0
+          0,
         ),
       status: invoice.status || "pending", // Add status field
       payment_status: invoice.payment_status || invoice.status || "pending", // Add payment_status
@@ -2824,7 +2830,8 @@ async function generateInvoiceNumber() {
 async function createInvoice(invoiceData) {
   try {
     // Validate required fields
-    const { customer_name, date, due_date, items, total } = invoiceData;
+    const { customer_name, date, due_date, payment_method, items, total } =
+      invoiceData;
 
     if (!customer_name || !customer_name.trim()) {
       throw new Error("Customer name is required");
@@ -2840,6 +2847,22 @@ async function createInvoice(invoiceData) {
 
     if (typeof total !== "number" || total < 0) {
       throw new Error("Total must be a non-negative number");
+    }
+
+    // Validate payment_method if provided (optional field)
+    const validPaymentMethods = [
+      "cash",
+      "card",
+      "bank_transfer",
+      "check",
+      "other",
+    ];
+    if (payment_method !== undefined && payment_method !== null) {
+      if (!validPaymentMethods.includes(payment_method)) {
+        throw new Error(
+          `Payment method must be one of: ${validPaymentMethods.join(", ")}`,
+        );
+      }
     }
 
     // Validate date format and ensure it's not in the future
@@ -2909,6 +2932,7 @@ async function createInvoice(invoiceData) {
       customer_name: customer_name.trim(),
       date: date,
       due_date: validatedDueDate,
+      payment_method: payment_method || null,
       items: items.map((item) => ({
         product_id: item.product_id,
         product_name: item.product_name,
@@ -2929,6 +2953,7 @@ async function createInvoice(invoiceData) {
       customer_name: customer_name.trim(),
       date: date,
       due_date: validatedDueDate,
+      payment_method: payment_method || null,
       items: invoiceToCreate.items,
       total: total,
       created_at: new Date().toISOString(),
@@ -2954,7 +2979,8 @@ async function editInvoice(invoiceData) {
       throw new Error("Invoice not found");
     }
 
-    const { customer_name, date, due_date, items, total } = invoiceData;
+    const { customer_name, date, due_date, payment_method, items, total } =
+      invoiceData;
 
     // Validate required fields
     if (!customer_name || !customer_name.trim()) {
@@ -2971,6 +2997,22 @@ async function editInvoice(invoiceData) {
 
     if (typeof total !== "number" || total < 0) {
       throw new Error("Total must be a non-negative number");
+    }
+
+    // Validate payment_method if provided (optional field)
+    const validPaymentMethods = [
+      "cash",
+      "card",
+      "bank_transfer",
+      "check",
+      "other",
+    ];
+    if (payment_method !== undefined && payment_method !== null) {
+      if (!validPaymentMethods.includes(payment_method)) {
+        throw new Error(
+          `Payment method must be one of: ${validPaymentMethods.join(", ")}`,
+        );
+      }
     }
 
     // Validate date format and ensure it's not in the future
@@ -3033,6 +3075,7 @@ async function editInvoice(invoiceData) {
       customer_name: customer_name.trim(),
       date: date,
       due_date: validatedDueDate,
+      payment_method: payment_method || null,
       items: items.map((item) => ({
         product_id: item.product_id,
         product_name: item.product_name,
@@ -3056,6 +3099,7 @@ async function editInvoice(invoiceData) {
       customer_name: updatedInvoice.customer_name,
       date: updatedInvoice.date,
       due_date: updatedInvoice.due_date,
+      payment_method: updatedInvoice.payment_method || null,
       items: updatedInvoice.items,
       total: updatedInvoice.total,
       created_at: updatedInvoice.createdAt?.toDate?.()
@@ -3086,7 +3130,7 @@ async function updateInvoiceStatus(invoiceId, status) {
     const validStatuses = ["pending", "paid", "cancelled"];
     if (!validStatuses.includes(status.toLowerCase())) {
       throw new Error(
-        `Invalid status. Must be one of: ${validStatuses.join(", ")}`
+        `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
       );
     }
 
@@ -3181,7 +3225,7 @@ async function handleLogin(email, password) {
     const userCredential = await signInWithEmailAndPassword(
       auth,
       email,
-      password
+      password,
     );
     const firebaseUser = userCredential.user;
 
@@ -3231,7 +3275,7 @@ export async function GET(request) {
     if (action === "login") {
       return Response.json(
         { success: false, error: "Login requires POST method" },
-        { status: 405, headers: corsHeaders }
+        { status: 405, headers: corsHeaders },
       );
     }
 
@@ -3240,7 +3284,7 @@ export async function GET(request) {
     if (auth.error) {
       return Response.json(
         { success: false, error: auth.error },
-        { status: 401, headers: corsHeaders }
+        { status: 401, headers: corsHeaders },
       );
     }
 
@@ -3304,7 +3348,7 @@ export async function GET(request) {
         {
           status: 400,
           headers: corsHeaders,
-        }
+        },
       );
     }
 
@@ -3321,7 +3365,7 @@ export async function GET(request) {
         {
           status: 400,
           headers: corsHeaders,
-        }
+        },
       );
     }
 
@@ -3342,7 +3386,7 @@ export async function GET(request) {
           generated_at: new Date().toISOString(),
           data: stockData,
         },
-        { headers: corsHeaders }
+        { headers: corsHeaders },
       );
     }
 
@@ -3359,7 +3403,7 @@ export async function GET(request) {
           generated_at: new Date().toISOString(),
           data: stockHistoryData,
         },
-        { headers: corsHeaders }
+        { headers: corsHeaders },
       );
     }
 
@@ -3375,7 +3419,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: itemsData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3383,7 +3427,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve items",
           },
-          { status: 500, headers: corsHeaders }
+          { status: 500, headers: corsHeaders },
         );
       }
     }
@@ -3400,7 +3444,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: categoriesData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3408,7 +3452,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve categories",
           },
-          { status: 500, headers: corsHeaders }
+          { status: 500, headers: corsHeaders },
         );
       }
     }
@@ -3425,7 +3469,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: invoicesData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3433,7 +3477,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve invoices",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       }
     }
@@ -3447,7 +3491,7 @@ export async function GET(request) {
             success: false,
             error: "Invoice ID is required for get-invoice action",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
 
@@ -3461,7 +3505,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: invoiceData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3469,7 +3513,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve invoice",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       }
     }
@@ -3484,7 +3528,7 @@ export async function GET(request) {
               success: false,
               error: "Purchase ID is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -3497,7 +3541,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: purchaseData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3505,7 +3549,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve purchase",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       }
     }
@@ -3534,7 +3578,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: expensesData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3542,7 +3586,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve expenses",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       }
     }
@@ -3557,7 +3601,7 @@ export async function GET(request) {
               success: false,
               error: "Expense ID is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -3570,7 +3614,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: expenseData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3578,7 +3622,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve expense",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       }
     }
@@ -3595,7 +3639,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: categories,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3603,7 +3647,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve expense categories",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       }
     }
@@ -3618,7 +3662,7 @@ export async function GET(request) {
               success: false,
               error: "Category ID is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -3631,7 +3675,7 @@ export async function GET(request) {
             generated_at: new Date().toISOString(),
             data: categoryData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         return Response.json(
@@ -3639,7 +3683,7 @@ export async function GET(request) {
             success: false,
             error: error.message || "Failed to retrieve expense category",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       }
     }
@@ -3656,7 +3700,7 @@ export async function GET(request) {
     const filteredReceipts = filterReceipts(
       receipts || [],
       dateRange,
-      employeeIds
+      employeeIds,
     );
 
     let data;
@@ -3670,7 +3714,7 @@ export async function GET(request) {
         data = await getSalesByItem(
           filteredReceipts,
           products || [],
-          dateRange
+          dateRange,
         );
         break;
 
@@ -3679,7 +3723,7 @@ export async function GET(request) {
           filteredReceipts,
           products || [],
           categories || [],
-          dateRange
+          dateRange,
         );
         break;
 
@@ -3687,7 +3731,7 @@ export async function GET(request) {
         data = await getSalesByEmployee(
           filteredReceipts,
           users || [],
-          dateRange
+          dateRange,
         );
         break;
 
@@ -3700,7 +3744,7 @@ export async function GET(request) {
           {
             status: 400,
             headers: corsHeaders,
-          }
+          },
         );
     }
 
@@ -3719,7 +3763,7 @@ export async function GET(request) {
         generated_at: new Date().toISOString(),
         data,
       },
-      { headers: corsHeaders }
+      { headers: corsHeaders },
     );
   } catch (error) {
     console.error("Mobile API Error:", error);
@@ -3731,7 +3775,7 @@ export async function GET(request) {
       {
         status: 500,
         headers: corsHeaders,
-      }
+      },
     );
   }
 }
@@ -3756,7 +3800,7 @@ export async function POST(request) {
           success: false,
           error: "Invalid JSON in request body",
         },
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers: corsHeaders },
       );
     }
 
@@ -3767,7 +3811,7 @@ export async function POST(request) {
       if (!email || !password) {
         return Response.json(
           { success: false, error: "Email and password are required" },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
 
@@ -3788,7 +3832,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -3802,7 +3846,7 @@ export async function POST(request) {
             error: "productId and cost are required",
             required_fields: ["productId", "cost"],
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
 
@@ -3811,7 +3855,7 @@ export async function POST(request) {
       if (isNaN(numericCost) || numericCost < 0) {
         return Response.json(
           { success: false, error: "Cost must be a non-negative number" },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
 
@@ -3830,7 +3874,7 @@ export async function POST(request) {
             new_cost: numericCost,
             updated_at: new Date().toISOString(),
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error updating product cost:", error);
@@ -3840,7 +3884,7 @@ export async function POST(request) {
             error: "Failed to update product cost",
             details: error.message,
           },
-          { status: 500, headers: corsHeaders }
+          { status: 500, headers: corsHeaders },
         );
       }
     }
@@ -3852,7 +3896,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -3867,7 +3911,7 @@ export async function POST(request) {
               invoice: createdInvoice,
             },
           },
-          { status: 201, headers: corsHeaders }
+          { status: 201, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error creating invoice:", error);
@@ -3876,7 +3920,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to create invoice",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -3888,7 +3932,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -3903,7 +3947,7 @@ export async function POST(request) {
               invoice: editedInvoice,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error editing invoice:", error);
@@ -3912,7 +3956,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to edit invoice",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -3924,7 +3968,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -3937,7 +3981,7 @@ export async function POST(request) {
               success: false,
               error: "invoice_id is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -3947,7 +3991,7 @@ export async function POST(request) {
               success: false,
               error: "status is required (pending, paid, or cancelled)",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -3961,7 +4005,7 @@ export async function POST(request) {
               invoice: updatedInvoice,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error updating invoice status:", error);
@@ -3970,7 +4014,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to update invoice status",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -3982,7 +4026,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -3997,7 +4041,7 @@ export async function POST(request) {
               purchase: newPurchase,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error creating purchase:", error);
@@ -4006,7 +4050,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to create purchase",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4018,7 +4062,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4033,7 +4077,7 @@ export async function POST(request) {
               purchase: editedPurchase,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error editing purchase:", error);
@@ -4042,7 +4086,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to edit purchase",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4054,7 +4098,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4068,7 +4112,7 @@ export async function POST(request) {
             action: "delete-purchase",
             message: result.message,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error deleting purchase:", error);
@@ -4077,7 +4121,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to delete purchase",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4089,7 +4133,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4105,7 +4149,7 @@ export async function POST(request) {
               purchase: completedPurchase,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error completing purchase:", error);
@@ -4135,7 +4179,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4148,7 +4192,7 @@ export async function POST(request) {
             action: "get-suppliers",
             data: suppliers,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error fetching suppliers:", error);
@@ -4176,7 +4220,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4192,7 +4236,7 @@ export async function POST(request) {
               supplier: supplier,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error fetching supplier:", error);
@@ -4220,7 +4264,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4235,7 +4279,7 @@ export async function POST(request) {
               supplier: newSupplier,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error creating supplier:", error);
@@ -4263,7 +4307,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4278,7 +4322,7 @@ export async function POST(request) {
               supplier: updatedSupplier,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error editing supplier:", error);
@@ -4306,7 +4350,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4320,7 +4364,7 @@ export async function POST(request) {
             action: "delete-supplier",
             data: result,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error deleting supplier:", error);
@@ -4348,7 +4392,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4368,7 +4412,7 @@ export async function POST(request) {
             generated_at: new Date().toISOString(),
             data: purchasesData,
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error fetching purchases:", error);
@@ -4396,7 +4440,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4411,7 +4455,7 @@ export async function POST(request) {
               expense: newExpense,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error creating expense:", error);
@@ -4420,7 +4464,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to create expense",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4432,7 +4476,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4447,7 +4491,7 @@ export async function POST(request) {
               expense: editedExpense,
             },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error editing expense:", error);
@@ -4456,7 +4500,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to edit expense",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4468,7 +4512,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4478,7 +4522,7 @@ export async function POST(request) {
         if (!deletedBy) {
           return Response.json(
             { success: false, error: "deletedBy is required" },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -4490,7 +4534,7 @@ export async function POST(request) {
             action: "delete-expense",
             message: result.message,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error deleting expense:", error);
@@ -4499,7 +4543,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to delete expense",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4511,7 +4555,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4533,7 +4577,7 @@ export async function POST(request) {
             },
             message: "Expense approved successfully",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error approving expense:", error);
@@ -4542,7 +4586,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to approve expense",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4554,7 +4598,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4576,7 +4620,7 @@ export async function POST(request) {
             },
             message: "Expense denied successfully",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error denying expense:", error);
@@ -4585,7 +4629,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to deny expense",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4602,7 +4646,7 @@ export async function POST(request) {
             generated_at: new Date().toISOString(),
             data: categories,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error getting expense categories:", error);
@@ -4611,7 +4655,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to retrieve expense categories",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4628,7 +4672,7 @@ export async function POST(request) {
               success: false,
               error: "Category ID is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -4641,7 +4685,7 @@ export async function POST(request) {
             generated_at: new Date().toISOString(),
             data: categoryData,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error getting expense category:", error);
@@ -4650,7 +4694,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to retrieve expense category",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4662,7 +4706,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4677,7 +4721,7 @@ export async function POST(request) {
             message: "Expense category created successfully",
             data: result,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error creating expense category:", error);
@@ -4686,7 +4730,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to create expense category",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4698,7 +4742,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4716,7 +4760,7 @@ export async function POST(request) {
             message: "Expense category updated successfully",
             data: result,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error editing expense category:", error);
@@ -4725,7 +4769,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to edit expense category",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4737,7 +4781,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4748,13 +4792,13 @@ export async function POST(request) {
         if (!categoryIdToUse) {
           return Response.json(
             { success: false, error: "Category ID is required" },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
         const result = await deleteExpenseCategory(
           categoryIdToUse,
-          deletedBy || auth.user?.email || "system"
+          deletedBy || auth.user?.email || "system",
         );
 
         return Response.json(
@@ -4763,7 +4807,7 @@ export async function POST(request) {
             action: "delete-expense-category",
             message: result.message,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error deleting expense category:", error);
@@ -4772,7 +4816,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to delete expense category",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4784,7 +4828,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4795,7 +4839,7 @@ export async function POST(request) {
         if (!categoryIdToUse) {
           return Response.json(
             { success: false, error: "Category ID is required" },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -4807,7 +4851,7 @@ export async function POST(request) {
             action: "get-expense-category-history",
             data: result,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error getting expense category history:", error);
@@ -4816,7 +4860,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to get expense category history",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4828,7 +4872,7 @@ export async function POST(request) {
       if (auth.error) {
         return Response.json(
           { success: false, error: auth.error },
-          { status: 401, headers: corsHeaders }
+          { status: 401, headers: corsHeaders },
         );
       }
 
@@ -4839,13 +4883,13 @@ export async function POST(request) {
         if (!categoryIdToUse) {
           return Response.json(
             { success: false, error: "Category ID is required" },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
         const restoredCategory = await restoreExpenseCategory(
           categoryIdToUse,
-          restoredBy || auth.user?.email || "system"
+          restoredBy || auth.user?.email || "system",
         );
 
         return Response.json(
@@ -4854,7 +4898,7 @@ export async function POST(request) {
             action: "restore-expense-category",
             data: { category: restoredCategory },
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error restoring expense category:", error);
@@ -4863,7 +4907,7 @@ export async function POST(request) {
             success: false,
             error: error.message || "Failed to restore expense category",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -4902,7 +4946,7 @@ export async function POST(request) {
           "restore-expense-category",
         ],
       },
-      { status: 400, headers: corsHeaders }
+      { status: 400, headers: corsHeaders },
     );
   } catch (error) {
     console.error("POST error:", error);
@@ -4914,7 +4958,7 @@ export async function POST(request) {
       {
         status: 500,
         headers: corsHeaders,
-      }
+      },
     );
   }
 }
@@ -4939,7 +4983,7 @@ export async function DELETE(request) {
             "delete-expense",
           ],
         },
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers: corsHeaders },
       );
     }
 
@@ -4948,7 +4992,7 @@ export async function DELETE(request) {
     if (auth.error) {
       return Response.json(
         { success: false, error: auth.error },
-        { status: 401, headers: corsHeaders }
+        { status: 401, headers: corsHeaders },
       );
     }
 
@@ -4962,7 +5006,7 @@ export async function DELETE(request) {
               success: false,
               error: "Invoice ID is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -4974,7 +5018,7 @@ export async function DELETE(request) {
               success: false,
               error: "Invoice not found",
             },
-            { status: 404, headers: corsHeaders }
+            { status: 404, headers: corsHeaders },
           );
         }
 
@@ -4987,7 +5031,7 @@ export async function DELETE(request) {
             action: "delete-invoice",
             message: "Invoice deleted successfully",
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error deleting invoice:", error);
@@ -4996,7 +5040,7 @@ export async function DELETE(request) {
             success: false,
             error: error.message || "Failed to delete invoice",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -5011,7 +5055,7 @@ export async function DELETE(request) {
               success: false,
               error: "Purchase ID is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -5023,7 +5067,7 @@ export async function DELETE(request) {
             action: "delete-purchase",
             message: result.message,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error deleting purchase:", error);
@@ -5032,7 +5076,7 @@ export async function DELETE(request) {
             success: false,
             error: error.message || "Failed to delete purchase",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -5047,7 +5091,7 @@ export async function DELETE(request) {
               success: false,
               error: "Expense ID is required",
             },
-            { status: 400, headers: corsHeaders }
+            { status: 400, headers: corsHeaders },
           );
         }
 
@@ -5059,7 +5103,7 @@ export async function DELETE(request) {
             action: "delete-expense",
             message: result.message,
           },
-          { status: 200, headers: corsHeaders }
+          { status: 200, headers: corsHeaders },
         );
       } catch (error) {
         console.error("Error deleting expense:", error);
@@ -5068,7 +5112,7 @@ export async function DELETE(request) {
             success: false,
             error: error.message || "Failed to delete expense",
           },
-          { status: 400, headers: corsHeaders }
+          { status: 400, headers: corsHeaders },
         );
       }
     }
@@ -5084,7 +5128,7 @@ export async function DELETE(request) {
           "delete-expense",
         ],
       },
-      { status: 400, headers: corsHeaders }
+      { status: 400, headers: corsHeaders },
     );
   } catch (error) {
     console.error("DELETE error:", error);
@@ -5096,7 +5140,7 @@ export async function DELETE(request) {
       {
         status: 500,
         headers: corsHeaders,
-      }
+      },
     );
   }
 }
