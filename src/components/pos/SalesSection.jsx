@@ -1721,17 +1721,39 @@ export default function SalesSection({ cashier }) {
       return;
     }
 
-    // Find cart item by productId (cart item.id !== product.id)
-    const cartItem = items.find(
-      (it) => it.productId === selectedWeightProduct.id,
+    console.log("🔍 DEBUG selectedWeightProduct:", selectedWeightProduct);
+    console.log("🔍 selectedWeightProduct.id:", selectedWeightProduct.id);
+    console.log(
+      "🔍 selectedWeightProduct.productId:",
+      selectedWeightProduct.productId,
     );
 
-    if (cartItem) {
-      // Update the cart item using the cart item's id
-      updateQuantity(cartItem.id, weight);
+    // Check if selectedWeightProduct is a cart item or a product
+    // Cart items: id is nanoid (random string), productId is the Firestore document ID
+    // Products: id is Firestore document ID, productId is the SKU (like "PRD-0041")
+    // So: Cart item has productId !== id and productId looks like a Firestore ID
+    //     Product has productId !== id but productId looks like "PRD-XXXX"
+    const isEditingCartItem =
+      selectedWeightProduct.productId !== undefined &&
+      selectedWeightProduct.productId === selectedWeightProduct.id;
+
+    // Better check: Cart items will have 'total' and 'discount' fields that products don't have
+    const isCartItem =
+      selectedWeightProduct.total !== undefined &&
+      selectedWeightProduct.discount !== undefined;
+
+    console.log("🔍 isCartItem (by total/discount check):", isCartItem);
+
+    if (isCartItem) {
+      // This is an existing cart item being EDITED via the Edit button
+      // Update using the cart item's id directly
+      console.log("✏️ EDITING existing cart item:", selectedWeightProduct.id);
+      updateQuantity(selectedWeightProduct.id, weight);
       toast.success(`Updated to ${weight} kg`);
     } else {
-      // Add to cart with weight as quantity
+      // This is a product being ADDED from the product grid
+      // Always add as new item (allow multiple entries with different weights)
+      console.log("➕ ADDING new item to cart");
       addItem(selectedWeightProduct, weight);
       toast.success(`Added ${weight} kg to cart`);
     }

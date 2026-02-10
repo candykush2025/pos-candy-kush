@@ -13,7 +13,16 @@ export const useCartStore = create((set, get) => ({
   // Add item to cart
   addItem: (product, quantity = 1) => {
     const { items, customer } = get();
-    const existingItem = items.find((item) => item.productId === product.id);
+
+    // Check if product is sold by weight
+    const isSoldByWeight =
+      product.soldBy === "weight" || product.soldByWeight === true;
+
+    // For weight products, ALWAYS add as new item (allow multiple entries with different weights)
+    // For regular products, check if it already exists and update quantity
+    const existingItem = isSoldByWeight
+      ? null
+      : items.find((item) => item.productId === product.id);
 
     // Determine price to use (member price if available and customer is attached)
     const hasCustomer = !!customer;
@@ -22,8 +31,8 @@ export const useCartStore = create((set, get) => ({
     const usePrice =
       hasCustomer && hasMemberPrice ? product.memberPrice : product.price;
 
-    if (existingItem) {
-      // Update quantity if item exists
+    if (existingItem && !isSoldByWeight) {
+      // Update quantity if item exists (only for non-weight items)
       set({
         items: items.map((item) =>
           item.productId === product.id

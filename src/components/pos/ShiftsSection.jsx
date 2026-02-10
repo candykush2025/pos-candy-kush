@@ -157,19 +157,39 @@ export default function ShiftsSection({ cashier }) {
         return;
       }
 
+      console.log("🔄 RECALCULATING SHIFT BEFORE CLOSING...");
+
+      // FIRST: Recalculate the shift to get accurate totals (including payment changes)
+      const recalculatedShift = await shiftsService.recalculateShift(
+        selectedShift.id,
+      );
+
+      console.log("✅ Recalculation complete:", {
+        expectedCash: recalculatedShift.expectedCash,
+        totalCashSales: recalculatedShift.totalCashSales,
+        totalCardSales: recalculatedShift.totalCardSales,
+      });
+
+      // NOW: Use the recalculated expectedCash for closing
       const actualCash = parseFloat(closingCash);
       const expectedCash =
-        selectedShift.expectedCash || selectedShift.startingCash || 0;
+        recalculatedShift.expectedCash || recalculatedShift.startingCash || 0;
       const variance = actualCash - expectedCash;
+
+      console.log("💰 CLOSING CALCULATION:", {
+        actualCash,
+        expectedCash,
+        variance,
+      });
 
       await shiftsService.endShift(selectedShift.id, {
         actualCash: actualCash,
         notes: closeNotes,
       });
 
-      // Store closed shift data for the summary modal
+      // Store closed shift data for the summary modal (use recalculated data)
       setClosedShiftData({
-        ...selectedShift,
+        ...recalculatedShift,
         actualCash: actualCash,
         endingCash: actualCash,
         variance: variance,
@@ -560,6 +580,9 @@ export default function ShiftsSection({ cashier }) {
                             <h3 className="font-semibold text-lg">
                               {isActive ? "Current Shift" : "Shift Completed"}
                             </h3>
+                            <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                              <span>ID: {shift.id}</span>
+                            </div>
                             <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
                               <Calendar className="h-3.5 w-3.5" />
                               <span>{formatDateTime(shift.startTime)}</span>
