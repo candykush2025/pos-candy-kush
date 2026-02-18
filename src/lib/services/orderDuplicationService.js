@@ -5,10 +5,12 @@
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_ISY_API_URL || "https://api.isy.software";
-const API_ENDPOINT = "/pos/v1/orders";
+const API_ENDPOINT = "/pos/v1/receipts"; // POS website uses /pos/v1/receipts (NOT /pos/v1/orders which is Android)
+const API_LOGIN_ENDPOINT = "/api/v1/auth/login"; // Unified login endpoint for all apps
 const API_USERNAME =
   process.env.NEXT_PUBLIC_ISY_API_USERNAME || "candykush_cashier";
 const API_PASSWORD = process.env.NEXT_PUBLIC_ISY_API_PASSWORD || "admin123";
+const ISY_ENABLED = process.env.NEXT_PUBLIC_ISY_API_ENABLED === "true";
 
 // Token management
 let cachedToken = null;
@@ -19,7 +21,7 @@ let tokenExpiry = null;
  */
 const loginToAPI = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/pos/v1/auth/login`, {
+    const response = await fetch(`${API_BASE_URL}${API_LOGIN_ENDPOINT}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -27,6 +29,7 @@ const loginToAPI = async () => {
       body: JSON.stringify({
         username: API_USERNAME,
         password: API_PASSWORD,
+        type: "pos",
       }),
     });
 
@@ -40,17 +43,23 @@ const loginToAPI = async () => {
     }
 
     const data = await response.json();
-    const token = data.token || data.access_token || data.data?.token;
+
+    // API response format: { success: true, data: { token: "...", user: {...} } }
+    const token = data.data?.token;
 
     if (!token) {
-      throw new Error("No token received from login response");
+      throw new Error(
+        "No token received from login response. Expected response.data.token",
+      );
     }
 
-    // Cache token (assume 1 hour expiry if not specified)
+    // Cache token - POS type gets 30 days expiry, but refresh at 23 hours to be safe
     cachedToken = token;
-    tokenExpiry = Date.now() + (data.expiresIn || 3600) * 1000;
+    tokenExpiry = Date.now() + 23 * 60 * 60 * 1000; // 23 hours
 
-    console.log("✅ Successfully logged in to ISY API");
+    console.log(
+      "✅ Successfully logged in to ISY API (unified endpoint, type: pos)",
+    );
 
     return token;
   } catch (error) {
@@ -62,7 +71,7 @@ const loginToAPI = async () => {
 /**
  * Get valid JWT token (from cache or new login)
  */
-const getAuthToken = async () => {
+export const getAuthToken = async () => {
   // Check if we have a valid cached token
   if (cachedToken && tokenExpiry && Date.now() < tokenExpiry - 60000) {
     return cachedToken;
@@ -75,7 +84,28 @@ const getAuthToken = async () => {
 /**
  * Transform POS receipt data to ISY API V2 format (CamelCase)
  */
-const transformReceiptData = (receiptData, cashier) => {
+export const transformReceiptData = (receiptData, cashier) => {
+  // Helper: normalize various date representations (Firestore Timestamp, Date, ISO string, epoch)
+  const normalizeDate = (d) => {
+    if (!d && d !== 0) return undefined;
+    // Firestore Timestamp
+    if (typeof d === "object" && typeof d.toDate === "function") {
+      try {
+        return d.toDate().toISOString();
+      } catch (e) {
+        return undefined;
+      }
+    }
+
+    if (d instanceof Date) return d.toISOString();
+    if (typeof d === "number") return new Date(d).toISOString();
+    if (typeof d === "string") {
+      const parsed = new Date(d);
+      return isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+    }
+
+    return undefined;
+  };
   return {
     // === IDENTIFIERS ===
     orderNumber:
@@ -85,13 +115,40 @@ const transformReceiptData = (receiptData, cashier) => {
     deviceId: receiptData.deviceId,
 
     // === TIMESTAMPS ===
-    createdAt: receiptData.createdAt || receiptData.created_at,
+    createdAt:
+      normalizeDate(receiptData.createdAt) ||
+      normalizeDate(receiptData.created_at),
+    // IMPORTANT: use the actual receipt date fields only — do NOT default to "now".
+    // Prefer explicit receiptDate / receipt_date, then fall back to createdAt / created_at,
+    // then try to parse from orderNumber (e.g. "O-260210-1856-987" → 2026-02-10).
     receiptDate:
-      receiptData.receiptDate ||
-      receiptData.receipt_date ||
-      receiptData.createdAt ||
-      receiptData.created_at,
-    updatedAt: receiptData.updatedAt || receiptData.updated_at,
+      normalizeDate(receiptData.receiptDate) ||
+      normalizeDate(receiptData.receipt_date) ||
+      normalizeDate(receiptData.createdAt) ||
+      normalizeDate(receiptData.created_at) ||
+      (() => {
+        // Last resort: parse date from orderNumber format "O-YYMMDD-HHMM-XXX"
+        const on =
+          receiptData.orderNumber ||
+          receiptData.receipt_number ||
+          receiptData.number ||
+          "";
+        const m = on.match(/O-(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+        if (m) {
+          const [, yy, mm, dd, hh, mi] = m;
+          return new Date(
+            2000 + parseInt(yy),
+            parseInt(mm) - 1,
+            parseInt(dd),
+            parseInt(hh),
+            parseInt(mi),
+          ).toISOString();
+        }
+        return undefined;
+      })(),
+    updatedAt:
+      normalizeDate(receiptData.updatedAt) ||
+      normalizeDate(receiptData.updated_at),
 
     // === CUSTOMER INFORMATION ===
     customerId: receiptData.customerId || receiptData.customer_id || null,
@@ -123,16 +180,17 @@ const transformReceiptData = (receiptData, cashier) => {
       variantId: item.variant_id || item.variantId || null,
       sku: item.sku || null,
       name: item.item_name || item.name || item.product_name,
-      quantity: item.quantity || item.qty || 1,
-      price: item.price || item.unit_price || 0,
-      discount: item.total_discount || item.discount || 0,
-      tax: item.tax || 0,
-      total:
+      quantity: parseFloat(item.quantity || item.qty || 1),
+      price: parseFloat(item.price || item.unit_price || 0),
+      discount: parseFloat(item.total_discount || item.discount || 0),
+      tax: parseFloat(item.tax || 0),
+      total: parseFloat(
         item.total_money ||
-        item.total ||
-        item.totalMoney ||
-        (item.quantity || 1) * (item.price || 0),
-      cost: item.cost || 0,
+          item.total ||
+          item.totalMoney ||
+          (item.quantity || 1) * (item.price || 0),
+      ),
+      cost: parseFloat(item.cost || 0),
     })),
 
     // === PRICING ===
@@ -142,14 +200,16 @@ const transformReceiptData = (receiptData, cashier) => {
       receiptData.totalDiscount ||
       receiptData.discount ||
       0,
+    discountType: receiptData.discountType || "fixed",
     taxAmount:
       receiptData.total_tax || receiptData.totalTax || receiptData.tax || 0,
-    totalAmount:
+    totalAmount: parseFloat(
       receiptData.totalAmount ||
-      receiptData.total_money ||
-      receiptData.totalMoney ||
-      receiptData.total ||
-      0,
+        receiptData.total_money ||
+        receiptData.totalMoney ||
+        receiptData.total ||
+        0,
+    ),
     tip: receiptData.tip || 0,
     surcharge: receiptData.surcharge || 0,
 
@@ -162,13 +222,16 @@ const transformReceiptData = (receiptData, cashier) => {
     change: receiptData.change || 0,
     payment: {
       method: receiptData.paymentMethod || receiptData.payment_method || "cash",
-      amount:
-        receiptData.totalAmount ||
-        receiptData.total_money ||
-        receiptData.totalMoney ||
-        receiptData.total ||
-        0,
-      changeDue: receiptData.change || 0,
+      amount: parseFloat(
+        receiptData.cashReceived ||
+          receiptData.cash_received ||
+          receiptData.totalAmount ||
+          receiptData.total_money ||
+          receiptData.totalMoney ||
+          receiptData.total ||
+          0,
+      ),
+      changeDue: parseFloat(receiptData.change || 0),
       transactionId: receiptData.transactionId || "",
     },
 
@@ -193,6 +256,13 @@ const transformReceiptData = (receiptData, cashier) => {
       receiptData.cashier_name ||
       cashier?.name ||
       "",
+    // POS website uses userName field
+    userName:
+      receiptData.userName ||
+      receiptData.cashierName ||
+      receiptData.cashier_name ||
+      cashier?.name ||
+      "",
     userId:
       receiptData.userId ||
       receiptData.user_id ||
@@ -207,6 +277,10 @@ const transformReceiptData = (receiptData, cashier) => {
     source: receiptData.source || "POS System",
     cancelledAt: receiptData.cancelled_at || receiptData.cancelledAt || null,
     fromThisDevice: receiptData.fromThisDevice ?? true,
+    notes: receiptData.notes || "",
+
+    // === SHIFT ===
+    shiftId: receiptData.shiftId || null,
 
     // === DISCOUNTS ===
     discounts: receiptData.discounts || [],
@@ -221,6 +295,14 @@ const transformReceiptData = (receiptData, cashier) => {
  * Duplicate order to ISY API and log to Firebase
  */
 export const duplicateOrderToISY = async (receiptData, cashier) => {
+  // Guard: skip if ISY sync is disabled
+  if (!ISY_ENABLED) {
+    console.log(
+      "[ISY SYNC] ⏭️ ISY sync disabled (NEXT_PUBLIC_ISY_API_ENABLED !== 'true')",
+    );
+    return { success: false, error: "ISY sync disabled", shouldRetry: false };
+  }
+
   console.log("[ISY SYNC] 🚀 Starting order duplication:", {
     orderNumber: receiptData.orderNumber,
     receiptId: receiptData.id,
@@ -249,6 +331,21 @@ export const duplicateOrderToISY = async (receiptData, cashier) => {
 
     // Transform receipt data to API format
     const orderData = transformReceiptData(receiptData, cashier);
+
+    // Debug: log the exact payload being sent to ISY API
+    console.log("[ISY SYNC] 📤 Transformed payload:", {
+      endpoint: `${API_BASE_URL}${API_ENDPOINT}`,
+      orderNumber: orderData.orderNumber,
+      totalAmount: orderData.totalAmount,
+      items: orderData.items?.length,
+      paymentMethod: orderData.payment?.method,
+      paymentAmount: orderData.payment?.amount,
+      receiptDate: orderData.receiptDate,
+      createdAt: orderData.createdAt,
+      userName: orderData.userName,
+      userId: orderData.userId,
+      shiftId: orderData.shiftId,
+    });
 
     // Send to ISY API with JWT token
     const response = await fetch(`${API_BASE_URL}${API_ENDPOINT}`, {
@@ -296,7 +393,10 @@ export const duplicateOrderToISY = async (receiptData, cashier) => {
     const result = await response.json();
 
     syncLog.status = "success";
-    syncLog.isyOrderId = result.data?.orderId;
+    syncLog.httpStatus = response.status;
+    // API returns { success: true, data: { _id: "...", orderNumber: "...", ... } }
+    syncLog.isyOrderId =
+      result.data?._id || result.data?.orderId || result.data?.id;
     syncLog.response = result;
 
     // Log success to Firebase
@@ -304,14 +404,14 @@ export const duplicateOrderToISY = async (receiptData, cashier) => {
 
     console.log("✅ Order duplicated to ISY API successfully:", {
       orderNumber: receiptData.orderNumber,
-      isyOrderId: result.data?.orderId,
+      isyOrderId: syncLog.isyOrderId,
       duration: `${syncLog.duration}ms`,
     });
 
     return {
       success: true,
       data: result.data,
-      isyOrderId: result.data?.orderId,
+      isyOrderId: syncLog.isyOrderId,
       duration: syncLog.duration,
       syncLogId: syncLog.id,
     };
@@ -552,4 +652,8 @@ export const orderDuplicationService = {
   isISYApiConfigured,
   getSyncLog,
   retryFromLog,
+  transformReceiptData,
+  getAuthToken,
+  API_BASE_URL,
+  API_ENDPOINT,
 };

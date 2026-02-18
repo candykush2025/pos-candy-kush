@@ -2482,6 +2482,18 @@ export default function SalesSection({ cashier }) {
         paymentTypeMap[paymentMethod] || paymentTypeMap.cash;
 
       // Create receipt data for Firebase
+      const activeShiftData = (() => {
+        try {
+          const saved =
+            typeof window !== "undefined"
+              ? localStorage.getItem("active_shift")
+              : null;
+          return saved ? JSON.parse(saved) : null;
+        } catch {
+          return null;
+        }
+      })();
+
       const receiptData = {
         // Local identifiers
         orderNumber: orderNumber,
@@ -2496,6 +2508,9 @@ export default function SalesSection({ cashier }) {
         receipt_type: "SALE",
         order: orderNumber,
         source: "POS System",
+
+        // Shift
+        shiftId: activeShiftData?.id || activeShiftData?.shiftId || null,
 
         // Dates
         created_at: now.toISOString(),
